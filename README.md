@@ -132,5 +132,4 @@ Tests for walking-related behaviors, including speed, posture, and movement tran
 Sensor Fusion
 
 Tests for the accuracy and convergence of the Kalman filter, ensuring reliable sensor-based position estimates.
-📄 License
 

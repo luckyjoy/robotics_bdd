@@ -8,18 +8,19 @@ on:
     branches:
       - main
   schedule:
-    # Runs at 00:00 AM PT every day (7 AM UTC)
     - cron: '0 7 * * *'
 
 jobs:
   test-and-deploy:
     runs-on: ubuntu-latest
 
+    # Required permissions for GitHub Pages deployment
     permissions:
       contents: write
       pages: write
       id-token: write
 
+    # Environment must be a mapping with 'name' key
     environment:
       name: github-pages
 
@@ -49,10 +50,10 @@ jobs:
           mkdir $ALLURE_DIR
           tar -xzf allure.tgz -C $ALLURE_DIR --strip-components 1
           export PATH="$PWD/$ALLURE_DIR/bin:$PATH"
-
+          
           cp supports/environment.properties allure-results/ 2>/dev/null || true
           cp supports/categories.json allure-results/ 2>/dev/null || true
-
+          
           allure generate allure-results --output allure-report --clean
 
       - name: Configure GitHub Pages

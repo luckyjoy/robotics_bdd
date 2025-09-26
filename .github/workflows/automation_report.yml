@@ -153,3 +153,8 @@ jobs:
           REPO_NAME=${GITHUB_REPOSITORY##*/}
           echo "✅ Latest Allure Report: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
           echo "✅ Historical Reports: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+
+        # Add links to workflow run summary (appears in left menu)
+          echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
+          echo "- [Latest Report]($LATEST)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Historical Reports]($HISTORICAL)" >> $GITHUB_STEP_SUMMARY

@@ -42,7 +42,7 @@ jobs:
 
       - name: Generate Allure Report
         run: |
-          BUILD_NUMBER=$GITHUB_RUN_NUMBER
+          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           VERSIONED_REPORT_DIR="allure-report-$BUILD_NUMBER"
           LATEST_REPORT_DIR="allure-report-latest"
 
@@ -79,7 +79,7 @@ jobs:
       - name: Upload versioned Allure report as Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: allure-report-$GITHUB_RUN_NUMBER
+          path: allure-report-${{ github.run_number }}
 
       - name: Deploy Allure Report to GitHub Pages
         uses: actions/deploy-pages@v4

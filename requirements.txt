@@ -1,4 +1,5 @@
 pytest
+pytest_bdd
 allure-pytest
 pybullet
 numpy

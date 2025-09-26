@@ -38,7 +38,9 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
+      # -----------------------------
       # Run tests per OS
+      # -----------------------------
       - name: Run tests (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -48,10 +50,12 @@ jobs:
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
         run: |
-          Remove-Item -Recurse -Force allure-results
+          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
           pytest -m navigation --alluredir=allure-results
 
+      # -----------------------------
       # Upload artifacts per OS
+      # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
         with:
@@ -75,7 +79,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      # -----------------------------
       # Download artifacts from both OSes
+      # -----------------------------
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
         with:

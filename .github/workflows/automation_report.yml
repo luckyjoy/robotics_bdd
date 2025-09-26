@@ -42,10 +42,17 @@ jobs:
           REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
           TEMP_DIR="site-old-gh"
 
+          # Clone gh-pages branch if it exists
           git clone --branch gh-pages --single-branch $REPO $TEMP_DIR || echo "No gh-pages branch yet"
+
+          # Copy historical builds (skip latest/ and current build)
           if [ -d "$TEMP_DIR" ]; then
             mkdir -p $SITE_DIR
-            cp -r $TEMP_DIR/* $SITE_DIR/ || true
+            for dir in $(ls -1 $TEMP_DIR | grep -Ev 'latest|README.md'); do
+              if [ "$dir" != "${GITHUB_RUN_NUMBER}" ]; then
+                cp -r "$TEMP_DIR/$dir" "$SITE_DIR/$dir"
+              fi
+            done
           fi
 
       - name: Generate Allure Report

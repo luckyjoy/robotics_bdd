@@ -89,9 +89,18 @@ jobs:
           # Remove any README.md to prevent GitHub Pages override
           rm -f $SITE_DIR/README.md
 
-          # Rebuild index.html with all builds (latest first + timestamps)
+          # Rebuild index.html with timestamps
           echo "<html><body><h1>Allure Reports</h1><ul>" > $SITE_DIR/index.html
-          echo "<li><a href='latest/'>Latest Report</a></li>" >> $SITE_DIR/index.html
+
+          # Latest report with timestamp
+          if [ -f "$SITE_DIR/$BUILD_NUMBER/build-info.txt" ]; then
+            TS=$(cat "$SITE_DIR/$BUILD_NUMBER/build-info.txt")
+          else
+            TS="(no timestamp)"
+          fi
+          echo "<li><a href='latest/'>Latest Report</a> - ${TS}</li>" >> $SITE_DIR/index.html
+
+          # Historical builds
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
             if [ -f "$SITE_DIR/$dir/build-info.txt" ]; then
               TS=$(cat "$SITE_DIR/$dir/build-info.txt")
@@ -100,8 +109,8 @@ jobs:
             fi
             echo "<li><a href='${dir}/'>Build #${dir}</a> - ${TS}</li>" >> $SITE_DIR/index.html
           done
-          echo "</ul></body></html>" >> $SITE_DIR/index.html
 
+          echo "</ul></body></html>" >> $SITE_DIR/index.html
           echo "📂 Generated directories:"
           ls -R $SITE_DIR
 

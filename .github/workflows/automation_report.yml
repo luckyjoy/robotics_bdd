@@ -44,7 +44,6 @@ jobs:
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}"
-          LATEST_REPORT_DIR="allure-report-latest"
           SITE_DIR="site"
 
           ALLURE_VERSION="2.25.0"
@@ -64,18 +63,22 @@ jobs:
             echo "<html><body><h1>No Allure Report available for build #$BUILD_NUMBER</h1></body></html>" > "$VERSIONED_REPORT_DIR/index.html"
           fi
 
-          # Prepare GitHub Pages folder
-          rm -rf $SITE_DIR
+          # Prepare Pages folder
           mkdir -p $SITE_DIR/latest
           mkdir -p $SITE_DIR/$BUILD_NUMBER
-
-          cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/$BUILD_NUMBER/
           cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/latest/
+          cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/$BUILD_NUMBER/
 
-          # Create root index.html with links
+          # Remove any README.md to prevent GitHub Pages override
+          rm -f $SITE_DIR/README.md
+
+          # Update root index.html to list all builds
           echo "<html><body><h1>Allure Reports</h1><ul>" > $SITE_DIR/index.html
           echo "<li><a href='latest/'>Latest Report</a></li>" >> $SITE_DIR/index.html
-          echo "<li><a href='${BUILD_NUMBER}/'>Build #${BUILD_NUMBER}</a></li>" >> $SITE_DIR/index.html
+          # List historical builds by scanning directories
+          for dir in $(ls -v $SITE_DIR | grep -E '^[0-9]+$'); do
+            echo "<li><a href='${dir}/'>Build #${dir}</a></li>" >> $SITE_DIR/index.html
+          done
           echo "</ul></body></html>" >> $SITE_DIR/index.html
 
           echo "📂 Generated directories:"
@@ -95,5 +98,5 @@ jobs:
       - name: Show GitHub Pages URL
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          echo "✅ Latest Allure Report for build #${GITHUB_RUN_NUMBER} is available at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
-          echo "✅ Historical report for this build: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/${GITHUB_RUN_NUMBER}/"
+          echo "✅ Latest Allure Report: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
+          echo "✅ Historical reports: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/${GITHUB_RUN_NUMBER}/"

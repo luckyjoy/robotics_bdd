@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -35,17 +37,17 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      # Restore previous GitHub Pages site to preserve historical builds
-      - name: Restore previous GitHub Pages site
+      # Restore historical builds from allure-history branch
+      - name: Restore historical builds
         run: |
           SITE_DIR="site"
-          TEMP_DIR="site-old-gh"
+          TEMP_DIR="site-history"
           REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
 
-          # Clone gh-pages branch if it exists
-          git clone --branch gh-pages --single-branch $REPO $TEMP_DIR || echo "No gh-pages branch yet"
+          # Clone the history branch if exists
+          git clone --branch allure-history --single-branch $REPO $TEMP_DIR || echo "No allure-history branch yet"
 
-          # Merge historical numeric builds into SITE_DIR
+          # Copy all numeric build folders into SITE_DIR
           mkdir -p $SITE_DIR
           if [ -d "$TEMP_DIR" ]; then
             for dir in $(ls -1 $TEMP_DIR | grep -E '^[0-9]+$'); do
@@ -53,7 +55,7 @@ jobs:
             done
           fi
 
-      - name: Generate Allure Report
+      - name: Run tests and generate Allure Report
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
@@ -66,37 +68,32 @@ jobs:
           tar -xzf allure.tgz -C $ALLURE_DIR --strip-components 1
           export PATH="$PWD/$ALLURE_DIR/bin:$PATH"
 
-          # Run Allure tests & save logs
+          # Run Allure tests
           rm -rf allure-results
           pytest -m navigation --alluredir=allure-results | tee pytest.log
           cp supports/environment.properties allure-results/ 2>/dev/null || true
           cp supports/categories.json allure-results/ 2>/dev/null || true
 
-          echo "⚡ Generating Allure report..."
+          # Generate Allure report
           VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}"
+          mkdir -p $VERSIONED_REPORT_DIR
           if ! allure generate allure-results --output "$VERSIONED_REPORT_DIR" --clean; then
-            echo "⚠️ Allure generation failed, creating fallback index.html"
-            mkdir -p "$VERSIONED_REPORT_DIR"
-            echo "<html><body><h1>No Allure Report available for build #$BUILD_NUMBER</h1></body></html>" > "$VERSIONED_REPORT_DIR/index.html"
+            echo "<html><body><h1>No Allure Report for build #$BUILD_NUMBER</h1></body></html>" > "$VERSIONED_REPORT_DIR/index.html"
           fi
 
-          # Add current build
+          # Copy current build to site
           mkdir -p $SITE_DIR/$BUILD_NUMBER
           cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/$BUILD_NUMBER/
           mkdir -p $SITE_DIR/latest
           cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/latest/
 
-          # Save build timestamp
+          # Save timestamp
           date -u +"%Y-%m-%d %H:%M:%S UTC" > $SITE_DIR/$BUILD_NUMBER/build-info.txt
 
           # Rebuild index.html
           echo "<html><body><h1>Allure Reports</h1><ul>" > $SITE_DIR/index.html
-
-          # Latest report
           TS=$(cat "$SITE_DIR/$BUILD_NUMBER/build-info.txt")
           echo "<li><a href='latest/'>Latest Report</a> - ${TS}</li>" >> $SITE_DIR/index.html
-
-          # Historical builds (skip current build)
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
             if [ "$dir" = "$BUILD_NUMBER" ]; then
               continue
@@ -108,30 +105,9 @@ jobs:
             fi
             echo "<li><a href='${dir}/'>Build #${dir}</a> - ${TS}</li>" >> $SITE_DIR/index.html
           done
-
           echo "</ul></body></html>" >> $SITE_DIR/index.html
 
-      # Upload raw Allure results for debugging
-      - name: Upload raw Allure results
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-results-${{ github.run_number }}
-          path: allure-results
-          retention-days: 7
-
-      # Upload pytest log + optional artifacts
-      - name: Upload test logs & artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-debug-${{ github.run_number }}
-          path: |
-            pytest.log
-            logs/
-            screenshots/
-          if-no-files-found: ignore
-          retention-days: 7
-
+      # Upload Allure site to GitHub Pages
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
@@ -142,6 +118,35 @@ jobs:
 
       - name: Deploy Allure Reports to GitHub Pages
         uses: actions/deploy-pages@v4
+
+      # Push current build to history branch for future runs
+      - name: Update allure-history branch
+        run: |
+          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
+          REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
+          TEMP_DIR="site-history-update"
+
+          git clone --branch allure-history --single-branch $REPO $TEMP_DIR || git clone $REPO $TEMP_DIR
+          cp -r site/$BUILD_NUMBER $TEMP_DIR/
+          cd $TEMP_DIR
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git add "$BUILD_NUMBER"
+          git commit -m "Add build #$BUILD_NUMBER"
+          git push origin HEAD:allure-history
+
+      # Upload artifacts for debugging
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-debug-${{ github.run_number }}
+          path: |
+            allure-results
+            pytest.log
+            logs/
+            screenshots/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Show GitHub Pages URL
         run: |

@@ -92,20 +92,20 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: allure-results-ubuntu-latest
-          path: allure-results/ubuntu
+          path: allure-results/ubuntu-latest
 
       - name: Download Windows Allure Results
         uses: actions/download-artifact@v4
         with:
           name: allure-results-windows-latest
-          path: allure-results/windows
+          path: allure-results/windows-latest
 
-      # Merge results
+      # Merge results with OS folders
       - name: Merge Allure Results
         run: |
           mkdir -p allure-results
-          cp -r allure-results/ubuntu/* allure-results/
-          cp -r allure-results/windows/* allure-results/
+          cp -r allure-results/ubuntu-latest/* allure-results/ubuntu-latest/
+          cp -r allure-results/windows-latest/* allure-results/windows-latest/
 
       # Setup Allure CLI
       - name: Setup Allure CLI
@@ -116,39 +116,50 @@ jobs:
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH   # persist PATH
 
-      # Generate Allure report
+      # Generate Allure report per OS
       - name: Generate Allure Report
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
-          VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}"
-          mkdir -p "$VERSIONED_REPORT_DIR"
-          allure generate allure-results --output "$VERSIONED_REPORT_DIR" --clean
 
-          mkdir -p "$SITE_DIR/$BUILD_NUMBER"
-          cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/"
-          mkdir -p "$SITE_DIR/latest"
-          cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/"
+          for OS in ubuntu-latest windows-latest; do
+            VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
+            mkdir -p "$VERSIONED_REPORT_DIR"
+            allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
 
-          date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/build-info.txt"
+            mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
+            cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
+            mkdir -p "$SITE_DIR/latest/$OS"
+            cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
-      # Rebuild index.html
+            date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
+          done
+
+      # Rebuild index.html with OS labels
       - name: Rebuild Index
         run: |
           SITE_DIR="site"
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
-          TS=$(cat "$SITE_DIR/$BUILD_NUMBER/build-info.txt")
-          echo "<li><a href='latest/'>Latest Report</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
-          for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
-            if [ "$dir" = "$BUILD_NUMBER" ]; then continue; fi
-            if [ -f "$SITE_DIR/$dir/build-info.txt" ]; then
-              TS=$(cat "$SITE_DIR/$dir/build-info.txt")
-            else
-              TS="(no timestamp)"
+
+          # Latest reports
+          for OS in ubuntu-latest windows-latest; do
+            if [ -d "$SITE_DIR/latest/$OS" ]; then
+              TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+              echo "<li><a href='latest/$OS/'>Latest Report ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
             fi
-            echo "<li><a href='${dir}/'>Build #${dir}</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
           done
+
+          # Historical builds
+          for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
+            for OS in ubuntu-latest windows-latest; do
+              if [ -d "$SITE_DIR/$dir/$OS" ]; then
+                TS=$(cat "$SITE_DIR/$dir/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                echo "<li><a href='${dir}/${OS}/'>Build #${dir} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              fi
+            done
+          done
+
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
       # Deploy to GitHub Pages

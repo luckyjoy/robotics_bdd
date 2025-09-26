@@ -12,7 +12,7 @@ on:
     - cron: '0 7 * * *'
 
 jobs:
-  test-and-report:
+  test-and-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -54,10 +54,10 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Allure Report for Pages
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy Allure Report to GitHub Pages
+        uses: actions/deploy-pages@v4
         with:
           path: 'allure-report'
 
-      - name: Deploy Allure Report to GitHub Pages
-        uses: actions/deploy-pages@v4
+      - name: Show GitHub Pages URL
+        run: echo "✅ Allure Report is available at: https://$GITHUB_REPOSITORY_OWNER.github.io/$GITHUB_REPOSITORY/"

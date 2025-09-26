@@ -98,5 +98,5 @@ jobs:
       - name: Show GitHub Pages URL
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          echo "✅ Latest Allure Report: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
-          echo "✅ Historical reports: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/${GITHUB_RUN_NUMBER}/"
+            echo "✅ Latest Allure Report: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
+            echo "✅ Historical Reports: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"

@@ -42,6 +42,10 @@ jobs:
 
       - name: Generate Allure Report
         run: |
+          BUILD_NUMBER=$GITHUB_RUN_NUMBER
+          VERSIONED_REPORT_DIR="allure-report-$BUILD_NUMBER"
+          LATEST_REPORT_DIR="allure-report-latest"
+
           ALLURE_VERSION="2.25.0"
           ALLURE_DIR="allure-commandline"
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/$ALLURE_VERSION/allure-commandline-$ALLURE_VERSION.tgz"
@@ -52,7 +56,12 @@ jobs:
           cp supports/environment.properties allure-results/ 2>/dev/null || true
           cp supports/categories.json allure-results/ 2>/dev/null || true
 
-          allure generate allure-results --output allure-report --clean
+          # Generate versioned report
+          allure generate allure-results --output $VERSIONED_REPORT_DIR --clean
+
+          # Copy the versioned report to the 'latest' folder for GitHub Pages root
+          rm -rf $LATEST_REPORT_DIR
+          cp -r $VERSIONED_REPORT_DIR $LATEST_REPORT_DIR
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -60,11 +69,14 @@ jobs:
       - name: Upload Allure Report as Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: allure-report
+          path: |
+            allure-report-latest
+            allure-report-${{ github.run_number }}
 
       - name: Deploy Allure Report to GitHub Pages
         uses: actions/deploy-pages@v4
 
       - name: Show GitHub Pages URL
         run: |
-          echo "✅ Allure Report is available at: https://$GITHUB_REPOSITORY_OWNER.github.io/$GITHUB_REPOSITORY/"
+          echo "✅ Latest Allure Report for build #${GITHUB_RUN_NUMBER} is available at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/"
+          echo "✅ Historical reports can be found at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/allure-report-${GITHUB_RUN_NUMBER}/"

@@ -38,7 +38,6 @@ jobs:
       - name: Run tests and collect Allure results
         run: |
           rm -rf allure-results
-          # Run multiple markers for full coverage
           pytest -m "navigation or pick_and_place or safety" --alluredir=allure-results
 
       - name: Generate Allure Report
@@ -80,7 +79,13 @@ jobs:
       - name: Upload versioned Allure report as Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: allure-report-${{ github.run_number }}
+          path: allure-report-$GITHUB_RUN_NUMBER
 
       - name: Deploy Allure Report to GitHub Pages
-        us
+        uses: actions/deploy-pages@v4
+
+      - name: Show GitHub Pages URL
+        run: |
+          REPO_NAME=$(basename $GITHUB_REPOSITORY)
+          echo "✅ Latest Allure Report for build #${GITHUB_RUN_NUMBER} is available at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          echo "✅ Historical reports can be found at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/allure-report-${GITHUB_RUN_NUMBER}/"

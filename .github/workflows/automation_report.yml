@@ -13,7 +13,6 @@ on:
 
 jobs:
   test-and-report:
-    # Set to ubuntu-latest for simplified Allure CLI installation
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -31,7 +30,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # FIX: Re-added pytest-html to resolve ModuleNotFoundError caused by an import in conftest.py
+          # Install all necessary Python packages, including pytest-html to satisfy conftest.py import
           pip install pytest pytest-bdd allure-pytest pytest-html
           # Install Allure Command Line Interface (CLI)
           sudo apt-get update
@@ -41,14 +40,14 @@ jobs:
         run: |
           # 1. Clean up old results directory
           rm -rf allure-results
-          # 2. Run navigation suite tests and generate raw Allure data
-          pytest -m navigation --alluredir=allure-results
+          # 2. Run all tests and generate raw Allure data
+          pytest --alluredir=allure-results
 
-      - name: Copy Allure configuration files
+      - name: Copy Allure configuration files from supports/ folder
+        # FIX: Explicitly copy files from the correct 'supports/' folder
         run: |
-          # Copy environment.properties from root into the newly created results folder
           cp supports/environment.properties allure-results/
-          cp supports/categories.json        allure-results/
+          cp supports/categories.json allure-results/
 
       - name: Build Allure Report
         # Generates the static HTML report into 'allure-report' folder

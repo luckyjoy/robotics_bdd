@@ -1,59 +1,82 @@
+name: Robotics BDD Simulation CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 7 * * *'
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: |
+          pip install pytest pytest-bdd allure-pytest pytest-html
+
+      - name: Run tests and collect Allure results
+        run: |
+          rm -rf allure-results
+          pytest -m navigation --alluredir=allure-results
+
       - name: Generate Allure Report
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
-          VERSIONED_REPORT_DIR="allure-report-$BUILD_NUMBER"
+          VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}"
           LATEST_REPORT_DIR="allure-report-latest"
-          ROOT_DIR="gh-pages-root"
 
           ALLURE_VERSION="2.25.0"
           ALLURE_DIR="allure-commandline"
-
-          # Download Allure CLI
-          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/$ALLURE_VERSION/allure-commandline-$ALLURE_VERSION.tgz"
+          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
           mkdir $ALLURE_DIR
           tar -xzf allure.tgz -C $ALLURE_DIR --strip-components 1
           export PATH="$PWD/$ALLURE_DIR/bin:$PATH"
 
-          # Copy optional support files
           cp supports/environment.properties allure-results/ 2>/dev/null || true
           cp supports/categories.json allure-results/ 2>/dev/null || true
 
           # Generate versioned report
           allure generate allure-results --output $VERSIONED_REPORT_DIR --clean
 
-          # Copy to "latest"
+          # Copy the versioned report to the 'latest' folder for GitHub Pages root
           rm -rf $LATEST_REPORT_DIR
           cp -r $VERSIONED_REPORT_DIR $LATEST_REPORT_DIR
-
-          # Prepare Pages folder
-          mkdir -p gh-pages-reports
-          mv $VERSIONED_REPORT_DIR gh-pages-reports/
-          mv $LATEST_REPORT_DIR gh-pages-reports/
-
-          # Copy latest contents to root for direct access
-          rm -rf $ROOT_DIR
-          mkdir -p $ROOT_DIR
-          cp -r $LATEST_REPORT_DIR/* $ROOT_DIR/
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Allure reports as Pages Artifact
+      - name: Upload Allure Report as Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: gh-pages-reports
-
-      - name: Upload Root Allure Report (Latest) for direct URL
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: gh-pages-root
+          path: |
+            allure-report-latest
+            allure-report-${{ github.run_number }}
 
       - name: Deploy Allure Report to GitHub Pages
         uses: actions/deploy-pages@v4
 
       - name: Show GitHub Pages URL
         run: |
-          REPO_NAME=$(basename $GITHUB_REPOSITORY)
-          echo "✅ Latest Allure Report (Root URL): https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
-          echo "✅ Historical Report (Build #${GITHUB_RUN_NUMBER}): https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/allure-report-${GITHUB_RUN_NUMBER}/"
-          echo "✅ Previous builds: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/allure-report-latest/"
+          echo "✅ Latest Allure Report for build #${GITHUB_RUN_NUMBER} is available at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
+          echo "✅ Historical report for this build: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/allure-report-${GITHUB_RUN_NUMBER}/"

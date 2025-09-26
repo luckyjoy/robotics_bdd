@@ -47,7 +47,8 @@ jobs:
       - name: Copy Allure configuration files
         run: |
           # Copy environment.properties from root into the newly created results folder
-          cp environment.properties allure-results/
+          cp supports/environment.properties allure-results/
+          cp supports/categories.json        allure-results/
 
       - name: Build Allure Report
         # Generates the static HTML report into 'allure-report' folder

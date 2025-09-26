@@ -36,5 +36,4 @@ echo.
 
 rem start "" https://localhost:8443/view/all/builds
 
-echo.
-pause
+

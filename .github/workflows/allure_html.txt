@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-11]   # Add Windows 11
+        os: [ubuntu-latest, windows-11]
 
     permissions:
       contents: write
@@ -40,7 +40,11 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      - name: Clone historical builds
+      # -----------------------------
+      # Clone historical builds
+      # -----------------------------
+      - name: Clone historical builds (Linux)
+        if: runner.os == 'Linux'
         run: |
           SITE_DIR="site"
           HISTORY_DIR="history"
@@ -55,8 +59,26 @@ jobs:
             done
           fi
 
-      - name: Run tests and generate Allure Report
-        shell: bash
+      - name: Clone historical builds (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $SiteDir = "site"
+          $HistoryDir = "history"
+          $Repo = "https://${env:GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${env:GITHUB_REPOSITORY}.git"
+
+          New-Item -ItemType Directory -Path $SiteDir -Force
+          git clone --branch allure-history --single-branch $Repo $HistoryDir -ErrorAction SilentlyContinue
+          if (Test-Path $HistoryDir) {
+            Get-ChildItem $HistoryDir -Directory | ForEach-Object {
+              Copy-Item $_.FullName "$SiteDir\$($_.Name)" -Recurse -Force
+            }
+          }
+
+      # -----------------------------
+      # Run tests and generate Allure Report
+      # -----------------------------
+      - name: Run tests and generate Allure Report (Linux)
+        if: runner.os == 'Linux'
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
@@ -86,13 +108,46 @@ jobs:
 
           date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/build-info.txt"
 
+      - name: Run tests and generate Allure Report (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $BUILD_NUMBER = $env:GITHUB_RUN_NUMBER
+          $SITE_DIR = "site"
+          $ALLURE_VERSION = "2.25.0"
+          $ALLURE_DIR = "allure-commandline"
+
+          Invoke-WebRequest "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/$ALLURE_VERSION/allure-commandline-$ALLURE_VERSION.zip" -OutFile "allure.zip"
+          Expand-Archive allure.zip $ALLURE_DIR -Force
+
+          $env:PATH = "$PWD\$ALLURE_DIR;$env:PATH"
+
+          Remove-Item -Recurse -Force allure-results
+          pytest -m navigation --alluredir=allure-results
+          Copy-Item supports\environment.properties allure-results\ -ErrorAction SilentlyContinue
+          Copy-Item supports\categories.json allure-results\ -ErrorAction SilentlyContinue
+
+          $VERSIONED_REPORT_DIR = "allure-report-$BUILD_NUMBER"
+          New-Item -ItemType Directory -Path $VERSIONED_REPORT_DIR -Force
+          & allure generate allure-results --output $VERSIONED_REPORT_DIR --clean
+
+          Copy-Item "$VERSIONED_REPORT_DIR\*" "$SITE_DIR\$BUILD_NUMBER\" -Recurse -Force
+          New-Item -ItemType Directory -Path "$SITE_DIR\latest" -Force
+          Copy-Item "$VERSIONED_REPORT_DIR\*" "$SITE_DIR\latest\" -Recurse -Force
+
+          Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC" | Out-File "$SITE_DIR\$BUILD_NUMBER\build-info.txt" -Encoding utf8
+
+      # -----------------------------
+      # Rebuild index.html (both OSes)
+      # -----------------------------
+      - name: Rebuild index.html
+        run: |
+          SITE_DIR="site"
+          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
           TS=$(cat "$SITE_DIR/$BUILD_NUMBER/build-info.txt")
           echo "<li><a href='latest/'>Latest Report</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
-            if [ "$dir" = "$BUILD_NUMBER" ]; then
-              continue
-            fi
+            if [ "$dir" = "$BUILD_NUMBER" ]; then continue; fi
             if [ -f "$SITE_DIR/$dir/build-info.txt" ]; then
               TS=$(cat "$SITE_DIR/$dir/build-info.txt")
             else
@@ -102,6 +157,9 @@ jobs:
           done
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
+      # -----------------------------
+      # Configure and deploy GitHub Pages
+      # -----------------------------
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
@@ -113,6 +171,9 @@ jobs:
       - name: Deploy Allure Reports to GitHub Pages
         uses: actions/deploy-pages@v4
 
+      # -----------------------------
+      # Update historical branch
+      # -----------------------------
       - name: Update allure-history branch
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
@@ -128,6 +189,9 @@ jobs:
           git branch -M allure-history
           git push -f $REPO allure-history
 
+      # -----------------------------
+      # Upload test artifacts
+      # -----------------------------
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -140,6 +204,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      # -----------------------------
+      # Show GitHub Pages URL with Markdown badges
+      # -----------------------------
       - name: Show GitHub Pages URL with Markdown Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}

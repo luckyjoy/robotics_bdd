@@ -45,13 +45,14 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p allure-results
+          OS_NAME=$(uname -a)
           cat <<EOF > allure-results/environment.properties
 Project=Robotics Behavior-Driven Development (BDD) Simulation Framework
 Author=Bang Thien Nguyen
 Email=ontario1998@gmail.com
 Robot Model=Gazebo_Pioneer3DX
 Simulation Engine=PyBullet
-Operating System=Linux
+Operating System=$OS_NAME
 Python Version=3.10.12
 Framework Version=1.0.0
 Test Type=Integration
@@ -60,20 +61,23 @@ EOF
 
       - name: Create dynamic environment.properties (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           mkdir allure-results -ErrorAction SilentlyContinue
-          @"
+          $OS_NAME = (Get-CimInstance Win32_OperatingSystem).Caption
+          $envProps = @"
 Project=Robotics Behavior-Driven Development (BDD) Simulation Framework
 Author=Bang Thien Nguyen
 Email=ontario1998@gmail.com
 Robot Model=Gazebo_Pioneer3DX
 Simulation Engine=PyBullet
-Operating System=Windows
+Operating System=$OS_NAME
 Python Version=3.10.12
 Framework Version=1.0.0
 Test Type=Integration
 HTML Reporter=Allure Test Report 2.35.1
-"@ | Out-File -FilePath allure-results\environment.properties -Encoding utf8
+"@
+          $envProps | Out-File -FilePath allure-results\environment.properties -Encoding utf8
 
       # -----------------------------
       # Run tests per OS
@@ -87,6 +91,7 @@ HTML Reporter=Allure Test Report 2.35.1
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           Remove-Item -Recurse -Force allure-results\* -ErrorAction SilentlyContinue
           pytest -m navigation --alluredir=allure-results
@@ -121,7 +126,7 @@ HTML Reporter=Allure Test Report 2.35.1
           fetch-depth: 0
 
       # -----------------------------
-      # Download artifacts from both OSes
+      # Download artifacts
       # -----------------------------
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -135,10 +140,14 @@ HTML Reporter=Allure Test Report 2.35.1
           name: allure-results-windows-latest
           path: allure-results/windows-latest
 
-      # Merge results (just copy into OS folders)
+      # -----------------------------
+      # Merge Allure Results
+      # -----------------------------
       - name: Merge Allure Results
         run: |
           mkdir -p allure-results
+          cp -r allure-results/ubuntu-latest/* allure-results/ubuntu-latest/
+          cp -r allure-results/windows-latest/* allure-results/windows-latest/
 
       # -----------------------------
       # Setup Allure CLI
@@ -152,7 +161,7 @@ HTML Reporter=Allure Test Report 2.35.1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
       # -----------------------------
-      # Generate Allure Report with OS and timestamp
+      # Generate Allure Report per OS
       # -----------------------------
       - name: Generate Allure Report
         run: |
@@ -173,7 +182,7 @@ HTML Reporter=Allure Test Report 2.35.1
           done
 
       # -----------------------------
-      # Rebuild index.html with OS labels
+      # Rebuild Index.html
       # -----------------------------
       - name: Rebuild Index
         run: |

@@ -39,37 +39,24 @@ jobs:
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
-      # Prepare environment.properties dynamically
-      # -----------------------------
-      - name: Prepare environment.properties
-        run: |
-          mkdir -p allure-results
-          OS_NAME="${{ runner.os }}"
-          echo "Project=Robotics Behavior-Driven Development (BDD) Simulation Framework" > allure-results/environment.properties
-          echo "Author=Bang Thien Nguyen" >> allure-results/environment.properties
-          echo "Email=ontario1998@gmail.com" >> allure-results/environment.properties
-          echo "Robot Model=Gazebo_Pioneer3DX" >> allure-results/environment.properties
-          echo "Simulation Engine=PyBullet" >> allure-results/environment.properties
-          echo "Operating System=$OS_NAME" >> allure-results/environment.properties
-          echo "Python Version=3.10.12" >> allure-results/environment.properties
-          echo "Framework Version=1.0.0" >> allure-results/environment.properties
-          echo "Test Type=Integration" >> allure-results/environment.properties
-          echo "HTML Reporter=Allure Test Report 2.35.1" >> allure-results/environment.properties
-
-      # -----------------------------
       # Run tests per OS
       # -----------------------------
-      - name: Run tests
+      - name: Run tests (Linux)
+        if: runner.os == 'Linux'
         run: |
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            rm -rf allure-results
-            pytest -m navigation --alluredir=allure-results | tee pytest.log
-            cp supports/environment.properties supports/categories.json allure-results/ 2>/dev/null || true
-          else
-            Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
-            pytest -m navigation --alluredir=allure-results
-            Copy-Item supports\environment.properties supports\categories.json allure-results\ -ErrorAction SilentlyContinue
-          fi
+          rm -rf allure-results
+          pytest -m navigation --alluredir=allure-results | tee pytest.log
+          mkdir -p allure-results
+          cp supports/ubuntu.properties allure-results/environment.properties
+          cp supports/*.json allure-results/ 2>/dev/null || true
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
+          pytest -m navigation --alluredir=allure-results
+          Copy-Item supports\windows.properties allure-results\environment.properties -Force
+          Get-ChildItem supports\*.json -ErrorAction SilentlyContinue | Copy-Item -Destination allure-results\ -Force
 
       # -----------------------------
       # Upload artifacts per OS
@@ -115,15 +102,6 @@ jobs:
           path: allure-results/windows-latest
 
       # -----------------------------
-      # Merge Allure Results
-      # -----------------------------
-      - name: Merge Allure Results
-        run: |
-          mkdir -p allure-results
-          cp -r allure-results/ubuntu-latest/* allure-results/ubuntu-latest/ || true
-          cp -r allure-results/windows-latest/* allure-results/windows-latest/ || true
-
-      # -----------------------------
       # Setup Allure CLI
       # -----------------------------
       - name: Setup Allure CLI
@@ -135,12 +113,16 @@ jobs:
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
       # -----------------------------
-      # Generate Allure Report per OS
+      # Generate Allure report per OS
       # -----------------------------
-      - name: Generate Allure Report
+      - name: Generate Allure Reports
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
+
+          mkdir -p "$SITE_DIR/$BUILD_NUMBER"
+          mkdir -p "$SITE_DIR/latest"
+
           for OS in ubuntu-latest windows-latest; do
             VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
             mkdir -p "$VERSIONED_REPORT_DIR"
@@ -152,18 +134,18 @@ jobs:
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
+            cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
 
       # -----------------------------
-      # Rebuild Index.html
+      # Rebuild index.html with OS labels
       # -----------------------------
       - name: Rebuild Index
         run: |
           SITE_DIR="site"
-          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
 
-          # Latest reports
+          # Latest report per OS
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
@@ -171,7 +153,7 @@ jobs:
             fi
           done
 
-          # Historical builds
+          # Historical builds per OS
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
             for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$dir/$OS" ]; then

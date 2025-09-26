@@ -71,15 +71,12 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload latest Allure report as Pages Artifact
+      - name: Upload Allure reports as Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: allure-report-latest-${{ github.run_number }}
-
-      - name: Upload versioned Allure report as Pages Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: allure-report-${{ github.run_number }}
+          path: |
+            allure-report-latest-${{ github.run_number }}
+            allure-report-${{ github.run_number }}
 
       - name: Deploy Allure Report to GitHub Pages
         uses: actions/deploy-pages@v4

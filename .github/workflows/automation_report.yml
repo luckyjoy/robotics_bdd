@@ -38,36 +38,22 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      # -----------------------------
-      # Linux tests
-      # -----------------------------
-      - name: Run tests on Linux
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
+      - name: Prepare Allure results folder
         run: |
           rm -rf allure-results || true
-          pytest -m navigation --alluredir=allure-results | tee pytest.log
           mkdir -p allure-results
-          # Copy OS-specific environment properties
-          cp supports/ubuntu.properties allure-results/environment.properties || true
-          cp supports/*.json allure-results/ || true
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            cp supports/ubuntu.properties allure-results/environment.properties
+            cp supports/ubuntu.json allure-results/categories.json
+          else
+            cp supports/windows.properties allure-results/environment.properties
+            cp supports/windows.json allure-results/categories.json
+          fi
 
-      # -----------------------------
-      # Windows tests
-      # -----------------------------
-      - name: Run tests on Windows
-        if: matrix.os == 'windows-latest'
-        shell: powershell
+      - name: Run pytest
         run: |
-          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
-          pytest -m navigation --alluredir=allure-results
-          # Copy OS-specific environment properties
-          Copy-Item supports/windows.properties allure-results/environment.properties -Force -ErrorAction SilentlyContinue
-          Copy-Item supports\*.json allure-results\ -Force -ErrorAction SilentlyContinue
+          pytest -m navigation --alluredir=allure-results | tee pytest.log
 
-      # -----------------------------
-      # Upload artifacts per OS
-      # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
         with:
@@ -93,9 +79,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # -----------------------------
-      # Download artifacts from both OSes
-      # -----------------------------
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
         with:
@@ -108,9 +91,6 @@ jobs:
           name: allure-results-windows-latest
           path: allure-results/windows-latest
 
-      # -----------------------------
-      # Setup Allure CLI
-      # -----------------------------
       - name: Setup Allure CLI
         run: |
           ALLURE_VERSION=2.25.0
@@ -119,15 +99,10 @@ jobs:
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
-      # -----------------------------
-      # Generate Allure reports per OS
-      # -----------------------------
       - name: Generate Allure Reports
-        shell: bash
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
-
           mkdir -p "$SITE_DIR/$BUILD_NUMBER"
           mkdir -p "$SITE_DIR/latest"
 
@@ -136,8 +111,11 @@ jobs:
             mkdir -p "$VERSIONED_REPORT_DIR"
             allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
 
+            # Historical builds
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
+
+            # Latest builds
             mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
@@ -145,54 +123,43 @@ jobs:
             cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
 
-      # -----------------------------
-      # Rebuild index.html
-      # -----------------------------
       - name: Rebuild Index
-        shell: bash
         run: |
           SITE_DIR="site"
-          echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
+          echo "<html><body><h1>Allure Reports</h1>" > "$SITE_DIR/index.html"
+          echo "<h2>Latest Reports</h2>" >> "$SITE_DIR/index.html"
+          echo "<table border='1'><tr><th>OS</th><th>Link</th><th>Timestamp</th></tr>" >> "$SITE_DIR/index.html"
 
-          # Latest reports
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              echo "<li><a href='latest/$OS/'>Latest Report ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              echo "<tr><td>${OS}</td><td><a href='latest/$OS/'>Latest Report</a></td><td>${TS}</td></tr>" >> "$SITE_DIR/index.html"
             fi
           done
 
-          # Historical builds
+          echo "</table><h2>Historical Builds</h2>" >> "$SITE_DIR/index.html"
+          echo "<table border='1'><tr><th>Build #</th><th>OS</th><th>Link</th><th>Timestamp</th></tr>" >> "$SITE_DIR/index.html"
+
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
             for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$dir/$OS" ]; then
                 TS=$(cat "$SITE_DIR/$dir/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "<li><a href='${dir}/${OS}/'>Build #${dir} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+                echo "<tr><td>${dir}</td><td>${OS}</td><td><a href='${dir}/${OS}/'>Build #${dir}</a></td><td>${TS}</td></tr>" >> "$SITE_DIR/index.html"
               fi
             done
           done
 
-          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
+          echo "</table></body></html>" >> "$SITE_DIR/index.html"
 
-      # -----------------------------
-      # Deploy to GitHub Pages
-      # -----------------------------
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
       - uses: actions/deploy-pages@v4
 
-      # -----------------------------
-      # Add badges to workflow summary
-      # -----------------------------
       - name: Add Workflow Badges
-        shell: bash
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
-          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
-
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "[![Latest Report](https://img.shields.io/badge/Latest-Report-blue)]($LATEST)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Historical Reports](https://img.shields.io/badge/Historical-Reports-green)]($HISTORICAL)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Latest Ubuntu Report](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Latest Windows Report](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY

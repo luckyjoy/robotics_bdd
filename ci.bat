@@ -26,7 +26,6 @@ echo A new build has been triggred at secured Github server: https://github.com/
 echo.
 echo A new build has been triggred at secured Jenkins server: https://localhost:8443/view/all/builds
 echo.
-echo.
 echo Open secured GitHub server and Jenkins server
 echo.
 sleep 10

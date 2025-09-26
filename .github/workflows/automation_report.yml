@@ -39,7 +39,7 @@ jobs:
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
-      # Generate dynamic environment.properties per OS
+      # Create dynamic environment.properties
       # -----------------------------
       - name: Create dynamic environment.properties (Linux)
         if: runner.os == 'Linux'
@@ -83,12 +83,14 @@ HTML Reporter=Allure Test Report 2.35.1
         run: |
           rm -rf allure-results/*
           pytest -m navigation --alluredir=allure-results | tee pytest.log
+          cp supports/categories.json allure-results/ 2>/dev/null || true
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
         run: |
           Remove-Item -Recurse -Force allure-results\* -ErrorAction SilentlyContinue
           pytest -m navigation --alluredir=allure-results
+          Copy-Item supports\categories.json allure-results\ -ErrorAction SilentlyContinue
 
       # -----------------------------
       # Upload artifacts per OS
@@ -133,6 +135,11 @@ HTML Reporter=Allure Test Report 2.35.1
           name: allure-results-windows-latest
           path: allure-results/windows-latest
 
+      # Merge results (just copy into OS folders)
+      - name: Merge Allure Results
+        run: |
+          mkdir -p allure-results
+
       # -----------------------------
       # Setup Allure CLI
       # -----------------------------
@@ -147,11 +154,10 @@ HTML Reporter=Allure Test Report 2.35.1
       # -----------------------------
       # Generate Allure Report with OS and timestamp
       # -----------------------------
-      - name: Generate Allure Reports
+      - name: Generate Allure Report
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
-          mkdir -p "$SITE_DIR"
 
           for OS in ubuntu-latest windows-latest; do
             VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
@@ -160,7 +166,6 @@ HTML Reporter=Allure Test Report 2.35.1
 
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
-
             mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
@@ -168,7 +173,7 @@ HTML Reporter=Allure Test Report 2.35.1
           done
 
       # -----------------------------
-      # Rebuild index.html with OS labels and timestamps
+      # Rebuild index.html with OS labels
       # -----------------------------
       - name: Rebuild Index
         run: |

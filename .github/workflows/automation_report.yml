@@ -66,4 +66,5 @@ jobs:
         uses: actions/deploy-pages@v4
 
       - name: Show GitHub Pages URL
-        run: echo "✅ Allure Report is available at: https://$GITHUB_REPOSITORY_OWNER.github.io/$GITHUB_REPOSITORY/"
+        run: |
+          echo "✅ Allure Report is available at: https://$GITHUB_REPOSITORY_OWNER.github.io/$GITHUB_REPOSITORY/"

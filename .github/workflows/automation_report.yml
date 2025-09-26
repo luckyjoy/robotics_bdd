@@ -44,7 +44,7 @@ jobs:
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           VERSIONED_REPORT_DIR="allure-report-$BUILD_NUMBER"
-          LATEST_REPORT_DIR="allure-report-latest"
+          LATEST_REPORT_DIR="allure-report-latest-$BUILD_NUMBER"
 
           ALLURE_VERSION="2.25.0"
           ALLURE_DIR="allure-commandline"
@@ -64,7 +64,7 @@ jobs:
           # Generate versioned report
           allure generate allure-results --output $VERSIONED_REPORT_DIR --clean
 
-          # Copy versioned report to 'latest' for root deployment
+          # Copy versioned report to 'latest' folder
           rm -rf $LATEST_REPORT_DIR
           cp -r $VERSIONED_REPORT_DIR $LATEST_REPORT_DIR
 
@@ -74,7 +74,7 @@ jobs:
       - name: Upload latest Allure report as Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: allure-report-latest
+          path: allure-report-latest-${{ github.run_number }}
 
       - name: Upload versioned Allure report as Pages Artifact
         uses: actions/upload-pages-artifact@v3

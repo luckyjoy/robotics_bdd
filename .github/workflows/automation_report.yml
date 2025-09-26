@@ -35,28 +35,42 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      - name: Run tests and collect Allure results
-        run: |
-          rm -rf allure-results
-          pytest -m navigation --alluredir=allure-results
+      # Download previously deployed site to keep history
+      - name: Download existing Pages artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: github-pages
+          path: site-old
+        continue-on-error: true
 
       - name: Generate Allure Report
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
-          VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}"
           SITE_DIR="site"
-
           ALLURE_VERSION="2.25.0"
           ALLURE_DIR="allure-commandline"
+
+          # ♻️ Restore previous reports
+          if [ -d site-old ]; then
+            echo "♻️ Restoring previous reports..."
+            mkdir -p $SITE_DIR
+            cp -r site-old/* $SITE_DIR/ || true
+          fi
+
+          # Download & extract Allure CLI
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
-          mkdir $ALLURE_DIR
+          mkdir -p $ALLURE_DIR
           tar -xzf allure.tgz -C $ALLURE_DIR --strip-components 1
           export PATH="$PWD/$ALLURE_DIR/bin:$PATH"
 
+          # Run Allure tests & save logs
+          rm -rf allure-results
+          pytest -m navigation --alluredir=allure-results | tee pytest.log
           cp supports/environment.properties allure-results/ 2>/dev/null || true
           cp supports/categories.json allure-results/ 2>/dev/null || true
 
           echo "⚡ Generating Allure report..."
+          VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}"
           if ! allure generate allure-results --output "$VERSIONED_REPORT_DIR" --clean; then
             echo "⚠️ Allure generation failed, creating fallback index.html"
             mkdir -p "$VERSIONED_REPORT_DIR"
@@ -69,20 +83,48 @@ jobs:
           cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/latest/
           cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/$BUILD_NUMBER/
 
+          # Save build timestamp
+          date -u +"%Y-%m-%d %H:%M:%S UTC" > $SITE_DIR/$BUILD_NUMBER/build-info.txt
+
           # Remove any README.md to prevent GitHub Pages override
           rm -f $SITE_DIR/README.md
 
-          # Update root index.html to list all builds
+          # Rebuild index.html with all builds (latest first + timestamps)
           echo "<html><body><h1>Allure Reports</h1><ul>" > $SITE_DIR/index.html
           echo "<li><a href='latest/'>Latest Report</a></li>" >> $SITE_DIR/index.html
-          # List historical builds by scanning directories
-          for dir in $(ls -v $SITE_DIR | grep -E '^[0-9]+$'); do
-            echo "<li><a href='${dir}/'>Build #${dir}</a></li>" >> $SITE_DIR/index.html
+          for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
+            if [ -f "$SITE_DIR/$dir/build-info.txt" ]; then
+              TS=$(cat "$SITE_DIR/$dir/build-info.txt")
+            else
+              TS="(no timestamp)"
+            fi
+            echo "<li><a href='${dir}/'>Build #${dir}</a> - ${TS}</li>" >> $SITE_DIR/index.html
           done
           echo "</ul></body></html>" >> $SITE_DIR/index.html
 
           echo "📂 Generated directories:"
           ls -R $SITE_DIR
+
+      # Upload raw Allure results for debugging
+      - name: Upload raw Allure results
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ github.run_number }}
+          path: allure-results
+          retention-days: 7
+
+      # Upload pytest log + optional artifacts
+      - name: Upload test logs & artifacts
+        if: always()   # run even if tests fail
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-debug-${{ github.run_number }}
+          path: |
+            pytest.log
+            logs/
+            screenshots/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -98,5 +140,5 @@ jobs:
       - name: Show GitHub Pages URL
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-            echo "✅ Latest Allure Report: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
-            echo "✅ Historical Reports: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          echo "✅ Latest Allure Report: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
+          echo "✅ Historical Reports: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"

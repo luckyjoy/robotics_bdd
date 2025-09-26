@@ -19,7 +19,7 @@ jobs:
       pages: write
       id-token: write
 
-    environment: github-pages   # <-- required for deploy-pages@v4
+    environment: github-pages   # Required for GitHub Pages deployment
 
     steps:
       - name: Checkout repository
@@ -39,7 +39,7 @@ jobs:
           rm -rf allure-results
           pytest -m navigation --alluredir=allure-results
 
-      - name: Generate Allure Report (Reliable Method)
+      - name: Generate Allure Report
         run: |
           ALLURE_VERSION="2.25.0"
           ALLURE_DIR="allure-commandline"
@@ -51,15 +51,13 @@ jobs:
           cp supports/categories.json allure-results/ || true
           allure generate allure-results --output allure-report --clean
 
-      - name: Setup Pages
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Allure Report Artifact
+      - name: Upload Allure Report for Pages
         uses: actions/upload-pages-artifact@v3
         with:
           path: 'allure-report'
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Deploy Allure Report to GitHub Pages
         uses: actions/deploy-pages@v4

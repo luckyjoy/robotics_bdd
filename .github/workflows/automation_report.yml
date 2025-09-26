@@ -1,4 +1,4 @@
-name: Robotics Behavior-Driven Development (BDD) Simulation CI/CD
+name: Robotics BDD Simulation CI/CD Pipeline
 
 on:
   push:
@@ -67,5 +67,4 @@ jobs:
 
       - name: Show GitHub Pages URL
         run: |
-          REPO_NAME=${GITHUB_REPOSITORY##*/}
-          echo "✅ Allure Report for build #${GITHUB_RUN_NUMBER} is available at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          echo "✅ Allure Report is available at: https://$GITHUB_REPOSITORY_OWNER.github.io/$GITHUB_REPOSITORY/"

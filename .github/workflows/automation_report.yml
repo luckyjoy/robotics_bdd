@@ -25,8 +25,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,25 +35,20 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      # Restore previous deployment to preserve historical builds
-      - name: Restore previous Pages site
+      # Prepare history folder to store previous builds
+      - name: Prepare history folder
         run: |
-          SITE_DIR="site"
-          TEMP_DIR="site-old-gh"
-          REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
+          mkdir -p history
+          mkdir -p site
 
-          # Clone gh-pages branch if it exists
-          git clone --branch gh-pages --single-branch $REPO $TEMP_DIR || echo "No gh-pages branch yet"
-
-          mkdir -p $SITE_DIR
-          if [ -d "$TEMP_DIR" ]; then
-            # Copy numeric build folders (historical) into SITE_DIR
-            for dir in $(ls -1 $TEMP_DIR | grep -E '^[0-9]+$'); do
-              cp -r "$TEMP_DIR/$dir" "$SITE_DIR/$dir"
+          # Copy historical builds into site
+          if [ -d history ]; then
+            for dir in $(ls -1 history | grep -E '^[0-9]+$'); do
+              cp -r "history/$dir" "site/$dir"
             done
           fi
 
-      # Run tests and generate Allure report
+      # Run tests and generate Allure Report
       - name: Run tests and generate Allure Report
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
@@ -82,19 +75,19 @@ jobs:
             echo "<html><body><h1>No Allure Report for build #$BUILD_NUMBER</h1></body></html>" > "$VERSIONED_REPORT_DIR/index.html"
           fi
 
-          # Add current build to site
-          mkdir -p $SITE_DIR/$BUILD_NUMBER
-          cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/$BUILD_NUMBER/
-          mkdir -p $SITE_DIR/latest
-          cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/latest/
+          # Copy current build to site
+          mkdir -p "$SITE_DIR/$BUILD_NUMBER"
+          cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/"
+          mkdir -p "$SITE_DIR/latest"
+          cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/"
 
           # Save timestamp
-          date -u +"%Y-%m-%d %H:%M:%S UTC" > $SITE_DIR/$BUILD_NUMBER/build-info.txt
+          date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/build-info.txt"
 
           # Rebuild index.html
-          echo "<html><body><h1>Allure Reports</h1><ul>" > $SITE_DIR/index.html
+          echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
           TS=$(cat "$SITE_DIR/$BUILD_NUMBER/build-info.txt")
-          echo "<li><a href='latest/'>Latest Report</a> - ${TS}</li>" >> $SITE_DIR/index.html
+          echo "<li><a href='latest/'>Latest Report</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
             if [ "$dir" = "$BUILD_NUMBER" ]; then
               continue
@@ -104,9 +97,12 @@ jobs:
             else
               TS="(no timestamp)"
             fi
-            echo "<li><a href='${dir}/'>Build #${dir}</a> - ${TS}</li>" >> $SITE_DIR/index.html
+            echo "<li><a href='${dir}/'>Build #${dir}</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
           done
-          echo "</ul></body></html>" >> $SITE_DIR/index.html
+          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
+
+          # Copy current build to history for next runs
+          cp -r "$SITE_DIR/$BUILD_NUMBER" "history/$BUILD_NUMBER"
 
       # Configure and deploy Pages
       - name: Configure GitHub Pages

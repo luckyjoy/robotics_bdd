@@ -1,4 +1,4 @@
-name: Robotics BDD Simulation CI/CD Pipeline
+name: Robotics BDD Simulation CI/CD
 
 on:
   push:

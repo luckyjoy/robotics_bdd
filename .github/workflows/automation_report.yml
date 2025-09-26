@@ -46,12 +46,16 @@ jobs:
         run: |
           rm -rf allure-results
           pytest -m navigation --alluredir=allure-results | tee pytest.log
+          cp supports/environment.properties allure-results/ 2>/dev/null || true
+          cp supports/categories.json allure-results/ 2>/dev/null || true
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
         run: |
           Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
           pytest -m navigation --alluredir=allure-results
+          Copy-Item supports\environment.properties allure-results\ -ErrorAction SilentlyContinue
+          Copy-Item supports\categories.json allure-results\ -ErrorAction SilentlyContinue
 
       # -----------------------------
       # Upload artifacts per OS
@@ -66,9 +70,9 @@ jobs:
   deploy-pages:
     runs-on: ubuntu-latest
     needs: run-tests
-    timeout-minutes: 30   # Prevent hanging
+    timeout-minutes: 30
     environment:
-      name: github-pages   # << Required for deploy-pages
+      name: github-pages   # Required for deploy-pages
 
     permissions:
       contents: write
@@ -110,7 +114,7 @@ jobs:
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
           mkdir -p allure-commandline
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
-          echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH   # persist PATH for next steps
+          echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH   # persist PATH
 
       # Generate Allure report
       - name: Generate Allure Report

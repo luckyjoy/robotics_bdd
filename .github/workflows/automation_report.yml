@@ -14,12 +14,16 @@ on:
 jobs:
   test-and-deploy:
     runs-on: ubuntu-latest
+
+    # Permissions required for Pages deployment
     permissions:
       contents: write
       pages: write
       id-token: write
 
-    environment: github-pages
+    # Environment must be exactly at the job level, before steps
+    environment:
+      name: github-pages
 
     steps:
       - name: Checkout repository

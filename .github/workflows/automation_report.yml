@@ -45,6 +45,7 @@ jobs:
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}"
           LATEST_REPORT_DIR="allure-report-latest"
+          SITE_DIR="site"
 
           ALLURE_VERSION="2.25.0"
           ALLURE_DIR="allure-commandline"
@@ -63,27 +64,36 @@ jobs:
             echo "<html><body><h1>No Allure Report available for build #$BUILD_NUMBER</h1></body></html>" > "$VERSIONED_REPORT_DIR/index.html"
           fi
 
-          rm -rf "$LATEST_REPORT_DIR"
-          cp -r "$VERSIONED_REPORT_DIR" "$LATEST_REPORT_DIR"
+          # Prepare GitHub Pages folder
+          rm -rf $SITE_DIR
+          mkdir -p $SITE_DIR/latest
+          mkdir -p $SITE_DIR/$BUILD_NUMBER
+
+          cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/$BUILD_NUMBER/
+          cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/latest/
+
+          # Create root index.html with links
+          echo "<html><body><h1>Allure Reports</h1><ul>" > $SITE_DIR/index.html
+          echo "<li><a href='latest/'>Latest Report</a></li>" >> $SITE_DIR/index.html
+          echo "<li><a href='${BUILD_NUMBER}/'>Build #${BUILD_NUMBER}</a></li>" >> $SITE_DIR/index.html
+          echo "</ul></body></html>" >> $SITE_DIR/index.html
 
           echo "📂 Generated directories:"
-          ls -R .
+          ls -R $SITE_DIR
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Allure Report as Pages Artifact
+      - name: Upload Allure Reports to Pages
         uses: actions/upload-pages-artifact@v3
         with:
-          path: |
-            allure-report-latest
-            allure-report-${{ github.run_number }}
+          path: site
 
-      - name: Deploy Allure Report to GitHub Pages
+      - name: Deploy Allure Reports to GitHub Pages
         uses: actions/deploy-pages@v4
 
       - name: Show GitHub Pages URL
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          echo "✅ Latest Allure Report for build #${GITHUB_RUN_NUMBER} is available at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
-          echo "✅ Historical report for this build: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/allure-report-${GITHUB_RUN_NUMBER}/"
+          echo "✅ Latest Allure Report for build #${GITHUB_RUN_NUMBER} is available at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
+          echo "✅ Historical report for this build: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/${GITHUB_RUN_NUMBER}/"

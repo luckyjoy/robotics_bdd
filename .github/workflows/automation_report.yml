@@ -45,10 +45,10 @@ jobs:
           # Clone gh-pages branch if it exists
           git clone --branch gh-pages --single-branch $REPO $TEMP_DIR || echo "No gh-pages branch yet"
 
-          # Merge historical builds into SITE_DIR
+          # Merge historical numeric builds into SITE_DIR
           mkdir -p $SITE_DIR
           if [ -d "$TEMP_DIR" ]; then
-            for dir in $(ls -1 $TEMP_DIR | grep -Ev 'latest|README.md'); do
+            for dir in $(ls -1 $TEMP_DIR | grep -E '^[0-9]+$'); do
               cp -r "$TEMP_DIR/$dir" "$SITE_DIR/$dir"
             done
           fi
@@ -80,27 +80,20 @@ jobs:
             echo "<html><body><h1>No Allure Report available for build #$BUILD_NUMBER</h1></body></html>" > "$VERSIONED_REPORT_DIR/index.html"
           fi
 
-          # Prepare Pages folder
-          mkdir -p $SITE_DIR/latest
+          # Add current build
           mkdir -p $SITE_DIR/$BUILD_NUMBER
-          cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/latest/
           cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/$BUILD_NUMBER/
+          mkdir -p $SITE_DIR/latest
+          cp -r $VERSIONED_REPORT_DIR/* $SITE_DIR/latest/
 
           # Save build timestamp
           date -u +"%Y-%m-%d %H:%M:%S UTC" > $SITE_DIR/$BUILD_NUMBER/build-info.txt
 
-          # Remove any README.md to prevent GitHub Pages override
-          rm -f $SITE_DIR/README.md
-
-          # Rebuild index.html with timestamps
+          # Rebuild index.html
           echo "<html><body><h1>Allure Reports</h1><ul>" > $SITE_DIR/index.html
 
-          # Latest report with timestamp
-          if [ -f "$SITE_DIR/$BUILD_NUMBER/build-info.txt" ]; then
-            TS=$(cat "$SITE_DIR/$BUILD_NUMBER/build-info.txt")
-          else
-            TS="(no timestamp)"
-          fi
+          # Latest report
+          TS=$(cat "$SITE_DIR/$BUILD_NUMBER/build-info.txt")
           echo "<li><a href='latest/'>Latest Report</a> - ${TS}</li>" >> $SITE_DIR/index.html
 
           # Historical builds (skip current build)
@@ -117,8 +110,6 @@ jobs:
           done
 
           echo "</ul></body></html>" >> $SITE_DIR/index.html
-          echo "📂 Generated directories:"
-          ls -R $SITE_DIR
 
       # Upload raw Allure results for debugging
       - name: Upload raw Allure results
@@ -130,7 +121,7 @@ jobs:
 
       # Upload pytest log + optional artifacts
       - name: Upload test logs & artifacts
-        if: always()   # run even if tests fail
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-debug-${{ github.run_number }}

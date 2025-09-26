@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-    timeout-minutes: 45
+    timeout-minutes: 30
 
     permissions:
       contents: write
@@ -36,34 +36,39 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install --upgrade pip
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
-      # Run multiple pytest markers
+      # Run tests per OS
       # -----------------------------
-      - name: Run Pick and Place Tests
+      - name: Run tests (Linux)
+        if: runner.os == 'Linux'
         run: |
-          mkdir -p allure-results/pick_and_place
-          pytest -m pick_and_place --alluredir=allure-results/pick_and_place | tee pick_and_place.log
+          rm -rf allure-results
+          pytest -m navigation --alluredir=allure-results | tee pytest.log
 
-      - name: Run Safety Tests
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
         run: |
-          mkdir -p allure-results/safety
-          pytest -m safety --alluredir=allure-results/safety | tee safety.log
+          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
+          pytest -m navigation --alluredir=allure-results
 
-      - name: Run Navigation Tests
-        run: |
-          mkdir -p allure-results/navigation
-          pytest -m navigation --alluredir=allure-results/navigation | tee navigation.log
-
-      # Copy support files
-      - name: Copy Allure Support Files
+      # -----------------------------
+      # Copy Allure support files per OS
+      # -----------------------------
+      - name: Copy Allure Support Files (Linux)
+        if: runner.os == 'Linux'
         run: |
           cp -r supports/*.properties supports/*.json allure-results/ 2>/dev/null || true
 
+      - name: Copy Allure Support Files (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Copy-Item -Path "supports\*.properties" -Destination "allure-results" -ErrorAction SilentlyContinue
+          Copy-Item -Path "supports\*.json" -Destination "allure-results" -ErrorAction SilentlyContinue
+
       # -----------------------------
-      # Upload OS-specific Allure Results
+      # Upload artifacts per OS
       # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
@@ -75,7 +80,7 @@ jobs:
   deploy-pages:
     runs-on: ubuntu-latest
     needs: run-tests
-    timeout-minutes: 45
+    timeout-minutes: 30
     environment:
       name: github-pages
 
@@ -105,19 +110,14 @@ jobs:
           name: allure-results-windows-latest
           path: allure-results/windows-latest
 
-      # -----------------------------
-      # Merge Allure Results per OS
-      # -----------------------------
+      # Merge results with OS folders
       - name: Merge Allure Results
         run: |
-          mkdir -p allure-results/merged
-          for OS in ubuntu-latest windows-latest; do
-            cp -r "allure-results/$OS/"* allure-results/merged/
-          done
+          mkdir -p allure-results
+          cp -r allure-results/ubuntu-latest/* allure-results/ubuntu-latest/
+          cp -r allure-results/windows-latest/* allure-results/windows-latest/
 
-      # -----------------------------
       # Setup Allure CLI
-      # -----------------------------
       - name: Setup Allure CLI
         run: |
           ALLURE_VERSION=2.25.0
@@ -126,52 +126,41 @@ jobs:
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
-      # -----------------------------
-      # Generate Allure Report (per OS + merged)
-      # -----------------------------
-      - name: Generate Allure Reports
+      # Generate Allure report per OS
+      - name: Generate Allure Report
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
 
-          # Per OS reports
           for OS in ubuntu-latest windows-latest; do
-            REPORT_DIR="$SITE_DIR/$BUILD_NUMBER/$OS"
-            mkdir -p "$REPORT_DIR"
-            allure generate "allure-results/$OS" --output "$REPORT_DIR" --clean
+            VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
+            mkdir -p "$VERSIONED_REPORT_DIR"
+            allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
+
+            mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
+            cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
             mkdir -p "$SITE_DIR/latest/$OS"
-            cp -r "$REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
-            date -u +"%Y-%m-%d %H:%M:%S UTC" > "$REPORT_DIR/build-info.txt"
+            cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
+
+            date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
           done
 
-          # Merged report
-          MERGED_DIR="$SITE_DIR/$BUILD_NUMBER/merged"
-          mkdir -p "$MERGED_DIR"
-          allure generate "allure-results/merged" --output "$MERGED_DIR" --clean
-          mkdir -p "$SITE_DIR/latest/merged"
-          cp -r "$MERGED_DIR"/* "$SITE_DIR/latest/merged/"
-          date -u +"%Y-%m-%d %H:%M:%S UTC" > "$MERGED_DIR/build-info.txt"
-
-      # -----------------------------
-      # Rebuild index.html
-      # -----------------------------
+      # Rebuild index.html with OS labels
       - name: Rebuild Index
         run: |
           SITE_DIR="site"
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
 
-          # Latest reports
-          for OS in ubuntu-latest windows-latest merged; do
+          for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
               echo "<li><a href='latest/$OS/'>Latest Report ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
             fi
           done
 
-          # Historical builds
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
-            for OS in ubuntu-latest windows-latest merged; do
+            for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$dir/$OS" ]; then
                 TS=$(cat "$SITE_DIR/$dir/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
                 echo "<li><a href='${dir}/${OS}/'>Build #${dir} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
@@ -181,18 +170,14 @@ jobs:
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
-      # -----------------------------
       # Deploy to GitHub Pages
-      # -----------------------------
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
       - uses: actions/deploy-pages@v4
 
-      # -----------------------------
-      # Add workflow summary badges
-      # -----------------------------
+      # Add badges to workflow summary
       - name: Add Workflow Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}

@@ -61,7 +61,7 @@ jobs:
       - name: Deploy Allure Report to GitHub Pages
         uses: actions/deploy-pages@v4
         with:
-          path: allure-report
+          path: allure-report   # <-- must be exactly 2 spaces under 'with'
 
       - name: Show GitHub Pages URL
         run: echo "✅ Allure Report is available at: https://$GITHUB_REPOSITORY_OWNER.github.io/$GITHUB_REPOSITORY/"

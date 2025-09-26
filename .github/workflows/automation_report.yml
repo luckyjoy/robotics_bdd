@@ -19,6 +19,8 @@ jobs:
       pages: write
       id-token: write
 
+    environment: github-pages   # <-- required for deploy-pages@v4
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,47 +36,30 @@ jobs:
 
       - name: Run tests and collect Allure results
         run: |
-          # 1. Clean up old results directory
           rm -rf allure-results
-          # 2. Run ONLY tests marked with @navigation and generate Allure data
           pytest -m navigation --alluredir=allure-results
 
       - name: Generate Allure Report (Reliable Method)
         run: |
           ALLURE_VERSION="2.25.0"
           ALLURE_DIR="allure-commandline"
-          
-          # 1. Download and extract Allure CLI
-          echo "Downloading Allure CLI version $ALLURE_VERSION..."
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/$ALLURE_VERSION/allure-commandline-$ALLURE_VERSION.tgz"
           mkdir $ALLURE_DIR
           tar -xzf allure.tgz -C $ALLURE_DIR --strip-components 1
-          
-          # 2. Add Allure CLI to the path for this step
           export PATH="$PWD/$ALLURE_DIR/bin:$PATH"
-          
-          # 3. Copy mandatory environment properties
           cp supports/environment.properties allure-results/
-          
-          # 4. Copy optional categories.json (fails gracefully if missing)
           cp supports/categories.json allure-results/ || true
-          
-          # 5. Build the static HTML report using the downloaded CLI
-          echo "Generating Allure report..."
           allure generate allure-results --output allure-report --clean
 
       - name: Setup Pages
-        # This action configures the GitHub Pages environment
         uses: actions/configure-pages@v5
 
       - name: Upload Allure Report Artifact
-        # Uploads the static HTML report directory to be served by GitHub Pages
         uses: actions/upload-pages-artifact@v3
         with:
           path: 'allure-report'
 
       - name: Deploy to GitHub Pages
         id: deployment
-        # Only deploy on pushes to the main branch
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/deploy-pages@v4

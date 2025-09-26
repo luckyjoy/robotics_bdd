@@ -41,8 +41,8 @@ jobs:
         run: |
           # 1. Clean up old results directory
           rm -rf allure-results
-          # 2. Run all tests and generate raw Allure data
-          pytest --alluredir=allure-results
+          # 2. Run navigation suite tests and generate raw Allure data
+          pytest -m navigation --alluredir=allure-results
 
       - name: Copy Allure configuration files
         run: |

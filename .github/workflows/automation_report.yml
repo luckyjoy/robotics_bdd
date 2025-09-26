@@ -98,8 +98,11 @@ jobs:
           fi
           echo "<li><a href='latest/'>Latest Report</a> - ${TS}</li>" >> $SITE_DIR/index.html
 
-          # Historical builds
+          # Historical builds (skip current build)
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
+            if [ "$dir" = "$BUILD_NUMBER" ]; then
+              continue
+            fi
             if [ -f "$SITE_DIR/$dir/build-info.txt" ]; then
               TS=$(cat "$SITE_DIR/$dir/build-info.txt")
             else

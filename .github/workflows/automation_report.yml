@@ -1,90 +1,69 @@
 name: Robotics BDD Simulation CI/CD Pipeline
 
 on:
-push:
-branches:
-- main
-pull_request:
-branches:
-- main
-schedule:
-# Runs at 00:00 AM PT every day (7 AM UTC)
-- cron: '0 7 * * *'
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    # Runs at 00:00 AM PT every day (7 AM UTC)
+    - cron: '0 7 * * *'
 
 jobs:
-test-and-deploy: # Changed job name to match the snippet, if intended
-runs-on: ubuntu-latest
+  test-and-deploy:
+    runs-on: ubuntu-latest
 
-# Permissions required for Pages deployment
-permissions:
-  contents: write
-  pages: write
-  id-token: write
+    # Permissions required for Pages deployment
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
 
-# Setting environment at the job level for GitHub Pages deployment
-environment:
-  name: github-pages
-  url: ${{ steps.deployment.outputs.page_url }} # Add URL output for clarity
+    # Environment must be exactly at the job level, before steps
+    environment:
+      name: github-pages
 
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  - name: Set up Python
-    uses: actions/setup-python@v5
-    with:
-      python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-  - name: Install Python dependencies
-    # Install Python packages needed for testing and Allure data generation
-    run: |
-      pip install pytest pytest-bdd allure-pytest pytest-html
+      - name: Install Python dependencies
+        run: |
+          pip install pytest pytest-bdd allure-pytest pytest-html
 
-  - name: Install Allure CLI (Reliable Setup)
-    # FIX: Download and extract the Allure CLI manually to reliably set up the 'allure' command in the PATH.
-    run: |
-      ALLURE_VERSION="2.25.0"
-      ALLURE_DIR="allure-commandline"
-      
-      echo "Downloading Allure CLI version $ALLURE_VERSION..."
-      curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/$ALLURE_VERSION/allure-commandline-$ALLURE_VERSION.tgz"
-      mkdir $ALLURE_DIR
-      tar -xzf allure.tgz -C $ALLURE_DIR --strip-components 1
-      
-      # Make the Allure CLI executable available for the next step
-      echo "$PWD/$ALLURE_DIR/bin" >> $GITHUB_PATH
+      - name: Run tests and collect Allure results
+        run: |
+          rm -rf allure-results
+          pytest -m navigation --alluredir=allure-results
 
-  - name: Run tests and collect Allure results
-    run: |
-      # 1. Clean up old results directory
-      rm -rf allure-results
-      # 2. Run ONLY tests marked with @navigation and generate raw Allure data
-      pytest -m navigation --alluredir=allure-results
+      - name: Generate Allure Report
+        run: |
+          ALLURE_VERSION="2.25.0"
+          ALLURE_DIR="allure-commandline"
+          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/$ALLURE_VERSION/allure-commandline-$ALLURE_VERSION.tgz"
+          mkdir $ALLURE_DIR
+          tar -xzf allure.tgz -C $ALLURE_DIR --strip-components 1
+          export PATH="$PWD/$ALLURE_DIR/bin:$PATH"
+          
+          cp supports/environment.properties allure-results/ 2>/dev/null || true
+          cp supports/categories.json allure-results/ 2>/dev/null || true
+          
+          allure generate allure-results --output allure-report --clean
 
-  - name: Generate Allure Report
-    # The 'allure' command is now available due to $GITHUB_PATH being updated.
-    run: |
-      # 1. Copy mandatory environment properties
-      cp supports/environment.properties allure-results/
-      
-      # 2. Copy optional categories.json (fails gracefully if missing)
-      cp supports/categories.json allure-results/ || true
-      
-      # 3. Build the static HTML report
-      allure generate allure-results --output allure-report --clean
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
 
-  - name: Setup Pages
-    # This action configures the GitHub Pages environment
-    uses: actions/configure-pages@v5
+      - name: Deploy Allure Report to GitHub Pages
+        uses: actions/deploy-pages@v4
+        with:
+          path: allure-report
 
-  - name: Upload Allure Report Artifact
-    # Uploads the static HTML report directory to be served by GitHub Pages
-    uses: actions/upload-pages-artifact@v3
-    with:
-      path: 'allure-report'
-
-  - name: Deploy to GitHub Pages
-    id: deployment
-    # Only deploy on pushes to the main branch
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: actions/deploy-pages@v4
+      - name: Show GitHub Pages URL
+        run: echo "✅ Allure Report is available at: https://$GITHUB_REPOSITORY_OWNER.github.io/$GITHUB_REPOSITORY/"

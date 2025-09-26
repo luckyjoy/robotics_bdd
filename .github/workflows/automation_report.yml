@@ -37,25 +37,24 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      # Restore previous gh-pages deployment to preserve historical builds
-      - name: Restore historical builds from gh-pages
+      # Clone the historical builds branch
+      - name: Clone historical builds
         run: |
           SITE_DIR="site"
-          TEMP_DIR="site-gh-pages"
+          HISTORY_DIR="history"
           REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
 
-          # Clone gh-pages branch if it exists
-          git clone --branch gh-pages --single-branch $REPO $TEMP_DIR || echo "No gh-pages branch yet"
-
           mkdir -p $SITE_DIR
-          if [ -d "$TEMP_DIR" ]; then
-            # Copy all numeric build folders into SITE_DIR
-            for dir in $(ls -1 $TEMP_DIR | grep -E '^[0-9]+$'); do
-              cp -r "$TEMP_DIR/$dir" "$SITE_DIR/$dir"
+          git clone --branch allure-history --single-branch $REPO $HISTORY_DIR || mkdir -p $HISTORY_DIR
+
+          # Copy historical builds into site
+          if [ -d "$HISTORY_DIR" ]; then
+            for dir in $(ls -1 $HISTORY_DIR | grep -E '^[0-9]+$'); do
+              cp -r "$HISTORY_DIR/$dir" "$SITE_DIR/$dir"
             done
           fi
 
-      # Run tests and generate Allure Report
+      # Run tests and generate Allure report
       - name: Run tests and generate Allure Report
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
@@ -63,7 +62,7 @@ jobs:
           ALLURE_VERSION="2.25.0"
           ALLURE_DIR="allure-commandline"
 
-          # Download & extract Allure CLI
+          # Download Allure CLI
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
           mkdir -p $ALLURE_DIR
           tar -xzf allure.tgz -C $ALLURE_DIR --strip-components 1
@@ -82,7 +81,7 @@ jobs:
             echo "<html><body><h1>No Allure Report for build #$BUILD_NUMBER</h1></body></html>" > "$VERSIONED_REPORT_DIR/index.html"
           fi
 
-          # Copy current build into SITE_DIR
+          # Copy current build to site
           mkdir -p "$SITE_DIR/$BUILD_NUMBER"
           cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/"
           mkdir -p "$SITE_DIR/latest"
@@ -120,7 +119,23 @@ jobs:
       - name: Deploy Allure Reports to GitHub Pages
         uses: actions/deploy-pages@v4
 
-      # Upload raw results and artifacts
+      # Push current build into historical branch
+      - name: Update allure-history branch
+        run: |
+          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
+          REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
+          cd history
+          mkdir -p $BUILD_NUMBER
+          cp -r ../site/$BUILD_NUMBER/* $BUILD_NUMBER/
+          git init
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git add .
+          git commit -m "Add build #$BUILD_NUMBER"
+          git branch -M allure-history
+          git push -f $REPO allure-history
+
+      # Upload artifacts for debugging
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         with:

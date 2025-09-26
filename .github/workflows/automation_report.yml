@@ -39,7 +39,7 @@ jobs:
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
-      # Create environment.properties dynamically per OS
+      # Create dynamic environment.properties
       # -----------------------------
       - name: Create environment.properties (Linux)
         if: runner.os == 'Linux'
@@ -65,7 +65,7 @@ EOF
         run: |
           mkdir allure-results -ErrorAction SilentlyContinue
           $OS_NAME = (Get-CimInstance Win32_OperatingSystem).Caption
-          $envProps = @"
+          @"
 Project=Robotics Behavior-Driven Development (BDD) Simulation Framework
 Author=Bang Thien Nguyen
 Email=ontario1998@gmail.com
@@ -76,8 +76,7 @@ Python Version=3.10.12
 Framework Version=1.0.0
 Test Type=Integration
 HTML Reporter=Allure Test Report 2.35.1
-"@
-          $envProps | Out-File -FilePath allure-results\environment.properties -Encoding utf8
+"@ | Out-File -Encoding utf8 allure-results\environment.properties
 
       # -----------------------------
       # Run tests per OS
@@ -87,7 +86,6 @@ HTML Reporter=Allure Test Report 2.35.1
         run: |
           rm -rf allure-results/*
           pytest -m navigation --alluredir=allure-results | tee pytest.log
-          cp supports/categories.json allure-results/ 2>/dev/null || true
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
@@ -95,10 +93,9 @@ HTML Reporter=Allure Test Report 2.35.1
         run: |
           Remove-Item -Recurse -Force allure-results\* -ErrorAction SilentlyContinue
           pytest -m navigation --alluredir=allure-results
-          Copy-Item supports\categories.json allure-results\ -ErrorAction SilentlyContinue
 
       # -----------------------------
-      # Upload Allure Results
+      # Upload artifacts per OS
       # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
@@ -126,7 +123,7 @@ HTML Reporter=Allure Test Report 2.35.1
           fetch-depth: 0
 
       # -----------------------------
-      # Download artifacts
+      # Download artifacts from both OSes
       # -----------------------------
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -140,18 +137,14 @@ HTML Reporter=Allure Test Report 2.35.1
           name: allure-results-windows-latest
           path: allure-results/windows-latest
 
-      # -----------------------------
       # Merge results
-      # -----------------------------
       - name: Merge Allure Results
         run: |
           mkdir -p allure-results
           cp -r allure-results/ubuntu-latest/* allure-results/ubuntu-latest/
           cp -r allure-results/windows-latest/* allure-results/windows-latest/
 
-      # -----------------------------
       # Setup Allure CLI
-      # -----------------------------
       - name: Setup Allure CLI
         run: |
           ALLURE_VERSION=2.25.0
@@ -160,9 +153,7 @@ HTML Reporter=Allure Test Report 2.35.1
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
-      # -----------------------------
       # Generate Allure report per OS
-      # -----------------------------
       - name: Generate Allure Report
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
@@ -181,9 +172,7 @@ HTML Reporter=Allure Test Report 2.35.1
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
           done
 
-      # -----------------------------
       # Rebuild index.html with OS and timestamp
-      # -----------------------------
       - name: Rebuild Index
         run: |
           SITE_DIR="site"
@@ -210,18 +199,14 @@ HTML Reporter=Allure Test Report 2.35.1
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
-      # -----------------------------
       # Deploy to GitHub Pages
-      # -----------------------------
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
       - uses: actions/deploy-pages@v4
 
-      # -----------------------------
-      # Add badges to workflow summary
-      # -----------------------------
+      # Add workflow badges
       - name: Add Workflow Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}

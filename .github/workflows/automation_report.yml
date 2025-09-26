@@ -72,4 +72,5 @@ jobs:
 
       - name: Show GitHub Pages URL
         run: |
+          REPO_NAME=${GITHUB_REPOSITORY##*/}
           echo "✅ Allure Report for build #${GITHUB_RUN_NUMBER} is available at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"

@@ -30,9 +30,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install all necessary Python packages, including pytest-html to satisfy conftest.py import
+          # Install Python and Pytest dependencies
           pip install pytest pytest-bdd allure-pytest pytest-html
-          # REMOVED: Manual sudo apt-get install allure, replaced by Allure Action
+          # Install Allure Command Line Interface (CLI) using apt-get
+          sudo apt-get update
+          sudo apt-get install -y allure
 
       - name: Run tests and collect Allure results
         run: |
@@ -41,21 +43,17 @@ jobs:
           # 2. Run ONLY tests marked with @navigation and generate Allure data
           pytest -m navigation --alluredir=allure-results
 
-      - name: Copy Allure configuration files from supports/ folder
+      - name: Generate Allure Report
+        # FIX: Combining the copy and generate commands into one step resolves the "allure: command not found" issue.
         run: |
-          # Copy mandatory environment properties
+          # 1. Copy mandatory environment properties
           cp supports/environment.properties allure-results/
           
-          # Copy optional categories.json. The '|| true' allows the workflow to continue if the file is missing.
+          # 2. Copy optional categories.json (fails gracefully if missing)
           cp supports/categories.json allure-results/ || true
-
-      - name: Build Allure Report using Action
-        # FIX: Using the official action replaces the manual 'allure generate' command and installs the CLI internally.
-        uses: allure-framework/allure-action/github-pages@v2
-        id: allure_report
-        with:
-          report_dir: allure-report
-          allure_results_dir: allure-results
+          
+          # 3. Build the static HTML report
+          allure generate allure-results --output allure-report --clean
 
       - name: Setup Pages
         # This action configures the GitHub Pages environment

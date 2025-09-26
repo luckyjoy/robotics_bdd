@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-    timeout-minutes: 30   # Timeout per job to prevent hanging
+    timeout-minutes: 30   # Timeout per job
 
     permissions:
       contents: write
@@ -38,9 +38,7 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      # -----------------------------
       # Run tests per OS
-      # -----------------------------
       - name: Run tests (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -53,9 +51,7 @@ jobs:
           Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
           pytest -m navigation --alluredir=allure-results
 
-      # -----------------------------
       # Upload artifacts per OS
-      # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
         with:
@@ -79,9 +75,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # -----------------------------
       # Download artifacts from both OSes
-      # -----------------------------
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
         with:
@@ -108,14 +102,15 @@ jobs:
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
           mkdir -p allure-commandline
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
-          export PATH="$PWD/allure-commandline/bin:$PATH"
+          echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH   # persist PATH for next steps
 
       # Generate Allure report
-      - run: |
+      - name: Generate Allure Report
+        run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
           VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}"
-          mkdir -p $VERSIONED_REPORT_DIR
+          mkdir -p "$VERSIONED_REPORT_DIR"
           allure generate allure-results --output "$VERSIONED_REPORT_DIR" --clean
 
           mkdir -p "$SITE_DIR/$BUILD_NUMBER"
@@ -126,7 +121,8 @@ jobs:
           date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/build-info.txt"
 
       # Rebuild index.html
-      - run: |
+      - name: Rebuild Index
+        run: |
           SITE_DIR="site"
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
@@ -151,7 +147,8 @@ jobs:
       - uses: actions/deploy-pages@v4
 
       # Add badges to workflow summary
-      - run: |
+      - name: Add Workflow Badges
+        run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
           LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
           HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"

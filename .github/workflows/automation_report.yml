@@ -38,29 +38,42 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
+      # -----------------------------
+      # Prepare environment.properties dynamically
+      # -----------------------------
       - name: Prepare environment.properties
         run: |
           mkdir -p allure-results
           OS_NAME="${{ runner.os }}"
-          cat > allure-results/environment.properties <<EOL
-Project=Robotics Behavior-Driven Development (BDD) Simulation Framework
-Author=Bang Thien Nguyen
-Email=ontario1998@gmail.com
-Robot Model=Gazebo_Pioneer3DX
-Simulation Engine=PyBullet
-Operating System=$OS_NAME
-Python Version=3.10.12
-Framework Version=1.0.0
-Test Type=Integration
-HTML Reporter=Allure Test Report 2.35.1
-EOL
+          echo "Project=Robotics Behavior-Driven Development (BDD) Simulation Framework" > allure-results/environment.properties
+          echo "Author=Bang Thien Nguyen" >> allure-results/environment.properties
+          echo "Email=ontario1998@gmail.com" >> allure-results/environment.properties
+          echo "Robot Model=Gazebo_Pioneer3DX" >> allure-results/environment.properties
+          echo "Simulation Engine=PyBullet" >> allure-results/environment.properties
+          echo "Operating System=$OS_NAME" >> allure-results/environment.properties
+          echo "Python Version=3.10.12" >> allure-results/environment.properties
+          echo "Framework Version=1.0.0" >> allure-results/environment.properties
+          echo "Test Type=Integration" >> allure-results/environment.properties
+          echo "HTML Reporter=Allure Test Report 2.35.1" >> allure-results/environment.properties
 
+      # -----------------------------
+      # Run tests per OS
+      # -----------------------------
       - name: Run tests
         run: |
-          rm -rf allure-results/* || true
-          pytest -m navigation --alluredir=allure-results
-          cp supports/*.properties supports/*.json allure-results/ 2>/dev/null || true
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            rm -rf allure-results
+            pytest -m navigation --alluredir=allure-results | tee pytest.log
+            cp supports/environment.properties supports/categories.json allure-results/ 2>/dev/null || true
+          else
+            Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
+            pytest -m navigation --alluredir=allure-results
+            Copy-Item supports\environment.properties supports\categories.json allure-results\ -ErrorAction SilentlyContinue
+          fi
 
+      # -----------------------------
+      # Upload artifacts per OS
+      # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
         with:
@@ -86,6 +99,9 @@ EOL
         with:
           fetch-depth: 0
 
+      # -----------------------------
+      # Download artifacts from both OSes
+      # -----------------------------
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
         with:
@@ -98,12 +114,18 @@ EOL
           name: allure-results-windows-latest
           path: allure-results/windows-latest
 
+      # -----------------------------
+      # Merge Allure Results
+      # -----------------------------
       - name: Merge Allure Results
         run: |
           mkdir -p allure-results
           cp -r allure-results/ubuntu-latest/* allure-results/ubuntu-latest/ || true
           cp -r allure-results/windows-latest/* allure-results/windows-latest/ || true
 
+      # -----------------------------
+      # Setup Allure CLI
+      # -----------------------------
       - name: Setup Allure CLI
         run: |
           ALLURE_VERSION=2.25.0
@@ -112,12 +134,13 @@ EOL
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
-      - name: Generate Allure Reports
+      # -----------------------------
+      # Generate Allure Report per OS
+      # -----------------------------
+      - name: Generate Allure Report
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
-          mkdir -p "$SITE_DIR"
-
           for OS in ubuntu-latest windows-latest; do
             VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
             mkdir -p "$VERSIONED_REPORT_DIR"
@@ -131,6 +154,9 @@ EOL
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
           done
 
+      # -----------------------------
+      # Rebuild Index.html
+      # -----------------------------
       - name: Rebuild Index
         run: |
           SITE_DIR="site"
@@ -157,12 +183,18 @@ EOL
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
+      # -----------------------------
+      # Deploy to GitHub Pages
+      # -----------------------------
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
       - uses: actions/deploy-pages@v4
 
+      # -----------------------------
+      # Add badges to workflow summary
+      # -----------------------------
       - name: Add Workflow Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}

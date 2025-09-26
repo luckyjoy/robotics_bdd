@@ -34,7 +34,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest pytest-html
+          pip install pytest pytest-html pytest_bdd
 
       - name: Run tests and generate HTML report
         # The script now generates the report as index.html in the root

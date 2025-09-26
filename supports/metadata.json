@@ -1,0 +1,12 @@
+{
+  "Project": "Robotics Simulation Framework",
+  "Author": "Bang Thien Nguyen",
+  "Email" : "ontario1998@gmail.com",
+  "Robot Model": "Gazebo_Pioneer3DX",
+  "Simulation Engine": "PyBullet",
+  "Operating System": "Windows 11",
+  "Python Version": "3.10.12",
+  "Framework Version": "1.0.0",
+  "Test Type": "Integration",
+  "HTML Reporter": "pytest-html 2.19.2"
+}

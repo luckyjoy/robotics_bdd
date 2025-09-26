@@ -15,7 +15,7 @@ allure-results/
 # Reports & logs
 reports/
 *.log
-*.json
+
 
 # Python caches
 __pycache__/

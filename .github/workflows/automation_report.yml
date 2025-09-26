@@ -40,14 +40,16 @@ jobs:
         run: |
           # 1. Clean up old results directory
           rm -rf allure-results
-          # 2. Run ONLY tests marked with @navigation
-          # FIX: Added '-m navigation' to select only the navigation suite
+          # 2. Run ONLY tests marked with @navigation and generate Allure data
           pytest -m navigation --alluredir=allure-results
 
       - name: Copy Allure configuration files from supports/ folder
         run: |
+          # Copy mandatory environment properties
           cp supports/environment.properties allure-results/
-          cp supports/categories.json allure-results/
+          
+          # Copy optional categories.json. This step will not cause a failure if the file is missing.
+          cp supports/categories.json allure-results/ || true
 
       - name: Build Allure Report
         # Generates the static HTML report into 'allure-report' folder

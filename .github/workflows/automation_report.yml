@@ -17,12 +17,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     timeout-minutes: 30
-
     permissions:
       contents: write
       pages: write
       id-token: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,33 +32,25 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      # -----------------------------
       # Run tests per OS
-      # -----------------------------
-      - name: Run tests (Linux)
-        if: runner.os == 'Linux'
+      - name: Run tests
         run: |
-          rm -rf allure-results
-          pytest -m navigation --alluredir=allure-results | tee pytest.log
-          mkdir -p allure-results
-          cp supports/ubuntu.properties allure-results/environment.properties
-          cp supports/*.json allure-results/ 2>/dev/null || true
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            rm -rf allure-results || true
+            pytest -m navigation --alluredir=allure-results | tee pytest.log
+            cp supports/ubuntu.properties allure-results/environment.properties || true
+            cp supports/*.json allure-results/ || true
+          else
+            powershell -Command "Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue"
+            pytest -m navigation --alluredir=allure-results
+            Copy-Item supports/windows.properties allure-results/environment.properties -ErrorAction SilentlyContinue
+            Copy-Item supports/*.json allure-results\ -ErrorAction SilentlyContinue
+          fi
 
-      - name: Run tests (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
-          pytest -m navigation --alluredir=allure-results
-          Copy-Item supports/windows.properties allure-results\environment.properties -Force
-          Copy-Item supports\*.json allure-results\ -ErrorAction SilentlyContinue
-
-      # -----------------------------
-      # Upload artifacts per OS
-      # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
         with:
@@ -72,30 +62,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: run-tests
     timeout-minutes: 30
-    environment:
-      name: github-pages
-
     permissions:
       contents: write
       pages: write
       id-token: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # -----------------------------
-      # Download previous GitHub Pages site
-      # -----------------------------
-      - name: Download previous site
-        uses: actions/download-pages-artifact@v2
-        continue-on-error: true
+      # Clone existing GitHub Pages branch to preserve historical builds
+      - name: Clone gh-pages
+        run: |
+          git config --global user.name "${GITHUB_ACTOR}"
+          git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git clone --branch gh-pages https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git site || mkdir site
 
-      # -----------------------------
-      # Download test results
-      # -----------------------------
+      # Download test artifacts
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
         with:
@@ -108,9 +92,7 @@ jobs:
           name: allure-results-windows-latest
           path: allure-results/windows-latest
 
-      # -----------------------------
       # Setup Allure CLI
-      # -----------------------------
       - name: Setup Allure CLI
         run: |
           ALLURE_VERSION=2.25.0
@@ -119,9 +101,7 @@ jobs:
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
-      # -----------------------------
-      # Generate Allure reports per OS
-      # -----------------------------
+      # Generate Allure Reports per OS
       - name: Generate Allure Reports
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
@@ -136,25 +116,20 @@ jobs:
 
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
-
-            # Update latest folder
             mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
-            # Save build timestamp
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
             cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
 
-      # -----------------------------
-      # Rebuild index.html
-      # -----------------------------
+      # Rebuild index.html with OS labels
       - name: Rebuild Index
         run: |
           SITE_DIR="site"
           echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
 
-          # Latest reports
+          # Latest report per OS
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
@@ -162,36 +137,22 @@ jobs:
             fi
           done
 
-          # Historical builds
-          for BUILD in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
+          # Historical builds per OS
+          for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
             for OS in ubuntu-latest windows-latest; do
-              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              if [ -d "$SITE_DIR/$dir/$OS" ]; then
+                TS=$(cat "$SITE_DIR/$dir/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                echo "<li><a href='${dir}/${OS}/'>Build #${dir} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
               fi
             done
           done
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
-      # -----------------------------
-      # Deploy to GitHub Pages
-      # -----------------------------
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - uses: actions/deploy-pages@v4
-
-      # -----------------------------
-      # Add badges to workflow summary
-      # -----------------------------
-      - name: Add Workflow Badges
+      # Commit and push updated site to GitHub Pages
+      - name: Deploy Allure Reports
         run: |
-          REPO_NAME=${GITHUB_REPOSITORY##*/}
-          LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
-          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
-
-          echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "[![Latest Report](https://img.shields.io/badge/Latest-Report-blue)]($LATEST)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Historical Reports](https://img.shields.io/badge/Historical-Reports-green)]($HISTORICAL)" >> $GITHUB_STEP_SUMMARY
+          cd site
+          git add .
+          git commit -m "Update Allure reports for build #${GITHUB_RUN_NUMBER}" || echo "No changes to commit"
+          git push origin gh-pages

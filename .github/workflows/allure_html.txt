@@ -12,7 +12,10 @@ on:
 
 jobs:
   test-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-11]   # Add Windows 11
 
     permissions:
       contents: write
@@ -37,7 +40,6 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      # Clone the historical builds branch
       - name: Clone historical builds
         run: |
           SITE_DIR="site"
@@ -47,50 +49,43 @@ jobs:
           mkdir -p $SITE_DIR
           git clone --branch allure-history --single-branch $REPO $HISTORY_DIR || mkdir -p $HISTORY_DIR
 
-          # Copy historical builds into site
           if [ -d "$HISTORY_DIR" ]; then
             for dir in $(ls -1 $HISTORY_DIR | grep -E '^[0-9]+$'); do
               cp -r "$HISTORY_DIR/$dir" "$SITE_DIR/$dir"
             done
           fi
 
-      # Run tests and generate Allure report
       - name: Run tests and generate Allure Report
+        shell: bash
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
           ALLURE_VERSION="2.25.0"
           ALLURE_DIR="allure-commandline"
 
-          # Download Allure CLI
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
           mkdir -p $ALLURE_DIR
           tar -xzf allure.tgz -C $ALLURE_DIR --strip-components 1
           export PATH="$PWD/$ALLURE_DIR/bin:$PATH"
 
-          # Run tests
           rm -rf allure-results
           pytest -m navigation --alluredir=allure-results | tee pytest.log
           cp supports/environment.properties allure-results/ 2>/dev/null || true
           cp supports/categories.json allure-results/ 2>/dev/null || true
 
-          # Generate Allure report
           VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}"
           mkdir -p $VERSIONED_REPORT_DIR
           if ! allure generate allure-results --output "$VERSIONED_REPORT_DIR" --clean; then
             echo "<html><body><h1>No Allure Report for build #$BUILD_NUMBER</h1></body></html>" > "$VERSIONED_REPORT_DIR/index.html"
           fi
 
-          # Copy current build to site
           mkdir -p "$SITE_DIR/$BUILD_NUMBER"
           cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/"
           mkdir -p "$SITE_DIR/latest"
           cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/"
 
-          # Save timestamp
           date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/build-info.txt"
 
-          # Rebuild index.html
           echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
           TS=$(cat "$SITE_DIR/$BUILD_NUMBER/build-info.txt")
           echo "<li><a href='latest/'>Latest Report</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
@@ -107,7 +102,6 @@ jobs:
           done
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
-      # Configure and deploy Pages
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
@@ -119,7 +113,6 @@ jobs:
       - name: Deploy Allure Reports to GitHub Pages
         uses: actions/deploy-pages@v4
 
-      # Push current build into historical branch
       - name: Update allure-history branch
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
@@ -135,7 +128,6 @@ jobs:
           git branch -M allure-history
           git push -f $REPO allure-history
 
-      # Upload artifacts for debugging
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -148,8 +140,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Show GitHub Pages URL
+      - name: Show GitHub Pages URL with Markdown Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          echo "✅ Latest Allure Report: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
-          echo "✅ Historical Reports: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
+          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+
+          echo "✅ Latest Allure Report: $LATEST"
+          echo "✅ Historical Reports: $HISTORICAL"
+
+          echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
+          echo "[![Latest Report](https://img.shields.io/badge/Latest-Report-blue)]($LATEST)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Historical Reports](https://img.shields.io/badge/Historical-Reports-green)]($HISTORICAL)" >> $GITHUB_STEP_SUMMARY

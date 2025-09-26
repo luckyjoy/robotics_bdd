@@ -11,19 +11,17 @@ on:
     - cron: '0 7 * * *'
 
 jobs:
-  test-and-deploy:
+  run-tests:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-11]
+        os: [ubuntu-latest, windows-latest]
+    timeout-minutes: 30
 
     permissions:
       contents: write
       pages: write
       id-token: write
-
-    environment:
-      name: github-pages
 
     steps:
       - name: Checkout repository
@@ -41,180 +39,149 @@ jobs:
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
-      # Clone historical builds
+      # Run tests per OS
       # -----------------------------
-      - name: Clone historical builds (Linux)
+      - name: Run tests (Linux)
         if: runner.os == 'Linux'
         run: |
-          SITE_DIR="site"
-          HISTORY_DIR="history"
-          REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
-
-          mkdir -p $SITE_DIR
-          git clone --branch allure-history --single-branch $REPO $HISTORY_DIR || mkdir -p $HISTORY_DIR
-
-          if [ -d "$HISTORY_DIR" ]; then
-            for dir in $(ls -1 $HISTORY_DIR | grep -E '^[0-9]+$'); do
-              cp -r "$HISTORY_DIR/$dir" "$SITE_DIR/$dir"
-            done
-          fi
-
-      - name: Clone historical builds (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          $SiteDir = "site"
-          $HistoryDir = "history"
-          $Repo = "https://${env:GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${env:GITHUB_REPOSITORY}.git"
-
-          New-Item -ItemType Directory -Path $SiteDir -Force
-          git clone --branch allure-history --single-branch $Repo $HistoryDir -ErrorAction SilentlyContinue
-          if (Test-Path $HistoryDir) {
-            Get-ChildItem $HistoryDir -Directory | ForEach-Object {
-              Copy-Item $_.FullName "$SiteDir\$($_.Name)" -Recurse -Force
-            }
-          }
-
-      # -----------------------------
-      # Run tests and generate Allure Report
-      # -----------------------------
-      - name: Run tests and generate Allure Report (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
-          SITE_DIR="site"
-          ALLURE_VERSION="2.25.0"
-          ALLURE_DIR="allure-commandline"
-
-          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
-          mkdir -p $ALLURE_DIR
-          tar -xzf allure.tgz -C $ALLURE_DIR --strip-components 1
-          export PATH="$PWD/$ALLURE_DIR/bin:$PATH"
-
           rm -rf allure-results
           pytest -m navigation --alluredir=allure-results | tee pytest.log
-          cp supports/environment.properties allure-results/ 2>/dev/null || true
-          cp supports/categories.json allure-results/ 2>/dev/null || true
+          mkdir -p allure-results
+          cp supports/ubuntu.properties allure-results/environment.properties
+          cp supports/*.json allure-results/ 2>/dev/null || true
 
-          VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}"
-          mkdir -p $VERSIONED_REPORT_DIR
-          if ! allure generate allure-results --output "$VERSIONED_REPORT_DIR" --clean; then
-            echo "<html><body><h1>No Allure Report for build #$BUILD_NUMBER</h1></body></html>" > "$VERSIONED_REPORT_DIR/index.html"
-          fi
-
-          mkdir -p "$SITE_DIR/$BUILD_NUMBER"
-          cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/"
-          mkdir -p "$SITE_DIR/latest"
-          cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/"
-
-          date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/build-info.txt"
-
-      - name: Run tests and generate Allure Report (Windows)
+      - name: Run tests (Windows)
         if: runner.os == 'Windows'
         run: |
-          $BUILD_NUMBER = $env:GITHUB_RUN_NUMBER
-          $SITE_DIR = "site"
-          $ALLURE_VERSION = "2.25.0"
-          $ALLURE_DIR = "allure-commandline"
-
-          Invoke-WebRequest "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/$ALLURE_VERSION/allure-commandline-$ALLURE_VERSION.zip" -OutFile "allure.zip"
-          Expand-Archive allure.zip $ALLURE_DIR -Force
-
-          $env:PATH = "$PWD\$ALLURE_DIR;$env:PATH"
-
-          Remove-Item -Recurse -Force allure-results
+          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
           pytest -m navigation --alluredir=allure-results
-          Copy-Item supports\environment.properties allure-results\ -ErrorAction SilentlyContinue
-          Copy-Item supports\categories.json allure-results\ -ErrorAction SilentlyContinue
-
-          $VERSIONED_REPORT_DIR = "allure-report-$BUILD_NUMBER"
-          New-Item -ItemType Directory -Path $VERSIONED_REPORT_DIR -Force
-          & allure generate allure-results --output $VERSIONED_REPORT_DIR --clean
-
-          Copy-Item "$VERSIONED_REPORT_DIR\*" "$SITE_DIR\$BUILD_NUMBER\" -Recurse -Force
-          New-Item -ItemType Directory -Path "$SITE_DIR\latest" -Force
-          Copy-Item "$VERSIONED_REPORT_DIR\*" "$SITE_DIR\latest\" -Recurse -Force
-
-          Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC" | Out-File "$SITE_DIR\$BUILD_NUMBER\build-info.txt" -Encoding utf8
+          Copy-Item supports\windows.properties allure-results\environment.properties -Force
+          Get-ChildItem supports\*.json -ErrorAction SilentlyContinue | Copy-Item -Destination allure-results\ -Force
 
       # -----------------------------
-      # Rebuild index.html (both OSes)
+      # Upload artifacts per OS
       # -----------------------------
-      - name: Rebuild index.html
+      - name: Upload Allure Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.os }}
+          path: allure-results
+          retention-days: 7
+
+  deploy-pages:
+    runs-on: ubuntu-latest
+    needs: run-tests
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # -----------------------------
+      # Download artifacts from both OSes
+      # -----------------------------
+      - name: Download Linux Allure Results
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results-ubuntu-latest
+          path: allure-results/ubuntu-latest
+
+      - name: Download Windows Allure Results
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results-windows-latest
+          path: allure-results/windows-latest
+
+      # -----------------------------
+      # Setup Allure CLI
+      # -----------------------------
+      - name: Setup Allure CLI
+        run: |
+          ALLURE_VERSION=2.25.0
+          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
+          mkdir -p allure-commandline
+          tar -xzf allure.tgz -C allure-commandline --strip-components 1
+          echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
+
+      # -----------------------------
+      # Generate Allure report per OS
+      # -----------------------------
+      - name: Generate Allure Reports
+        run: |
+          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
+          SITE_DIR="site"
+
+          mkdir -p "$SITE_DIR/$BUILD_NUMBER"
+          mkdir -p "$SITE_DIR/latest"
+
+          for OS in ubuntu-latest windows-latest; do
+            VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
+            mkdir -p "$VERSIONED_REPORT_DIR"
+            allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
+
+            mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
+            cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
+            mkdir -p "$SITE_DIR/latest/$OS"
+            cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
+
+            date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
+            cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
+          done
+
+      # -----------------------------
+      # Rebuild index.html with OS labels
+      # -----------------------------
+      - name: Rebuild Index
         run: |
           SITE_DIR="site"
-          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
-          TS=$(cat "$SITE_DIR/$BUILD_NUMBER/build-info.txt")
-          echo "<li><a href='latest/'>Latest Report</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
-          for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
-            if [ "$dir" = "$BUILD_NUMBER" ]; then continue; fi
-            if [ -f "$SITE_DIR/$dir/build-info.txt" ]; then
-              TS=$(cat "$SITE_DIR/$dir/build-info.txt")
-            else
-              TS="(no timestamp)"
+
+          # Latest report per OS
+          for OS in ubuntu-latest windows-latest; do
+            if [ -d "$SITE_DIR/latest/$OS" ]; then
+              TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+              echo "<li><a href='latest/$OS/'>Latest Report ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
             fi
-            echo "<li><a href='${dir}/'>Build #${dir}</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
           done
+
+          # Historical builds per OS
+          for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
+            for OS in ubuntu-latest windows-latest; do
+              if [ -d "$SITE_DIR/$dir/$OS" ]; then
+                TS=$(cat "$SITE_DIR/$dir/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                echo "<li><a href='${dir}/${OS}/'>Build #${dir} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              fi
+            done
+          done
+
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
       # -----------------------------
-      # Configure and deploy GitHub Pages
+      # Deploy to GitHub Pages
       # -----------------------------
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload Allure Reports to Pages
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: site
-
-      - name: Deploy Allure Reports to GitHub Pages
-        uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v4
 
       # -----------------------------
-      # Update historical branch
+      # Add badges to workflow summary
       # -----------------------------
-      - name: Update allure-history branch
-        run: |
-          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
-          REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
-          cd history
-          mkdir -p $BUILD_NUMBER
-          cp -r ../site/$BUILD_NUMBER/* $BUILD_NUMBER/
-          git init
-          git config user.name "${GITHUB_ACTOR}"
-          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-          git add .
-          git commit -m "Add build #$BUILD_NUMBER"
-          git branch -M allure-history
-          git push -f $REPO allure-history
-
-      # -----------------------------
-      # Upload test artifacts
-      # -----------------------------
-      - name: Upload test artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-debug-${{ github.run_number }}
-          path: |
-            allure-results
-            pytest.log
-            logs/
-            screenshots/
-          if-no-files-found: ignore
-          retention-days: 7
-
-      # -----------------------------
-      # Show GitHub Pages URL with Markdown badges
-      # -----------------------------
-      - name: Show GitHub Pages URL with Markdown Badges
+      - name: Add Workflow Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
           LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
           HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
-
-          echo "✅ Latest Allure Report: $LATEST"
-          echo "✅ Historical Reports: $HISTORICAL"
 
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "[![Latest Report](https://img.shields.io/badge/Latest-Report-blue)]($LATEST)" >> $GITHUB_STEP_SUMMARY

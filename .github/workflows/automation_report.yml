@@ -41,22 +41,19 @@ jobs:
       # -----------------------------
       # Run tests per OS
       # -----------------------------
-      - name: Run tests (Linux)
-        if: runner.os == 'Linux'
+      - name: Run tests
         run: |
-          rm -rf allure-results
+          rm -rf allure-results || true
           pytest -m navigation --alluredir=allure-results | tee pytest.log
-          mkdir -p allure-results
-          cp supports/ubuntu.properties allure-results/environment.properties
-          cp supports/*.json allure-results/ 2>/dev/null || true
 
-      - name: Run tests (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
-          pytest -m navigation --alluredir=allure-results
-          Copy-Item supports\windows.properties allure-results\environment.properties -Force
-          Get-ChildItem supports\*.json -ErrorAction SilentlyContinue | Copy-Item -Destination allure-results\ -Force
+          # Copy OS-specific environment properties
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            cp supports/ubuntu.properties allure-results/environment.properties
+          else
+            cp supports/windows.properties allure-results/environment.properties
+          fi
+
+          cp supports/*.json allure-results/ 2>/dev/null || true
 
       # -----------------------------
       # Upload artifacts per OS
@@ -113,14 +110,14 @@ jobs:
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
       # -----------------------------
-      # Generate Allure report per OS
+      # Generate Allure report per OS and keep history
       # -----------------------------
       - name: Generate Allure Reports
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
 
-          mkdir -p "$SITE_DIR/$BUILD_NUMBER"
+          mkdir -p "$SITE_DIR/history"
           mkdir -p "$SITE_DIR/latest"
 
           for OS in ubuntu-latest windows-latest; do
@@ -128,17 +125,21 @@ jobs:
             mkdir -p "$VERSIONED_REPORT_DIR"
             allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
 
-            mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
-            cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
+            # Save history
+            mkdir -p "$SITE_DIR/history/$BUILD_NUMBER/$OS"
+            cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/history/$BUILD_NUMBER/$OS/"
+
+            # Save latest
             mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
-            date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
-            cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
+            # Save build info
+            date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/history/$BUILD_NUMBER/$OS/build-info.txt"
+            cp "$SITE_DIR/history/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
 
       # -----------------------------
-      # Rebuild index.html with OS labels
+      # Rebuild index.html with OS labels and history
       # -----------------------------
       - name: Rebuild Index
         run: |
@@ -154,11 +155,11 @@ jobs:
           done
 
           # Historical builds per OS
-          for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
+          for BUILD in $(ls -1v $SITE_DIR/history | sort -nr); do
             for OS in ubuntu-latest windows-latest; do
-              if [ -d "$SITE_DIR/$dir/$OS" ]; then
-                TS=$(cat "$SITE_DIR/$dir/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "<li><a href='${dir}/${OS}/'>Build #${dir} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              if [ -d "$SITE_DIR/history/$BUILD/$OS" ]; then
+                TS=$(cat "$SITE_DIR/history/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                echo "<li><a href='history/$BUILD/$OS/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
               fi
             done
           done
@@ -181,7 +182,7 @@ jobs:
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
           LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
-          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/history/"
 
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "[![Latest Report](https://img.shields.io/badge/Latest-Report-blue)]($LATEST)" >> $GITHUB_STEP_SUMMARY

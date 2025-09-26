@@ -39,9 +39,9 @@ jobs:
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
-      # Create dynamic environment.properties
+      # Create dynamic environment.properties per OS
       # -----------------------------
-      - name: Create dynamic environment.properties (Linux)
+      - name: Create environment.properties (Linux)
         if: runner.os == 'Linux'
         run: |
           mkdir -p allure-results
@@ -59,7 +59,7 @@ Test Type=Integration
 HTML Reporter=Allure Test Report 2.35.1
 EOF
 
-      - name: Create dynamic environment.properties (Windows)
+      - name: Create environment.properties (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -85,9 +85,8 @@ HTML Reporter=Allure Test Report 2.35.1
       - name: Run tests (Linux)
         if: runner.os == 'Linux'
         run: |
-          rm -rf allure-results/*
+          rm -rf allure-results/*.json
           pytest -m navigation --alluredir=allure-results | tee pytest.log
-          cp supports/categories.json allure-results/ 2>/dev/null || true
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
@@ -95,10 +94,9 @@ HTML Reporter=Allure Test Report 2.35.1
         run: |
           Remove-Item -Recurse -Force allure-results\* -ErrorAction SilentlyContinue
           pytest -m navigation --alluredir=allure-results
-          Copy-Item supports\categories.json allure-results\ -ErrorAction SilentlyContinue
 
       # -----------------------------
-      # Upload artifacts per OS
+      # Upload Allure Results
       # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
@@ -126,7 +124,7 @@ HTML Reporter=Allure Test Report 2.35.1
           fetch-depth: 0
 
       # -----------------------------
-      # Download artifacts
+      # Download artifacts from both OSes
       # -----------------------------
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -141,7 +139,7 @@ HTML Reporter=Allure Test Report 2.35.1
           path: allure-results/windows-latest
 
       # -----------------------------
-      # Merge Allure Results
+      # Merge results
       # -----------------------------
       - name: Merge Allure Results
         run: |
@@ -182,7 +180,7 @@ HTML Reporter=Allure Test Report 2.35.1
           done
 
       # -----------------------------
-      # Rebuild Index.html
+      # Rebuild index.html with timestamps and OS labels
       # -----------------------------
       - name: Rebuild Index
         run: |
@@ -220,7 +218,7 @@ HTML Reporter=Allure Test Report 2.35.1
       - uses: actions/deploy-pages@v4
 
       # -----------------------------
-      # Add badges to workflow summary
+      # Add workflow badges to summary
       # -----------------------------
       - name: Add Workflow Badges
         run: |

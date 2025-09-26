@@ -8,8 +8,8 @@ on:
     branches:
       - main
   schedule:
-  # Runs at 1:00 AM PT every day.
-  - cron: '0 8 * * *'
+  # Runs at 00:00 AM PT every day.
+  - cron: '0 7 * * *'
 
 
 jobs:

@@ -5,8 +5,6 @@ echo Add dummy file dummy.txt
 
 git add .
 
-REM Commit with message
-rem echo.
 rem echo Git pushed a dummy file for CI Demo
 echo.
 echo git commit -m "Add a dummy file to trigger Jenkins Webhooks and Github Workflow Actions ..."

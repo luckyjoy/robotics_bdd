@@ -28,14 +28,16 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies and Allure CLI
+      - name: Install Python dependencies
+        # FIX: Removed the incorrect 'pip install allure-cli'
         run: |
-          # 1. Install Python and Pytest dependencies
           pip install pytest pytest-bdd allure-pytest pytest-html
-          
-          # FIX: Install Allure CLI using pip, which reliably places it in the Python bin path
-          # and makes it available to the shell session.
-          pip install allure-cli
+
+      - name: Install Allure CLI (Fixes 'command not found')
+        # FIX: Using a dedicated action to reliably install Allure CLI and set the PATH.
+        uses: rrylee/setup-allure-cli@v1
+        with:
+          version: 2.25.0 # Use a recent stable version
 
       - name: Run tests and collect Allure results
         run: |
@@ -45,7 +47,7 @@ jobs:
           pytest -m navigation --alluredir=allure-results
 
       - name: Generate Allure Report
-        # FIX: The allure command is now reliably available here via the Python path.
+        # The 'allure' command is now available due to the setup-allure-cli action.
         run: |
           # 1. Copy mandatory environment properties
           cp supports/environment.properties allure-results/
@@ -53,7 +55,7 @@ jobs:
           # 2. Copy optional categories.json (fails gracefully if missing)
           cp supports/categories.json allure-results/ || true
           
-          # 3. Build the static HTML report using the installed CLI
+          # 3. Build the static HTML report
           allure generate allure-results --output allure-report --clean
 
       - name: Setup Pages

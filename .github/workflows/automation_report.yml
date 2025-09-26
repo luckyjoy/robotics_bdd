@@ -38,7 +38,8 @@ jobs:
       - name: Run tests and collect Allure results
         run: |
           rm -rf allure-results
-          pytest -m navigation --alluredir=allure-results
+          # Run multiple markers for full coverage
+          pytest -m "navigation or pick_and_place or safety" --alluredir=allure-results
 
       - name: Generate Allure Report
         run: |
@@ -48,13 +49,41 @@ jobs:
 
           ALLURE_VERSION="2.25.0"
           ALLURE_DIR="allure-commandline"
+
+          # Download Allure CLI
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/$ALLURE_VERSION/allure-commandline-$ALLURE_VERSION.tgz"
           mkdir $ALLURE_DIR
           tar -xzf allure.tgz -C $ALLURE_DIR --strip-components 1
+
+          # Add Allure CLI to PATH
           export PATH="$PWD/$ALLURE_DIR/bin:$PATH"
 
+          # Copy optional support files
           cp supports/environment.properties allure-results/ 2>/dev/null || true
           cp supports/categories.json allure-results/ 2>/dev/null || true
 
           # Generate versioned report
-          all
+          allure generate allure-results --output $VERSIONED_REPORT_DIR --clean
+
+          # Copy versioned report to 'latest' for root deployment
+          rm -rf $LATEST_REPORT_DIR
+          cp -r $VERSIONED_REPORT_DIR $LATEST_REPORT_DIR
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Allure Report as Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: |
+            allure-report-latest
+            allure-report-${{ github.run_number }}
+
+      - name: Deploy Allure Report to GitHub Pages
+        uses: actions/deploy-pages@v4
+
+      - name: Show GitHub Pages URL
+        run: |
+          REPO_NAME=$(basename $GITHUB_REPOSITORY)
+          echo "✅ Latest Allure Report for build #${GITHUB_RUN_NUMBER} is available at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          echo "✅ Historical reports can be found at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/allure-report-${GITHUB_RUN_NUMBER}/"

@@ -39,19 +39,17 @@ jobs:
       - name: Restore previous GitHub Pages site
         run: |
           SITE_DIR="site"
-          REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
           TEMP_DIR="site-old-gh"
+          REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
 
           # Clone gh-pages branch if it exists
           git clone --branch gh-pages --single-branch $REPO $TEMP_DIR || echo "No gh-pages branch yet"
 
-          # Copy historical builds (skip latest/ and current build)
+          # Merge historical builds into SITE_DIR
+          mkdir -p $SITE_DIR
           if [ -d "$TEMP_DIR" ]; then
-            mkdir -p $SITE_DIR
             for dir in $(ls -1 $TEMP_DIR | grep -Ev 'latest|README.md'); do
-              if [ "$dir" != "${GITHUB_RUN_NUMBER}" ]; then
-                cp -r "$TEMP_DIR/$dir" "$SITE_DIR/$dir"
-              fi
+              cp -r "$TEMP_DIR/$dir" "$SITE_DIR/$dir"
             done
           fi
 

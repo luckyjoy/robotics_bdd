@@ -39,24 +39,56 @@ jobs:
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
+      # Generate dynamic environment.properties per OS
+      # -----------------------------
+      - name: Create dynamic environment.properties (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p allure-results
+          cat <<EOF > allure-results/environment.properties
+Project=Robotics Behavior-Driven Development (BDD) Simulation Framework
+Author=Bang Thien Nguyen
+Email=ontario1998@gmail.com
+Robot Model=Gazebo_Pioneer3DX
+Simulation Engine=PyBullet
+Operating System=Linux
+Python Version=3.10.12
+Framework Version=1.0.0
+Test Type=Integration
+HTML Reporter=Allure Test Report 2.35.1
+EOF
+
+      - name: Create dynamic environment.properties (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir allure-results -ErrorAction SilentlyContinue
+          @"
+Project=Robotics Behavior-Driven Development (BDD) Simulation Framework
+Author=Bang Thien Nguyen
+Email=ontario1998@gmail.com
+Robot Model=Gazebo_Pioneer3DX
+Simulation Engine=PyBullet
+Operating System=Windows
+Python Version=3.10.12
+Framework Version=1.0.0
+Test Type=Integration
+HTML Reporter=Allure Test Report 2.35.1
+"@ | Out-File -FilePath allure-results\environment.properties -Encoding utf8
+
+      # -----------------------------
       # Run tests per OS
       # -----------------------------
       - name: Run tests (Linux)
         if: runner.os == 'Linux'
         run: |
-          rm -rf allure-results
+          rm -rf allure-results/*
           pytest -m navigation --alluredir=allure-results | tee pytest.log
-          mkdir -p allure-results
-          cp supports/*.properties allure-results/ 2>/dev/null || true
-          cp supports/*.json allure-results/ 2>/dev/null || true
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
         run: |
-          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force allure-results\* -ErrorAction SilentlyContinue
           pytest -m navigation --alluredir=allure-results
-          Copy-Item supports\*.properties allure-results\ -ErrorAction SilentlyContinue
-          Copy-Item supports\*.json allure-results\ -ErrorAction SilentlyContinue
 
       # -----------------------------
       # Upload artifacts per OS
@@ -113,15 +145,13 @@ jobs:
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
       # -----------------------------
-      # Generate Allure report per OS
+      # Generate Allure Report with OS and timestamp
       # -----------------------------
       - name: Generate Allure Reports
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
-
-          mkdir -p "$SITE_DIR/$BUILD_NUMBER"
-          mkdir -p "$SITE_DIR/latest"
+          mkdir -p "$SITE_DIR"
 
           for OS in ubuntu-latest windows-latest; do
             VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
@@ -130,22 +160,23 @@ jobs:
 
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
+
             mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
-            cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
 
       # -----------------------------
-      # Rebuild index.html with OS labels
+      # Rebuild index.html with OS labels and timestamps
       # -----------------------------
       - name: Rebuild Index
         run: |
           SITE_DIR="site"
+          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
 
-          # Latest report per OS
+          # Latest reports
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
@@ -153,7 +184,7 @@ jobs:
             fi
           done
 
-          # Historical builds per OS
+          # Historical builds
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
             for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$dir/$OS" ]; then

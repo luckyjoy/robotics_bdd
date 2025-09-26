@@ -35,13 +35,18 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      # Download previously deployed site to keep history
-      - name: Download existing Pages artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: github-pages
-          path: site-old
-        continue-on-error: true
+      # Restore previous GitHub Pages site to preserve historical builds
+      - name: Restore previous GitHub Pages site
+        run: |
+          SITE_DIR="site"
+          REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
+          TEMP_DIR="site-old-gh"
+
+          git clone --branch gh-pages --single-branch $REPO $TEMP_DIR || echo "No gh-pages branch yet"
+          if [ -d "$TEMP_DIR" ]; then
+            mkdir -p $SITE_DIR
+            cp -r $TEMP_DIR/* $SITE_DIR/ || true
+          fi
 
       - name: Generate Allure Report
         run: |
@@ -49,13 +54,6 @@ jobs:
           SITE_DIR="site"
           ALLURE_VERSION="2.25.0"
           ALLURE_DIR="allure-commandline"
-
-          # ♻️ Restore previous reports
-          if [ -d site-old ]; then
-            echo "♻️ Restoring previous reports..."
-            mkdir -p $SITE_DIR
-            cp -r site-old/* $SITE_DIR/ || true
-          fi
 
           # Download & extract Allure CLI
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"

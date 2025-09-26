@@ -39,7 +39,7 @@ jobs:
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
-      # Create dynamic environment.properties per OS
+      # Create environment.properties dynamically per OS
       # -----------------------------
       - name: Create environment.properties (Linux)
         if: runner.os == 'Linux'
@@ -85,8 +85,9 @@ HTML Reporter=Allure Test Report 2.35.1
       - name: Run tests (Linux)
         if: runner.os == 'Linux'
         run: |
-          rm -rf allure-results/*.json
+          rm -rf allure-results/*
           pytest -m navigation --alluredir=allure-results | tee pytest.log
+          cp supports/categories.json allure-results/ 2>/dev/null || true
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
@@ -94,6 +95,7 @@ HTML Reporter=Allure Test Report 2.35.1
         run: |
           Remove-Item -Recurse -Force allure-results\* -ErrorAction SilentlyContinue
           pytest -m navigation --alluredir=allure-results
+          Copy-Item supports\categories.json allure-results\ -ErrorAction SilentlyContinue
 
       # -----------------------------
       # Upload Allure Results
@@ -124,7 +126,7 @@ HTML Reporter=Allure Test Report 2.35.1
           fetch-depth: 0
 
       # -----------------------------
-      # Download artifacts from both OSes
+      # Download artifacts
       # -----------------------------
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -159,7 +161,7 @@ HTML Reporter=Allure Test Report 2.35.1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
       # -----------------------------
-      # Generate Allure Report per OS
+      # Generate Allure report per OS
       # -----------------------------
       - name: Generate Allure Report
         run: |
@@ -180,7 +182,7 @@ HTML Reporter=Allure Test Report 2.35.1
           done
 
       # -----------------------------
-      # Rebuild index.html with timestamps and OS labels
+      # Rebuild index.html with OS and timestamp
       # -----------------------------
       - name: Rebuild Index
         run: |
@@ -218,7 +220,7 @@ HTML Reporter=Allure Test Report 2.35.1
       - uses: actions/deploy-pages@v4
 
       # -----------------------------
-      # Add workflow badges to summary
+      # Add badges to workflow summary
       # -----------------------------
       - name: Add Workflow Badges
         run: |

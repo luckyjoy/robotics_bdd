@@ -56,12 +56,18 @@ jobs:
           cp supports/environment.properties allure-results/ 2>/dev/null || true
           cp supports/categories.json allure-results/ 2>/dev/null || true
 
-          # Generate versioned report
-          allure generate allure-results --output $VERSIONED_REPORT_DIR --clean
+          echo "⚡ Generating Allure report..."
+          if ! allure generate allure-results --output "$VERSIONED_REPORT_DIR" --clean; then
+            echo "⚠️ Allure generation failed, creating fallback index.html"
+            mkdir -p "$VERSIONED_REPORT_DIR"
+            echo "<html><body><h1>No Allure Report available for build #$BUILD_NUMBER</h1></body></html>" > "$VERSIONED_REPORT_DIR/index.html"
+          fi
 
-          # Copy the versioned report to the 'latest' folder for GitHub Pages root
-          rm -rf $LATEST_REPORT_DIR
-          cp -r $VERSIONED_REPORT_DIR $LATEST_REPORT_DIR
+          rm -rf "$LATEST_REPORT_DIR"
+          cp -r "$VERSIONED_REPORT_DIR" "$LATEST_REPORT_DIR"
+
+          echo "📂 Generated directories:"
+          ls -R .
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -78,5 +84,6 @@ jobs:
 
       - name: Show GitHub Pages URL
         run: |
-          echo "✅ Latest Allure Report for build #${GITHUB_RUN_NUMBER} is available at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
-          echo "✅ Historical report for this build: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/allure-report-${GITHUB_RUN_NUMBER}/"
+          REPO_NAME=${GITHUB_REPOSITORY##*/}
+          echo "✅ Latest Allure Report for build #${GITHUB_RUN_NUMBER} is available at: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          echo "✅ Historical report for this build: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/allure-report-${GITHUB_RUN_NUMBER}/"

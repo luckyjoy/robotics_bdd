@@ -8,16 +8,13 @@ on:
     branches:
       - main
   schedule:
-  # Runs at 00:00 AM PT every day.
-  - cron: '0 7 * * *'
-
+    # Runs at 00:00 AM PT every day (7 AM UTC)
+    - cron: '0 7 * * *'
 
 jobs:
   test-and-report:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+    # Set to ubuntu-latest for simplified Allure CLI installation
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pages: write
@@ -34,18 +31,43 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest pytest-html pytest-bdd
+          # Install Python dependencies including allure-pytest
+          pip install pytest pytest-bdd allure-pytest
+          # Install Allure Command Line Interface (CLI)
+          sudo apt-get update
+          sudo apt-get install -y allure
 
-      - name: Run tests and generate HTML report
-        # The script now generates the report as index.html in the root
-        run: pytest -m navigation --html=index.html --self-contained-html --capture=tee-sys
+      - name: Run tests and collect Allure results
+        run: |
+          # 1. Clean up old results directory
+          rm -rf allure-results
+          # 2. Run all tests and generate raw Allure data
+          # Using all markers now, as navigation was too specific
+          pytest --alluredir=allure-results
 
-      - name: Deploy Report to GitHub Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.os == 'ubuntu-latest'
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Copy Allure configuration files
+        run: |
+          # Copy environment.properties from root into the newly created results folder
+          # If your categories.json file exists in the root, uncomment the line below.
+          cp environment.properties allure-results/
+          # cp categories.json allure-results/
+
+      - name: Build Allure Report
+        # Generates the static HTML report into 'allure-report' folder
+        run: allure generate allure-results --output allure-report --clean
+
+      - name: Setup Pages
+        # This action configures the GitHub Pages environment
+        uses: actions/configure-pages@v5
+
+      - name: Upload Allure Report Artifact
+        # Uploads the static HTML report directory to be served by GitHub Pages
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          # The publish_dir should be where your report file is located
-          publish_dir: .
-          publish_branch: gh-pages
-          keep_files: true
+          path: 'allure-report'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        # Only deploy on pushes to the main branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/deploy-pages@v4

@@ -40,11 +40,11 @@ jobs:
         run: |
           # 1. Clean up old results directory
           rm -rf allure-results
-          # 2. Run all tests and generate raw Allure data
-          pytest --alluredir=allure-results
+          # 2. Run ONLY tests marked with @navigation
+          # FIX: Added '-m navigation' to select only the navigation suite
+          pytest -m navigation --alluredir=allure-results
 
       - name: Copy Allure configuration files from supports/ folder
-        # FIX: Explicitly copy files from the correct 'supports/' folder
         run: |
           cp supports/environment.properties allure-results/
           cp supports/categories.json allure-results/

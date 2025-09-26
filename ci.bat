@@ -1,6 +1,6 @@
 @echo off
 
-echo %RANDOM% > dummy.txt
+echo %RANDOM% > supports/dummy.txt
 echo Add dummy file dummy.txt
 
 git add .
@@ -21,17 +21,16 @@ echo.
 echo git push -u origin main
 git push -u origin main
 
-rem curl -u "luckyjoy:11ce1755fa745c0bf522d169a9cac2ca11" -k -X POST "https://localhost:8443/job/robotics/build"
+curl -u "luckyjoy:11ce1755fa745c0bf522d169a9cac2ca11" -k -X POST "https://localhost:8443/job/robotics/build"
 
 echo.
 echo Open secured GitHub server and Jenkins server
 sleep 10
 
-start "" "https://github.com/luckyjoy/robotics_bdd/actions"
-
-
+ start "" "https://github.com/luckyjoy/robotics_bdd/actions"
 echo.
-
+ start "" https://localhost:8443/view/all/builds
+echo.
 echo A new build has been triggred at secured Github server: https://github.com/luckyjoy/robotics_bdd
 echo.
 echo A new build has been triggred at secured Jenkins server: https://localhost:8443/view/all/builds

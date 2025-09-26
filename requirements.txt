@@ -3,3 +3,4 @@ pytest_bdd
 allure-pytest
 pybullet
 numpy
+pytest-xdist

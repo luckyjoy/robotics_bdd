@@ -44,7 +44,7 @@ Feature: Robot safety
     Then the robot arm should stop before the nearest obstacle
 
     Examples:
-      | start_x | start_y | start_z | obs1_x | obs1_y | obs1_z | obs2_x | obs2_y | obs2_z | target_x | target_y | target_z |
-      | 0       | 0       | 0       | 0.5    | 0      | 0      | 1      | 0      | 0      | 2        | 0        | 0        |
-      | 0       | 0       | 0       | 0      | 0.5    | 0      | 0      | 1      | 0      | 0        | 2        | 0        |
-      | 1       | 1       | 1       | 1.5    | 1      | 1      | 2      | 1      | 1      | 3        | 1        | 1        |
+      | start_x | start_y | start_z | obs1_x  | obs1_y  | obs1_z | obs2_x | obs2_y | obs2_z | target_x | target_y | target_z |
+      | 0       | 0       | 0       |  0.5    |  0      | 0      |  1     | 0      | 0      | 2        | 0        | 0        |
+      | 0       | 0       | 0       |  0      |  0.5    | 0      |  0     | 1      | 0      | 0        | 2        | 0        |
+      | 1       | 1       | 1       |  1.5    |  1      | 1      |  2     | 1      | 1      | 3        | 1        | 1        |

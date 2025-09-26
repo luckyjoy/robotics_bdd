@@ -1,135 +1,134 @@
-# Robot Simulation BDD Testing
+# 🤖 Robotics Behavior-Driven Development (BDD) Framework
 
-![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Pytest](https://img.shields.io/badge/pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)
-![BDD](https://img.shields.io/badge/BDD-FF5733?style=for-the-badge&logo=bdd&logoColor=white)
+A robust, BDD-driven framework for validating the functionality, path planning, and critical **safety protocols** of a simulated mobile manipulator robot.
 
-**Author:** Bang Thien Nguyen – ontario1998@gmail.com
+**Author:** Bang Thien Nguyen | **Contact:** ontario1998@gmail.com
 
-This project uses **Behavior-Driven Development (BDD)** with `pytest-bdd` to test the functionality and safety of a simple robot simulation. Tests are written in **Gherkin syntax** and designed to be human-readable for both technical and non-technical team members.
+-----
 
----
+## 💡 Project Overview
+
+This framework implements **Behavior-Driven Development (BDD)** using `pytest-bdd` to create a **living documentation** and validation layer for the robot's control logic. All requirements are documented as human-readable **Gherkin scenarios** (Given-When-Then), ensuring clear collaboration between technical and non-technical stakeholders.
+
+| Core Component | Technology | Role |
+| :--- | :--- | :--- |
+| **Test Syntax** | **Gherkin** (`.feature` files) | Defines test cases using unambiguous scenario descriptions. |
+| **Test Runner** | **`pytest`** | Industry-standard Python testing tool. |
+| **BDD Integration** | **`pytest-bdd`** | Maps Gherkin steps to executable Python code (step definitions). |
+| **Reporting** | **Allure & `pytest-html`** | Generates professional, interactive HTML reports for test traceability. |
+
+-----
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-- Python 3.8+
-- `pip` for package installation
+  * Python 3.8+
+  * `pip` package manager
+  * Allure command-line tool (required for full HTML reporting)
 
 ### Installation
 
-1. Clone the repository:
+1.  **Clone the Repository:**
 
-```bash
-git clone <your-repository-url>
-cd robotics_bdd
+    ```bash
+    git clone <your-repository-url>
+    cd robotics_bdd
+    ```
 
-    Install dependencies:
+2.  **Install Dependencies:**
 
-pip install -r requirements.txt
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-📋 Framework Structure
+-----
 
+## 🌳 Framework Architecture
+
+The structure enforces separation between simulation logic, feature specifications, and executable code.
+
+```
 robotics_bdd/
 ├─ README.md
-├─ Jenkinsfile
-├─ allure-results/           # Allure raw results
-├─ conftest.py
-├─ environment.py
-├─ environment.properties
-├─ metadata.json
-├─ pytest.ini
+├─ Jenkinsfile                      # CI/CD pipeline definition
+├─ pytest.ini                       # pytest configuration (markers)
 ├─ requirements.txt
-├─ run_all_tests.py
 ├─ simulation/
-│  ├─ __init__.py
-│  ├─ robot_sim.py           # Robot simulation logic
-│  └─ sensors.py             # Sensor & Kalman filter logic
-├─ steps/
-│  ├─ __init__.py
-│  ├─ navigation_steps.py
-│  ├─ pick_and_place_steps.py
-│  ├─ safety_steps.py
-│  ├─ sensor_steps.py
-│  └─ walking_steps.py
-└─ features/
-   ├─ navigation.feature
-   ├─ pick_and_place.feature
-   ├─ safety.feature
-   ├─ sensors.feature
-   └─ walking.feature
+│  ├─ robot_sim.py                  # Core robot model and simulation API
+│  └─ sensors.py                    # Sensor/Kalman filter logic
+├─ features/                        # Gherkin Scenarios
+│  ├─ navigation.feature
+│  ├─ pick_and_place.feature
+│  ├─ safety.feature
+│  ├─ sensors.feature
+│  └─ walking.feature
+└─ steps/                           # Python Step Definitions (Glue Code)
+   ├─ navigation_steps.py
+   ├─ pick_and_place_steps.py
+   ├─ safety_steps.py
+   ├─ sensor_steps.py
+   └─ walking_steps.py
+```
 
-🏷️ BDD Test Tags
+-----
 
-    navigation – Tests related to robot navigation
+## 🏷️ Test Tags and Execution
 
-    pick_and_place – Tests for pick and place sequences
+Tests are grouped using `pytest` markers (tags) to allow for selective execution.
 
-    safety – Safety-related tests
+| Tag | Focus Area | Description |
+| :--- | :--- | :--- |
+| **`navigation`** | Path Planning | Safe movement, obstacle avoidance, and waypoint following. |
+| **`pick_and_place`** | Manipulation | Object handling, arm kinematics, and dynamic manipulation sequences. |
+| **`safety`** | System Integrity | Collision prevention, boundary limits, and critical error handling. |
+| **`walking`** | Gait Control | Posture, speed, stability, and movement transitions during locomotion. |
+| **`sensors`** | Data Fusion | Accuracy and convergence of sensor filtering (e.g., Kalman Filter). |
 
-    walking – Walking-related tests
+### Running Test Suites
 
-    sensors – Sensor-related tests
+| Execution Mode | Command |
+| :--- | :--- |
+| **Run All Tests** | `pytest --verbose` |
+| **Run Specific Tag** | `pytest -m sensors --verbose` |
+| **Sequential Execution (OR)** | `pytest -m "navigation or pick_and_place"` |
+| **Parallel Execution (OR)** | `pytest -m "navigation or safety" -n auto` | Uses `pytest-xdist` to run tests across available CPU cores. |
 
-Example: Run only navigation tests
+-----
 
-pytest -m "navigation"
+## 📊 Professional Test Reporting
 
-Combine multiple tags:
+### 1\. Interactive Allure Report (Recommended for Analysis)
 
-pytest -m "pick_and_place and safety"
+Allure generates a rich, interactive HTML dashboard suitable for detailed test analysis, CI/CD integration, and trend monitoring.
 
-▶️ Running the Tests
+1.  **Generate Raw Results:**
+    ```bash
+    pytest -m "pick_and_place or safety" --alluredir=allure-results
+    ```
+2.  **Serve Interactive Report:**
+    ```bash
+    allure serve allure-results
+    ```
+    *This opens the report in your default web browser.*
 
-Run all tests:
+### 2\. Static HTML Report (`pytest-html`)
 
-pytest --verbose
+Generates a single, self-contained HTML file for simple archiving and sharing.
 
-Run specific tag:
+```bash
+pytest --html=reports/report.html --self-contained-html
+```
 
-pytest -m sensors --verbose
+-----
 
-📊 HTML Reporting with Allure
-Step 1: Run tests and save results
+## 📝 Test Coverage Summary
 
-pytest -m sensors --alluredir=allure-results
-
-Step 2: Serve interactive HTML report
-
-allure serve allure-results
-
-    Opens an interactive report in the browser with test graphs, trends, and details.
-
-Optional: Generate static HTML report
-
-allure generate allure-results -o allure-report --clean
-
-Open the report in browser:
-
-start allure-report\index.html   # Windows
-# or
-open allure-report/index.html    # macOS/Linux
-
-
-📊 HTML Reporting with pytest_html Report
-pytest --html=reports/report.html --self-contained-html --capture=tee-sys
-
-
-📝 Test Features
-Navigation
-
-Tests to ensure the robot moves safely to target positions, avoids obstacles, and follows waypoints.
-Pick and Place
-
-Tests covering object manipulation, arm reach limitations, and pick & place sequences while walking.
-Safety
-
-Comprehensive tests verifying safety protocols, preventing collisions, enforcing limits, and handling unexpected failures.
-Walking
-
-Tests for walking-related behaviors, including speed, posture, and movement transitions.
-Sensor Fusion
-
-Tests for the accuracy and convergence of the Kalman filter, ensuring reliable sensor-based position estimates.
+| Feature Area | Objective | Value Proposition |
+| :--- | :--- | :--- |
+| **Navigation** | Validate robust, collision-free movement across the environment. | Ensures the robot reliably reaches targets while adhering to safety clearances. |
+| **Pick and Place** | Confirm reliable object interaction and arm dexterity within reach limits. | Guarantees consistent success rates for manipulation tasks. |
+| **Safety** | Enforce non-negotiable operational limits and error handling. | Prevents equipment damage and maintains system integrity (e.g., chest height, boundary limits). |
+| **Sensor Fusion** | Ensure the accuracy and stability of sensor-based state estimation. | Validates the integrity of the robot's perception system (Kalman Filter convergence). |
+| **Walking** | Verify stable and safe locomotion dynamics. | Prevents tripping/falling and maintains optimal posture during movement. |
 

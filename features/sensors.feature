@@ -31,7 +31,7 @@ Feature: Sensor and Filtering
       | 2.0   | 1.5   | 0     | 0     |
       | 2.0   | 0     | 1.5   | 1.0   |
       | 0.5   | 0.4   | 0     | 0     |
-
+	  
   @object_detection_negative
   Scenario Outline: Sensor does not detect objects out of range
     Given a sensor with range <range>

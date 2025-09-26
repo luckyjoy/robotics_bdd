@@ -15,7 +15,7 @@ Feature: Robot Walking
       | 1       | 0       | 0       |
       | 0       | 1       | 0       |
       | 1       | 1       | 1       |
-
+	  
   @ground
   Scenario Outline: Robot crouches from different positions
     Given a robot at position [<start_x>, <start_y>, <start_z>]
@@ -36,7 +36,8 @@ Feature: Robot Walking
 
     Examples:
       | start_x | start_y | start_z | distance | end_x | end_y | end_z |
-      | 0       | 0       | 0       | 1        | 0     | 1     | 0     |
-      | 0       | 1       | 0       | 2        | 0     | 3     | 0     |
-      | 1       | 0       | 0       | 3        | 1     | 3     | 0     |
-      | 2       | 2       | 0       | 1        | 2     | 3     | 0     |
+      |   0     |   0     |   0     |  1       |  0    |  1    |  0    |
+      |   0     |   1     |   0     |  2       |  0    |  3    |  0    |
+      |   1     |   0     |   0     |  3       |  1    |  3    |  0    |
+      |   2     |   2     |   0     |  1       |  2    |  3    |  0    |
+      |  24     |  29     |  50     | 51       | 20    | 13    | 10    |

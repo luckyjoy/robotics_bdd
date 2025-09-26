@@ -28,13 +28,14 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      - name: Install dependencies and Allure CLI
         run: |
-          # Install Python and Pytest dependencies
+          # 1. Install Python and Pytest dependencies
           pip install pytest pytest-bdd allure-pytest pytest-html
-          # Install Allure Command Line Interface (CLI) using apt-get
-          sudo apt-get update
-          sudo apt-get install -y allure
+          
+          # FIX: Install Allure CLI using pip, which reliably places it in the Python bin path
+          # and makes it available to the shell session.
+          pip install allure-cli
 
       - name: Run tests and collect Allure results
         run: |
@@ -44,7 +45,7 @@ jobs:
           pytest -m navigation --alluredir=allure-results
 
       - name: Generate Allure Report
-        # FIX: Combining the copy and generate commands into one step resolves the "allure: command not found" issue.
+        # FIX: The allure command is now reliably available here via the Python path.
         run: |
           # 1. Copy mandatory environment properties
           cp supports/environment.properties allure-results/
@@ -52,7 +53,7 @@ jobs:
           # 2. Copy optional categories.json (fails gracefully if missing)
           cp supports/categories.json allure-results/ || true
           
-          # 3. Build the static HTML report
+          # 3. Build the static HTML report using the installed CLI
           allure generate allure-results --output allure-report --clean
 
       - name: Setup Pages

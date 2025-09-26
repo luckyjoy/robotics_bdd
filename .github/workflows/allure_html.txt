@@ -1,4 +1,4 @@
-name: Robotics BDD Simulation CI/CD Pipeline
+name: Robotics BDD Simulation CI/CD
 
 on:
   push:
@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -35,36 +37,119 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      - name: Run tests and collect Allure results
+      # Clone the historical builds branch
+      - name: Clone historical builds
         run: |
-          rm -rf allure-results
-          pytest -m navigation --alluredir=allure-results
+          SITE_DIR="site"
+          HISTORY_DIR="history"
+          REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
 
-      - name: Generate Allure Report
+          mkdir -p $SITE_DIR
+          git clone --branch allure-history --single-branch $REPO $HISTORY_DIR || mkdir -p $HISTORY_DIR
+
+          # Copy historical builds into site
+          if [ -d "$HISTORY_DIR" ]; then
+            for dir in $(ls -1 $HISTORY_DIR | grep -E '^[0-9]+$'); do
+              cp -r "$HISTORY_DIR/$dir" "$SITE_DIR/$dir"
+            done
+          fi
+
+      # Run tests and generate Allure report
+      - name: Run tests and generate Allure Report
         run: |
+          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
+          SITE_DIR="site"
           ALLURE_VERSION="2.25.0"
           ALLURE_DIR="allure-commandline"
-          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/$ALLURE_VERSION/allure-commandline-$ALLURE_VERSION.tgz"
-          mkdir $ALLURE_DIR
+
+          # Download Allure CLI
+          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
+          mkdir -p $ALLURE_DIR
           tar -xzf allure.tgz -C $ALLURE_DIR --strip-components 1
           export PATH="$PWD/$ALLURE_DIR/bin:$PATH"
 
+          # Run tests
+          rm -rf allure-results
+          pytest -m navigation --alluredir=allure-results | tee pytest.log
           cp supports/environment.properties allure-results/ 2>/dev/null || true
           cp supports/categories.json allure-results/ 2>/dev/null || true
 
-          allure generate allure-results --output allure-report --clean
+          # Generate Allure report
+          VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}"
+          mkdir -p $VERSIONED_REPORT_DIR
+          if ! allure generate allure-results --output "$VERSIONED_REPORT_DIR" --clean; then
+            echo "<html><body><h1>No Allure Report for build #$BUILD_NUMBER</h1></body></html>" > "$VERSIONED_REPORT_DIR/index.html"
+          fi
 
+          # Copy current build to site
+          mkdir -p "$SITE_DIR/$BUILD_NUMBER"
+          cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/"
+          mkdir -p "$SITE_DIR/latest"
+          cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/"
+
+          # Save timestamp
+          date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/build-info.txt"
+
+          # Rebuild index.html
+          echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
+          TS=$(cat "$SITE_DIR/$BUILD_NUMBER/build-info.txt")
+          echo "<li><a href='latest/'>Latest Report</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+          for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
+            if [ "$dir" = "$BUILD_NUMBER" ]; then
+              continue
+            fi
+            if [ -f "$SITE_DIR/$dir/build-info.txt" ]; then
+              TS=$(cat "$SITE_DIR/$dir/build-info.txt")
+            else
+              TS="(no timestamp)"
+            fi
+            echo "<li><a href='${dir}/'>Build #${dir}</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+          done
+          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
+
+      # Configure and deploy Pages
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Allure Report as Pages Artifact
+      - name: Upload Allure Reports to Pages
         uses: actions/upload-pages-artifact@v3
         with:
-          path: allure-report
+          path: site
 
-      - name: Deploy Allure Report to GitHub Pages
+      - name: Deploy Allure Reports to GitHub Pages
         uses: actions/deploy-pages@v4
+
+      # Push current build into historical branch
+      - name: Update allure-history branch
+        run: |
+          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
+          REPO="https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
+          cd history
+          mkdir -p $BUILD_NUMBER
+          cp -r ../site/$BUILD_NUMBER/* $BUILD_NUMBER/
+          git init
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git add .
+          git commit -m "Add build #$BUILD_NUMBER"
+          git branch -M allure-history
+          git push -f $REPO allure-history
+
+      # Upload artifacts for debugging
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-debug-${{ github.run_number }}
+          path: |
+            allure-results
+            pytest.log
+            logs/
+            screenshots/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Show GitHub Pages URL
         run: |
-          echo "✅ Allure Report is available at: https://$GITHUB_REPOSITORY_OWNER.github.io/$GITHUB_REPOSITORY/"
+          REPO_NAME=${GITHUB_REPOSITORY##*/}
+          echo "✅ Latest Allure Report: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
+          echo "✅ Historical Reports: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"

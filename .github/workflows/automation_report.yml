@@ -81,7 +81,7 @@ jobs:
             echo "<html><body><h1>No Allure Report for build #$BUILD_NUMBER</h1></body></html>" > "$VERSIONED_REPORT_DIR/index.html"
           fi
 
-          # Copy current build to site
+          # Copy current build into SITE_DIR
           mkdir -p "$SITE_DIR/$BUILD_NUMBER"
           cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/"
           mkdir -p "$SITE_DIR/latest"
@@ -135,7 +135,7 @@ jobs:
           git branch -M allure-history
           git push -f $REPO allure-history
 
-      # Upload artifacts for debugging
+      # Upload raw results and artifacts
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -148,13 +148,17 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      # Show GitHub Pages URLs and add links to workflow summary
       - name: Show GitHub Pages URL
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          echo "✅ Latest Allure Report: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
-          echo "✅ Historical Reports: https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
+          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          
+          echo "✅ Latest Allure Report: $LATEST"
+          echo "✅ Historical Reports: $HISTORICAL"
 
-        # Add links to workflow run summary (appears in left menu)
+          # Add links to workflow run summary (left menu)
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "- [Latest Report]($LATEST)" >> $GITHUB_STEP_SUMMARY
           echo "- [Historical Reports]($HISTORICAL)" >> $GITHUB_STEP_SUMMARY

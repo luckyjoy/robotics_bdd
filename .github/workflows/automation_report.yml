@@ -39,34 +39,28 @@ jobs:
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
-      # Linux tests
+      # Run tests per OS
       # -----------------------------
-      - name: Run tests on Linux
+      - name: Run tests (Linux)
         if: runner.os == 'Linux'
-        shell: bash
         run: |
-          echo "Running on Linux"
           rm -rf allure-results
           pytest -m navigation --alluredir=allure-results | tee pytest.log
           mkdir -p allure-results
-          cp supports/ubuntu.properties allure-results/environment.properties
-          cp supports/categories.json allure-results/
+          cp supports/ubuntu.properties allure-results/environment.properties || true
+          cp supports/categories.json allure-results/ || true
 
-      # -----------------------------
-      # Windows tests
-      # -----------------------------
-      - name: Run tests on Windows
+      - name: Run tests (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Write-Host "Running on Windows"
           Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
           pytest -m navigation --alluredir=allure-results
-          Copy-Item supports\windows.properties allure-results\environment.properties -Force
-          Copy-Item supports\categories.json allure-results\ -Force
+          Copy-Item supports\windows.properties allure-results\environment.properties -ErrorAction SilentlyContinue
+          Copy-Item supports\categories.json allure-results\ -ErrorAction SilentlyContinue
 
       # -----------------------------
-      # Upload Allure Results per OS
+      # Upload artifacts per OS
       # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
@@ -94,7 +88,7 @@ jobs:
           fetch-depth: 0
 
       # -----------------------------
-      # Download artifacts
+      # Download artifacts from both OSes
       # -----------------------------
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -120,7 +114,7 @@ jobs:
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
       # -----------------------------
-      # Generate Allure Reports
+      # Generate Allure report per OS
       # -----------------------------
       - name: Generate Allure Reports
         run: |
@@ -145,7 +139,7 @@ jobs:
           done
 
       # -----------------------------
-      # Rebuild index.html
+      # Rebuild index.html (Latest + History)
       # -----------------------------
       - name: Rebuild Index
         run: |
@@ -170,6 +164,9 @@ jobs:
             done
           done
 
+          # Add consolidated Report History link
+          echo "<li><a href='./'>Report History</a> - All previous builds</li>" >> "$SITE_DIR/index.html"
+
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
       # -----------------------------
@@ -189,7 +186,9 @@ jobs:
           REPO_NAME=${GITHUB_REPOSITORY##*/}
           LATEST_UBU="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/"
           LATEST_WIN="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/"
+          HISTORY="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
 
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)]($LATEST_UBU)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-green)]($LATEST_WIN)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://img.shields.io/badge/History-Reports-orange)]($HISTORY)" >> $GITHUB_STEP_SUMMARY

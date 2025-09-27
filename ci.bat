@@ -19,7 +19,7 @@ echo.
 echo git push -u origin main
 git push -u origin main
 
-rem curl -u "luckyjoy:11ce1755fa745c0bf522d169a9cac2ca11" -k -X POST "https://localhost:8443/job/robotics_bdd/build"
+ curl -u "luckyjoy:11ce1755fa745c0bf522d169a9cac2ca11" -k -X POST "https://localhost:8443/job/robotics_bdd/build"
 
 echo.
 echo A CI has been triggred at secured Github workflow: https://github.com/luckyjoy/robotics_bdd
@@ -32,4 +32,4 @@ sleep 4
 
  start "" "https://github.com/luckyjoy/robotics_bdd/actions"
 echo.
-rem start "" https://localhost:8443/view/all/builds
+ start "" https://localhost:8443/view/all/builds

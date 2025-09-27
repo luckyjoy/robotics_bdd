@@ -73,7 +73,7 @@ jobs:
     needs: run-tests
     permissions:
       contents: write
-      pages: write
+      # Removed 'pages: write' to explicitly avoid any tie-ins to the GitHub Pages built-in deployment system
       id-token: write
 
     steps:

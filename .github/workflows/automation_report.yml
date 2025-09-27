@@ -80,10 +80,18 @@ jobs:
       - name: Checkout repository (Primary branch)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 
+          fetch-depth: 0
 
-      # REMOVED: The second 'actions/checkout@v4' step, as it breaks the directory structure.
-      # The peaceiris action will handle the history clone internally.
+      # CRITICAL FIX 1: Checkout the existing gh-pages content into a temporary folder to preserve history
+      - name: Checkout gh-pages history
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: gh-pages
+          path: _history
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Set clean to false just in case, though the path is new
+          clean: false
 
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -111,12 +119,19 @@ jobs:
           echo "Generating Allure reports..."
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
+          HISTORY_DIR="_history"
           
-          # CRITICAL FIX: The site directory must be created/cloned by the deployment action.
-          # We must ensure the local 'site' folder is clean before placing reports inside.
+          # 1. Create the local SITE_DIR
           if [ -d "$SITE_DIR" ]; then rm -rf "$SITE_DIR"; fi
           mkdir -p "$SITE_DIR/latest"
           
+          # CRITICAL FIX 2: Copy historical reports from the cloned gh-pages branch into the new site directory
+          echo "Copying historical builds from $HISTORY_DIR to $SITE_DIR..."
+          # This copies all folders with numeric names (the build numbers, e.g., 160, 161)
+          # It ignores files like index.html or folders like 'latest' from the old history
+          find "$HISTORY_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*\/[0-9]+$" -exec cp -r {} "$SITE_DIR/" \; 2>/dev/null || echo "No numeric history folders to copy."
+
+          # 2. Generate NEW reports and merge them into the site directory
           for OS in ubuntu-latest windows-latest; do
             VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
             mkdir -p "$VERSIONED_REPORT_DIR"
@@ -124,10 +139,11 @@ jobs:
             # Generate the new report
             allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
 
-            # Copy the new report into the site directory
+            # Copy the NEW report into the site directory (this is the current build)
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
             
+            # Update 'latest' folder with NEW report
             mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
@@ -136,38 +152,52 @@ jobs:
             cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
 
-      - name: Rebuild index.html (This script will now only index the *current* and *latest* folders locally)
+      - name: Rebuild index.html (Now comprehensive as all history is local)
         run: |
           SITE_DIR="site"
-          echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
-          
-          # Only include the latest links in this version of the index.html 
-          # because the historical folders are not present yet.
-          # The peaceiris action will merge this with the old index.html content 
-          # and the old build folders from the gh-pages branch.
+          echo "<html><head><title>Allure Reports History</title><style>body { font-family: sans-serif; }</style></head><body><h1>Allure Reports History</h1><hr><ul>" > "$SITE_DIR/index.html"
+
+          # 1. Latest reports
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              echo "<li><a href='latest/$OS/'>Latest Report ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: ${TS}</li>" >> "$SITE_DIR/index.html"
             fi
           done
+          
+          echo "</ul><hr><h2>All Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
+          
+          # 2. Historical reports (Guaranteed to find them now in the SITE_DIR)
+          # Use find for reliable directory detection of numeric folders
+          HISTORICAL_BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*\/[0-9]+$" | xargs -n 1 basename | sort -nr)
+          
+          if [ -z "$HISTORICAL_BUILDS" ]; then
+              echo "<p>No historical builds found.</p>" >> "$SITE_DIR/index.html"
+          else
+              for BUILD in $HISTORICAL_BUILDS; do
+                for OS in ubuntu-latest windows-latest; do
+                  if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
+                    TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                    echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+                  fi
+                done
+              done
+          fi
 
-          # Add link to history page (which is the root index)
-          echo "<li><a href='./'>Report History - All previous builds</a></li>" >> "$SITE_DIR/index.html"
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
-
+          
+      # CRITICAL FIX 3: Deploy the full, comprehensive 'site' folder to gh-pages
+      # Since 'site' now contains the index, the new build, AND the old builds, 
+      # we can safely replace the target branch content entirely.
       - name: Deploy to GitHub Pages (Final Robust Fix)
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: site
-          publish_branch: gh-pages 
-          # CRITICAL: This flag tells the action to clone the gh-pages branch 
-          # before deployment and only overwrite the files in the 'site' folder, 
-          # preserving all other files (the historical build folders)
-          keep_files: true 
-          # This ensures the action operates correctly without needing the deprecated environment config
-          external_repository: ${{ github.repository }}
+          publish_branch: gh-pages
+          # Use force_orphan: true to completely replace the gh-pages branch content 
+          # with the contents of the local 'site' directory, which is now complete.
+          force_orphan: true 
           commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
 
       # The final step for adding badges remains the same

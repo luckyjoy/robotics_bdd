@@ -82,12 +82,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # --- FIX: Download Existing Pages Content to Preserve History ---
+      # --- FIX: Download Existing Pages Content with Error Handling ---
       - name: Download Existing Pages Content
         uses: actions/download-artifact@v4
         with:
           name: github-pages
           path: site
+        # This allows the step to fail on the very first run 
+        # when the artifact does not yet exist.
+        continue-on-error: true 
 
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -124,7 +127,7 @@ jobs:
             # Generate the new report
             allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
 
-            # Copy to historical location (preserves previous builds in 'site')
+            # Copy to historical location (merges with downloaded history)
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
             
@@ -151,7 +154,7 @@ jobs:
           done
 
           echo "<h2>Report History</h2>" >> "$SITE_DIR/index.html"
-          # Historical builds - correctly lists all folders in the downloaded 'site' history
+          # Historical builds - lists all build folders now present in the merged 'site' directory
           for BUILD in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$'); do
             for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$BUILD/$OS" ]; then

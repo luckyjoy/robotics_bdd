@@ -36,26 +36,33 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install pytest pytest-bdd allure-pytest pytest-html
 
       - name: Clean previous results
         run: |
-          if [ -d "allure-results" ]; then rm -rf allure-results; fi
-          mkdir -p allure-results
-
-      - name: Copy OS-specific environment.properties
-        run: |
-          if [ "${RUNNER_OS}" == "Linux" ]; then
-            cp supports/ubuntu.properties allure-results/environment.properties
+          if [ "${RUNNER_OS}" == "Linux" ] || [ "${RUNNER_OS}" == "macOS" ]; then
+            rm -rf allure-results
           else
-            cp supports/windows.properties allure-results/environment.properties
+            Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
           fi
-          cp supports/categories.json allure-results/
 
       - name: Run tests
         run: |
-          pytest -m navigation --alluredir=allure-results | tee pytest.log
+          pytest -m navigation --alluredir=allure-results
+
+      - name: Copy OS-specific support files
+        run: |
+          if [ "${RUNNER_OS}" == "Linux" ] || [ "${RUNNER_OS}" == "macOS" ]; then
+            cp supports/ubuntu.properties allure-results/ 2>/dev/null || true
+          else
+            Copy-Item supports\windows.properties allure-results\ -ErrorAction SilentlyContinue
+          fi
+          # categories.json is shared for all OSes
+          if [ "${RUNNER_OS}" == "Linux" ] || [ "${RUNNER_OS}" == "macOS" ]; then
+            cp supports/categories.json allure-results/ 2>/dev/null || true
+          else
+            Copy-Item supports\categories.json allure-results\ -ErrorAction SilentlyContinue
+          fi
 
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
@@ -106,7 +113,6 @@ jobs:
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
-
           mkdir -p "$SITE_DIR/$BUILD_NUMBER"
           mkdir -p "$SITE_DIR/latest"
 
@@ -129,7 +135,7 @@ jobs:
           SITE_DIR="site"
           echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
 
-          # Latest reports
+          # Latest report links
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
@@ -148,7 +154,7 @@ jobs:
           done
 
           # Add Report History link
-          echo "<li><a href='./'>Report History</a> - All previous builds</li>" >> "$SITE_DIR/index.html"
+          echo "<li><a href='./'>Report History - All previous builds</a></li>" >> "$SITE_DIR/index.html"
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
       - uses: actions/configure-pages@v5
@@ -160,11 +166,7 @@ jobs:
       - name: Add Workflow Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          LATEST_UBUNTU="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/"
-          LATEST_WINDOWS="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/"
-          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
-
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)]($LATEST_UBUNTU)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)]($LATEST_WINDOWS)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/History-All%20Builds-green)]($HISTORICAL)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/)](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY

@@ -39,40 +39,26 @@ jobs:
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
-      # Prepare Allure results per OS
-      # -----------------------------
-      - name: Prepare Allure results (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          rm -rf allure-results || true
-          mkdir -p allure-results
-          cp supports/ubuntu.properties allure-results/environment.properties || true
-          cp supports/categories.json allure-results/ || true
-
-      - name: Prepare Allure results (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path allure-results | Out-Null
-          Copy-Item supports\windows.properties allure-results\environment.properties -Force -ErrorAction SilentlyContinue
-          Copy-Item supports\categories.json allure-results\ -Force -ErrorAction SilentlyContinue
-
-      # -----------------------------
       # Run tests per OS
       # -----------------------------
       - name: Run tests
-        shell: bash
-        if: runner.os == 'Linux'
         run: |
-          pytest -m navigation --alluredir=allure-results | tee pytest.log
+          # Linux
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            rm -rf allure-results
+            pytest -m navigation --alluredir=allure-results | tee pytest.log
+            mkdir -p allure-results
+            cp supports/ubuntu.properties allure-results/environment.properties
+            cp supports/categories.json allure-results/
+          fi
 
-      - name: Run tests
-        shell: pwsh
-        if: runner.os == 'Windows'
-        run: |
-          pytest -m navigation --alluredir=allure-results
+          # Windows
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
+            pytest -m navigation --alluredir=allure-results
+            Copy-Item supports\windows.properties allure-results\environment.properties -Force
+            Copy-Item supports\categories.json allure-results\ -Force
+          fi
 
       # -----------------------------
       # Upload artifacts per OS
@@ -135,7 +121,6 @@ jobs:
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
-
           mkdir -p "$SITE_DIR/$BUILD_NUMBER"
           mkdir -p "$SITE_DIR/latest"
 
@@ -159,22 +144,27 @@ jobs:
       - name: Rebuild Index
         run: |
           SITE_DIR="site"
-          echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
+          echo "<html><body><h1>Allure Reports</h1><h2>Latest Reports</h2><ul>" > "$SITE_DIR/index.html"
 
           # Latest report per OS
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              echo "<li><a href='latest/$OS/'>Latest Report ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              OS_LABEL="Ubuntu"
+              [ "$OS" = "windows-latest" ] && OS_LABEL="Windows"
+              echo "<li><a href='latest/$OS/'>${OS_LABEL} Latest Report</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
             fi
           done
 
-          # Historical builds per OS
+          echo "<h2>Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
+
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
             for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$dir/$OS" ]; then
                 TS=$(cat "$SITE_DIR/$dir/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "<li><a href='${dir}/${OS}/'>Build #${dir} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+                OS_LABEL="Ubuntu"
+                [ "$OS" = "windows-latest" ] && OS_LABEL="Windows"
+                echo "<li><a href='${dir}/${OS}/'>Build #${dir} (${OS_LABEL})</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
               fi
             done
           done
@@ -191,14 +181,14 @@ jobs:
       - uses: actions/deploy-pages@v4
 
       # -----------------------------
-      # Add badges to workflow summary
+      # Add badges for each OS
       # -----------------------------
       - name: Add Workflow Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/"
-          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          UBUNTU_LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/"
+          WINDOWS_LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/"
 
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "[![Latest Report](https://img.shields.io/badge/Latest-Report-blue)]($LATEST)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Historical Reports](https://img.shields.io/badge/Historical-Reports-green)]($HISTORICAL)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)]($UBUNTU_LATEST)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)]($WINDOWS_LATEST)" >> $GITHUB_STEP_SUMMARY

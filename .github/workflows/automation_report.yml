@@ -2,87 +2,169 @@ name: Robotics BDD Simulation CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+  schedule:
+    - cron: '0 7 * * *'
 
 jobs:
   run-tests:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install allure-pytest
-          pip install pytest-html
+
+      - name: Clean previous results
+        run: |
+          if [ -d "allure-results" ]; then rm -rf allure-results; fi
+          mkdir -p allure-results
+
+      - name: Copy OS-specific environment.properties
+        run: |
+          if [ "${RUNNER_OS}" == "Linux" ]; then
+            cp supports/ubuntu.properties allure-results/environment.properties
+          else
+            cp supports/windows.properties allure-results/environment.properties
+          fi
+          cp supports/categories.json allure-results/
 
       - name: Run tests
-        run: pytest -m navigation --alluredir=allure-results
+        run: |
+          pytest -m navigation --alluredir=allure-results | tee pytest.log
 
-      - name: Upload Allure results
+      - name: Upload Allure Results
         uses: actions/upload-artifact@v4
         with:
           name: allure-results-${{ matrix.os }}
           path: allure-results
+          retention-days: 7
 
-  build:
-    needs: run-tests
+  deploy-pages:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    needs: run-tests
+    timeout-minutes: 30
+    environment:
+      name: github-pages
 
-      - name: Download Allure results (Ubuntu)
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
         with:
           name: allure-results-ubuntu-latest
-          path: allure-results-ubuntu
+          path: allure-results/ubuntu-latest
 
-      - name: Download Allure results (Windows)
+      - name: Download Windows Allure Results
         uses: actions/download-artifact@v4
         with:
           name: allure-results-windows-latest
-          path: allure-results-windows
+          path: allure-results/windows-latest
 
-      - name: Generate Allure reports
+      - name: Setup Allure CLI
         run: |
-          pip install allure-pytest
-          allure generate allure-results-ubuntu -o reports/ubuntu --clean
-          allure generate allure-results-windows -o reports/windows --clean
+          ALLURE_VERSION=2.25.0
+          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
+          mkdir -p allure-commandline
+          tar -xzf allure.tgz -C allure-commandline --strip-components 1
+          echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Generate Allure Reports
+        run: |
+          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
+          SITE_DIR="site"
+
+          mkdir -p "$SITE_DIR/$BUILD_NUMBER"
+          mkdir -p "$SITE_DIR/latest"
+
+          for OS in ubuntu-latest windows-latest; do
+            VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
+            mkdir -p "$VERSIONED_REPORT_DIR"
+            allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
+
+            mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
+            cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
+            mkdir -p "$SITE_DIR/latest/$OS"
+            cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
+
+            date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
+            cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
+          done
+
+      - name: Rebuild Index
+        run: |
+          SITE_DIR="site"
+          echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
+
+          # Latest reports
+          for OS in ubuntu-latest windows-latest; do
+            if [ -d "$SITE_DIR/latest/$OS" ]; then
+              TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+              echo "<li><a href='latest/$OS/'>Latest Report ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+            fi
+          done
+
+          # Historical builds
+          for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
+            for OS in ubuntu-latest windows-latest; do
+              if [ -d "$SITE_DIR/$dir/$OS" ]; then
+                TS=$(cat "$SITE_DIR/$dir/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                echo "<li><a href='${dir}/${OS}/'>Build #${dir} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              fi
+            done
+          done
+
+          # Add Report History link
+          echo "<li><a href='./'>Report History</a> - All previous builds</li>" >> "$SITE_DIR/index.html"
+          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
         with:
-          path: reports
+          path: site
+      - uses: actions/deploy-pages@v4
 
-  deploy-pages:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-      - name: Summary with report links
+      - name: Add Workflow Badges
         run: |
-          echo "### 🚀 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Report-blue)](https://luckyjoy.github.io/robotics_bdd/ubuntu/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Report-green)](https://luckyjoy.github.io/robotics_bdd/windows/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/History-All%20Builds-orange)](https://luckyjoy.github.io/robotics_bdd/)" >> $GITHUB_STEP_SUMMARY
+          REPO_NAME=${GITHUB_REPOSITORY##*/}
+          LATEST_UBUNTU="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/"
+          LATEST_WINDOWS="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/"
+          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+
+          echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)]($LATEST_UBUNTU)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)]($LATEST_WINDOWS)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://img.shields.io/badge/History-All%20Builds-green)]($HISTORICAL)" >> $GITHUB_STEP_SUMMARY

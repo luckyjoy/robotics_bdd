@@ -2,11 +2,9 @@ name: Robotics BDD Simulation CI/CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   schedule:
     - cron: '0 7 * * *'
 
@@ -39,32 +37,38 @@ jobs:
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
-      # Clean allure-results per OS
+      # Clean previous results per OS
       # -----------------------------
-      - name: Clean allure-results
-        run: |
-          if [[ "${RUNNER_OS}" == "Linux" || "${RUNNER_OS}" == "macOS" ]]; then
-            rm -rf allure-results
-          else
-            Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
-          fi
+      - name: Clean allure-results (Linux/macOS)
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        run: rm -rf allure-results
         shell: bash
+
+      - name: Clean allure-results (Windows)
+        if: runner.os == 'Windows'
+        run: Remove-Item -Recurse -Force allure-results
+        shell: pwsh
 
       # -----------------------------
       # Run tests per OS
       # -----------------------------
-      - name: Run tests
+      - name: Run tests (Linux/macOS)
+        if: runner.os == 'Linux' || runner.os == 'macOS'
         run: |
+          mkdir -p allure-results
           pytest -m navigation --alluredir=allure-results
-          # Copy OS-specific properties
-          if [[ "${RUNNER_OS}" == "Linux" ]]; then
-            cp supports/ubuntu.properties allure-results/environment.properties
-          elif [[ "${RUNNER_OS}" == "Windows" ]]; then
-            Copy-Item supports/windows.properties allure-results/environment.properties
-          fi
-          # Copy single categories.json for all OS
-          cp supports/categories.json allure-results/categories.json 2>/dev/null || true
+          cp supports/linux.properties allure-results/environment.properties || true
+          cp supports/categories.json allure-results/ || true
         shell: bash
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir allure-results -Force
+          pytest -m navigation --alluredir=allure-results
+          Copy-Item supports/windows.properties allure-results\environment.properties -Force
+          Copy-Item supports/categories.json allure-results\ -Force
+        shell: pwsh
 
       # -----------------------------
       # Upload Allure results
@@ -95,7 +99,7 @@ jobs:
           fetch-depth: 0
 
       # -----------------------------
-      # Download artifacts from both OSes
+      # Download Allure artifacts
       # -----------------------------
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -121,7 +125,7 @@ jobs:
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
       # -----------------------------
-      # Generate Allure report per OS
+      # Generate Allure reports per OS
       # -----------------------------
       - name: Generate Allure Reports
         run: |
@@ -145,7 +149,7 @@ jobs:
           done
 
       # -----------------------------
-      # Rebuild index.html with OS labels
+      # Rebuild index.html
       # -----------------------------
       - name: Rebuild Index
         run: |
@@ -170,8 +174,8 @@ jobs:
             done
           done
 
-          # Add report history link
-          echo "<li><a href='./'>Report History</a></li>" >> "$SITE_DIR/index.html"
+          # Add Report History link
+          echo "<li><a href='./'>Report History (All previous builds)</a></li>" >> "$SITE_DIR/index.html"
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
       # -----------------------------
@@ -184,15 +188,16 @@ jobs:
       - uses: actions/deploy-pages@v4
 
       # -----------------------------
-      # Add badges to workflow summary
+      # Add workflow summary badges
       # -----------------------------
       - name: Add Workflow Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
-          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          OWNER=${GITHUB_REPOSITORY_OWNER}
+          LATEST="https://${OWNER}.github.io/${REPO_NAME}/latest/"
+          HISTORICAL="https://${OWNER}.github.io/${REPO_NAME}/"
 
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)]($LATESTubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)]($LATESTwindows-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/History-Reports-green)]($HISTORICAL)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)](${LATEST}ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)](${LATEST}windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://img.shields.io/badge/History-Reports-green)](${HISTORICAL})" >> $GITHUB_STEP_SUMMARY

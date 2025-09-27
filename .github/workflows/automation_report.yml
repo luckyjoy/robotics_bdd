@@ -10,6 +10,16 @@ on:
   schedule:
     - cron: '0 7 * * *'
 
+# CRITICAL FIX: Set global permissions to read-only, ensuring the GITHUB_TOKEN 
+# does not have default 'pages: write' scope, which is the likely trigger.
+permissions:
+  contents: read # Default to read
+  actions: read
+  checks: read
+  pull-requests: read
+  statuses: read
+  # Explicitly omitted pages: write and id-token: write globally
+
 jobs:
   run-tests:
     runs-on: ${{ matrix.os }}
@@ -18,9 +28,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     permissions:
-      contents: write
-      # Removed pages: write and id-token: write as they are not needed for testing/artifact upload
-      # and can trigger the unwanted default Pages workflow.
+      contents: write # Overriding global 'read' to 'write' for artifact upload
 
     steps:
       - name: Checkout repository
@@ -72,9 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: run-tests
     permissions:
-      contents: write
-      # Only contents: write is needed for the custom peaceiris action to push to the branch.
-      # Removed id-token: write and pages: write entirely.
+      contents: write # Only contents: write is strictly needed for the custom deployment
 
     steps:
       - name: Checkout repository (Primary branch)

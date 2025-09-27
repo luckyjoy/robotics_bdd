@@ -2,50 +2,68 @@ name: Robotics BDD Simulation CI/CD
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  run-tests:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install allure-pytest
+          pip install pytest-html
 
-      - name: Run tests with Allure
-        run: |
-          pytest --alluredir=allure-results
+      - name: Run tests
+        run: pytest --alluredir=allure-results
 
-      - name: Generate Allure Report
-        run: |
-          allure generate allure-results -o allure-report --clean
-
-      - name: Save build metadata
-        run: |
-          mkdir -p allure-report
-          echo "Build: $GITHUB_RUN_NUMBER" > allure-report/build-info.txt
-          echo "Date: $(date)" >> allure-report/build-info.txt
-
-      - name: Upload report artifact
+      - name: Upload Allure results
         uses: actions/upload-artifact@v4
         with:
-          name: allure-report-${{ matrix.os }}
-          path: allure-report
+          name: allure-results-${{ matrix.os }}
+          path: allure-results
+
+  build:
+    needs: run-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Allure results (Ubuntu)
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results-ubuntu-latest
+          path: allure-results-ubuntu
+
+      - name: Download Allure results (Windows)
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results-windows-latest
+          path: allure-results-windows
+
+      - name: Generate Allure reports
+        run: |
+          pip install allure-pytest
+          allure generate allure-results-ubuntu -o reports/ubuntu --clean
+          allure generate allure-results-windows -o reports/windows --clean
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: reports
 
   deploy-pages:
     needs: build
@@ -53,92 +71,18 @@ jobs:
     permissions:
       pages: write
       id-token: write
-
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Download Ubuntu report
-        uses: actions/download-artifact@v4
-        with:
-          name: allure-report-ubuntu-latest
-          path: site/${{ github.run_number }}/ubuntu-latest
-
-      - name: Download Windows report
-        uses: actions/download-artifact@v4
-        with:
-          name: allure-report-windows-latest
-          path: site/${{ github.run_number }}/windows-latest
-
-      - name: Copy to latest folder
-        run: |
-          mkdir -p site/latest
-          cp -r site/${{ github.run_number }}/ubuntu-latest site/latest/ubuntu-latest
-          cp -r site/${{ github.run_number }}/windows-latest site/latest/windows-latest
-
-      # -----------------------------
-      # Build index.html + history.html
-      # -----------------------------
-      - name: Build Index and History
-        run: |
-          SITE_DIR="site"
-          mkdir -p "$SITE_DIR"
-
-          # Index page
-          echo "<html><body><h1>Robotics BDD Simulation CI/CD</h1><ul>" > "$SITE_DIR/index.html"
-          for OS in ubuntu-latest windows-latest; do
-            if [ -d "$SITE_DIR/latest/$OS" ]; then
-              TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              echo "<li><a href='latest/$OS/'>Latest Report ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
-            fi
-          done
-          echo "<li><a href='history.html'>Report History - All previous builds</a></li>" >> "$SITE_DIR/index.html"
-          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
-
-          # History page
-          echo "<html><body><h1>All Build Reports</h1>" > "$SITE_DIR/history.html"
-
-          for OS in ubuntu-latest windows-latest; do
-            echo "<h2>${OS}</h2><ul>" >> "$SITE_DIR/history.html"
-            for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
-              if [ -d "$SITE_DIR/$dir/$OS" ]; then
-                TS=$(cat "$SITE_DIR/$dir/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "<li><a href='${dir}/${OS}/'>Build #${dir}</a> - ${TS}</li>" >> "$SITE_DIR/history.html"
-              fi
-            done
-            echo "</ul>" >> "$SITE_DIR/history.html"
-          done
-
-          echo "</body></html>" >> "$SITE_DIR/history.html"
-
-      # -----------------------------
-      # Upload pages
-      # -----------------------------
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
 
-      # -----------------------------
-      # Add badges in summary
-      # -----------------------------
-      - name: Add Workflow Badges
+      - name: Summary with report links
         run: |
-          REPO_NAME=${GITHUB_REPOSITORY##*/}
-          BASE_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}"
-
-          UBUNTU_LATEST="${BASE_URL}/latest/ubuntu-latest/"
-          WINDOWS_LATEST="${BASE_URL}/latest/windows-latest/"
-          HISTORY="${BASE_URL}/history.html"
-
-          echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Report-blue)]($UBUNTU_LATEST)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Report-blue)]($WINDOWS_LATEST)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/Report-History-green)]($HISTORY)" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Report-blue)](https://luckyjoy.github.io/robotics_bdd/ubuntu/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Report-green)](https://luckyjoy.github.io/robotics_bdd/windows/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://img.shields.io/badge/History-All%20Builds-orange)](https://luckyjoy.github.io/robotics_bdd/)" >> $GITHUB_STEP_SUMMARY

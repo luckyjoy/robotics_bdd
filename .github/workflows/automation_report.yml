@@ -10,15 +10,16 @@ on:
   schedule:
     - cron: '0 7 * * *'
 
-# CRITICAL FIX: Set global permissions to read-only, ensuring the GITHUB_TOKEN 
-# does not have default 'pages: write' scope, which is the likely trigger.
+# CRITICAL FIX: Set global permissions to read-only AND explicitly set 'pages: none' 
+# to guarantee that the built-in GitHub Pages workflow is not triggered.
 permissions:
   contents: read # Default to read
   actions: read
   checks: read
   pull-requests: read
   statuses: read
-  # Explicitly omitted pages: write and id-token: write globally
+  pages: none # Ensures the built-in 'pages build and deployment' job is blocked
+  id-token: none # Blocks OIDC which can be an indirect trigger
 
 jobs:
   run-tests:
@@ -80,7 +81,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: run-tests
     permissions:
-      contents: write # Only contents: write is strictly needed for the custom deployment
+      contents: write # Only contents: write is strictly needed for the custom deployment (peaceiris)
 
     steps:
       - name: Checkout repository (Primary branch)

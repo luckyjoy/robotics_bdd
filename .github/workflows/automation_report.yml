@@ -1,10 +1,5 @@
 name: Robotics BDD Simulation CI/CD
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-
 on:
   push:
     branches:
@@ -23,6 +18,11 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     timeout-minutes: 30
 
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,23 +34,31 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
-          pip install --upgrade pip
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      - name: Run tests
+      # -----------------------------
+      # Run tests per OS
+      # -----------------------------
+      - name: Run tests (Linux/macOS)
+        if: runner.os == 'Linux' || runner.os == 'macOS'
         run: |
-          if [[ "${RUNNER_OS}" == "Linux" || "${RUNNER_OS}" == "macOS" ]]; then
-            rm -rf allure-results || true
-            pytest -m navigation --alluredir=allure-results
-            cp supports/ubuntu.properties allure-results/environment.properties || true
-          elif [[ "${RUNNER_OS}" == "Windows" ]]; then
-            Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
-            pytest -m navigation --alluredir=allure-results
-            Copy-Item supports/windows.properties allure-results\environment.properties -Force
-          fi
+          rm -rf allure-results || true
+          pytest -m navigation --alluredir=allure-results
+          cp supports/ubuntu.properties allure-results/environment.properties || true
 
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
+          pytest -m navigation --alluredir=allure-results
+          Copy-Item supports/windows.properties allure-results\environment.properties -Force
+
+      # -----------------------------
+      # Upload artifacts per OS
+      # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
         with:
@@ -62,6 +70,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: run-tests
     timeout-minutes: 30
+    environment:
+      name: github-pages
 
     permissions:
       contents: write
@@ -74,7 +84,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      # -----------------------------
       # Download artifacts from both OSes
+      # -----------------------------
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
         with:
@@ -87,7 +99,9 @@ jobs:
           name: allure-results-windows-latest
           path: allure-results/windows-latest
 
+      # -----------------------------
       # Setup Allure CLI
+      # -----------------------------
       - name: Setup Allure CLI
         run: |
           ALLURE_VERSION=2.25.0
@@ -96,11 +110,14 @@ jobs:
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
-      # Generate Allure reports per OS
+      # -----------------------------
+      # Generate Allure report per OS
+      # -----------------------------
       - name: Generate Allure Reports
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
+
           mkdir -p "$SITE_DIR/$BUILD_NUMBER"
           mkdir -p "$SITE_DIR/latest"
 
@@ -118,7 +135,9 @@ jobs:
             cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
 
-      # Rebuild index.html with OS labels and history
+      # -----------------------------
+      # Rebuild index.html with OS labels & history
+      # -----------------------------
       - name: Rebuild Index
         run: |
           SITE_DIR="site"
@@ -132,7 +151,7 @@ jobs:
             fi
           done
 
-          # Historical builds per OS
+          # Historical builds
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
             for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$dir/$OS" ]; then
@@ -142,25 +161,27 @@ jobs:
             done
           done
 
-          # Report History link
-          echo "<li><a href='./'>Report History - All previous builds</a></li>" >> "$SITE_DIR/index.html"
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
+      # -----------------------------
       # Deploy to GitHub Pages
+      # -----------------------------
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
       - uses: actions/deploy-pages@v4
 
-      # Add workflow badges
+      # -----------------------------
+      # Add badges to workflow summary
+      # -----------------------------
       - name: Add Workflow Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
-          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          LATEST_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
+          HISTORY_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
 
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)](${LATEST}ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)](${LATEST}windows-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/History-All-green)](${HISTORICAL})" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)](${LATEST_URL}ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)](${LATEST_URL}windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://img.shields.io/badge/History-Reports-green)](${HISTORY_URL})" >> $GITHUB_STEP_SUMMARY

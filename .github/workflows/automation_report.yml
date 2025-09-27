@@ -81,14 +81,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        # Need to fetch the pages branch history to preserve old reports
+        with:
+          fetch-depth: 0
 
-      - name: Download Existing Pages Content
+      # --- NEW/FIXED HISTORY DOWNLOAD STRATEGY ---
+      # 1. Download the currently deployed GitHub Pages content (the history)
+      - name: Download Historical Pages Content
         uses: actions/download-artifact@v4
         with:
           name: github-pages
           path: site
-        # CRITICAL: Ensures job doesn't fail on first run when history doesn't exist
-        continue-on-error: true 
+        continue-on-error: true # Still necessary for the very first run
 
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -121,15 +125,20 @@ jobs:
           for OS in ubuntu-latest windows-latest; do
             VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
             mkdir -p "$VERSIONED_REPORT_DIR"
+
+            # Use the historical directory (from the downloaded pages content)
+            # The 'site/$BUILD_NUMBER/$OS/data' path should now exist if the download worked.
+            HISTORY_DIR="$SITE_DIR/$BUILD_NUMBER/$OS/data"
             
-            # Generate the new report
+            # Use allure generate with the history option. 
+            # Note: We must create the full report first, then copy.
             allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
 
-            # Copy to historical location
+            # --- Copy to historical location (preserves previous builds in 'site') ---
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
             
-            # Copy to 'latest' location
+            # --- Copy to 'latest' location ---
             mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
@@ -153,8 +162,7 @@ jobs:
 
           echo "<h2>Report History</h2>" >> "$SITE_DIR/index.html"
           
-          # FIX: Use 'find' instead of 'ls | grep' for reliable cross-platform directory detection.
-          # Finds all numerically named directories directly under 'site', sorts them newest first.
+          # FIX: Use 'find' for reliable directory detection (already applied, kept here for correctness)
           HISTORICAL_BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*\/[0-9]+$" | xargs -n 1 basename | sort -nr)
           
           if [ -z "$HISTORICAL_BUILDS" ]; then

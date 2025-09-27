@@ -57,10 +57,18 @@ jobs:
         run: |
           echo "Copying supports files for $RUNNER_OS..."
           mkdir -p allure-results
+          
+          # 1. Copy categories.json (required for custom test failure categorization)
+          cp supports/categories.json allure-results/ 2>/dev/null || echo "No categories.json file found"
+
+          # 2. Copy environment properties based on OS, renaming to environment.properties
           if [[ "$RUNNER_OS" == "Linux" ]]; then
-            cp supports/ubuntu.* allure-results/ 2>/dev/null || echo "No Ubuntu support files found"
+            echo "Copying Ubuntu environment properties..."
+            cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "No Ubuntu environment file found"
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            copy supports\windows.* allure-results\ 2>NUL || echo "No Windows support files found"
+            echo "Copying Windows environment properties..."
+            # Using cp command here is safe because the shell for the step is bash
+            cp supports/windows.properties allure-results/environment.properties 2>/dev/null || echo "No Windows environment file found"
           fi
         shell: bash
 

@@ -22,9 +22,9 @@ git push -u origin main
 rem curl -u "luckyjoy:11ce1755fa745c0bf522d169a9cac2ca11" -k -X POST "https://localhost:8443/job/robotics_bdd/build"
 
 echo.
-echo A new build has been triggred at secured Github server: https://github.com/luckyjoy/robotics_bdd
+echo A CI has been triggred at secured Github workflow: https://github.com/luckyjoy/robotics_bdd
 echo.
-echo A new build has been triggred at secured Jenkins server: https://localhost:8443/view/all/builds
+echo A CI has been triggred at secured Jenkins pipeline: https://localhost:8443/view/all/builds
 echo.
 echo Open secured GitHub server and Jenkins server
 echo.

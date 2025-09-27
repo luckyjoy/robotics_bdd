@@ -99,15 +99,13 @@ jobs:
           fetch-depth: 0
 
       # CRITICAL FIX 1: Checkout the existing gh-pages content into a temporary folder to preserve history
-      - name: Checkout gh-pages history
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          ref: gh-pages
-          path: _history
-          token: ${{ secrets.GITHUB_TOKEN }}
-          # Set clean to false just in case, though the path is new
-          clean: false
+      # Replaced actions/checkout with a robust native git clone to handle the non-existence of the gh-pages branch on the first run.
+      - name: Checkout gh-pages history (Robust Git Clone)
+        run: |
+          # Use GITHUB_TOKEN for authentication and suppress error (|| true) if the gh-pages branch doesn't exist yet.
+          echo "Attempting to clone gh-pages branch into _history..."
+          git clone --depth 1 --branch gh-pages "https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" _history || true
+        shell: bash
 
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4

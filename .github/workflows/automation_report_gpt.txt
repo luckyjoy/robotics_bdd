@@ -1,4 +1,74 @@
-deploy-pages:
+name: Robotics BDD Simulation CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 7 * * *'
+
+jobs:
+  run-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: |
+          echo "Installing pytest, pytest-bdd, allure-pytest, pytest-html..."
+          pip install pytest pytest-bdd allure-pytest pytest-html
+
+      - name: Clean previous allure-results
+        run: |
+          echo "Cleaning allure-results folder..."
+          if [ -d "allure-results" ]; then rm -rf allure-results; fi
+        shell: bash
+
+      - name: Copy platform-specific support files
+        run: |
+          echo "Copying supports files for $RUNNER_OS..."
+          mkdir -p allure-results
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            cp supports/ubuntu.* allure-results/ 2>/dev/null || echo "No Ubuntu support files found"
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            copy supports\windows.* allure-results\ 2>NUL || echo "No Windows support files found"
+          fi
+        shell: bash
+
+      - name: Run tests
+        run: |
+          echo "Running pytest navigation tests..."
+          pytest -m navigation --alluredir=allure-results | tee pytest.log
+        shell: bash
+
+      - name: Upload Allure Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.os }}
+          path: allure-results
+          retention-days: 7
+
+  deploy-pages:
     runs-on: ubuntu-latest
     needs: run-tests
     environment:
@@ -11,13 +81,6 @@ deploy-pages:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # --- NEW STEP: Download Existing Pages Content (History) ---
-      - name: Download Existing Pages Content
-        uses: actions/download-artifact@v4
-        with:
-          name: github-pages # This is the default name used by the deploy-pages action
-          path: site         # Download the existing content into the 'site' directory
 
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -45,41 +108,17 @@ deploy-pages:
           echo "Generating Allure reports..."
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
-          
-          # Ensure site/latest exists (it might not on the very first run)
           mkdir -p "$SITE_DIR/latest"
-
           for OS in ubuntu-latest windows-latest; do
             VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
             mkdir -p "$VERSIONED_REPORT_DIR"
-            
-            # Use 'allure-results/$OS' for current build results, 
-            # and 'site/$BUILD_NUMBER/$OS/data' for previous history data (if it exists)
-            # The 'allure generate' command handles merging history from 'data' subdirectories if present.
-
-            # NOTE: For Allure to show history, it needs the 'history' folder from the previous build.
-            # This workflow creates a new report, but since the ENTIRE 'site' folder is downloaded, 
-            # the necessary 'data' folders from previous reports are already present in 'site/$BUILD_NUMBER/$OS/data'.
-            # However, since you are creating a NEW report directory, you need a different strategy.
-            # The simplest way is to ensure all past reports are maintained in 'site/$BUILD_NUMBER/$OS'.
-            
-            # --- FIX FOR HISTORY ---
-            # Allure provides a way to merge results or copy history, but the cleanest approach for GitHub Pages is 
-            # to simply generate the report for the current build, then copy it into the historical location.
-            # Since the 'site' directory is downloaded, the historical reports are preserved.
-
-            # 1. Generate the current report
             allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
-            
-            # 2. Copy current report to historical location
+
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
-            
-            # 3. Copy current report to 'latest' location
             mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
-            # 4. Update build info
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
             cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
@@ -97,9 +136,7 @@ deploy-pages:
             fi
           done
 
-          # Historical builds (This now correctly lists all folders in the downloaded 'site' history)
-          # Use 'ls -1vr' to list in reverse order (newest first)
-          echo "<h2>Report History</h2>" >> "$SITE_DIR/index.html"
+          # Historical builds
           for BUILD in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$'); do
             for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
@@ -109,6 +146,8 @@ deploy-pages:
             done
           done
 
+          # Add "Report History" link at the bottom
+          echo "<li><a href='./'>Report History - All previous builds</a></li>" >> "$SITE_DIR/index.html"
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
       - name: Deploy to GitHub Pages
@@ -117,8 +156,7 @@ deploy-pages:
         with:
           path: site
       - uses: actions/deploy-pages@v4
-        
-      # The final step for adding badges remains the same
+
       - name: Add workflow badges to summary
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}

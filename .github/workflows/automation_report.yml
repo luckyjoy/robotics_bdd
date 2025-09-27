@@ -28,7 +28,7 @@ jobs:
           pip install pytest-html
 
       - name: Run tests
-        run: pytest --alluredir=allure-results
+        run: pytest -m navigation --alluredir=allure-results
 
       - name: Upload Allure results
         uses: actions/upload-artifact@v4

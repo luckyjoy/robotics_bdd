@@ -82,14 +82,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # --- FIX: Download Existing Pages Content with Error Handling ---
       - name: Download Existing Pages Content
         uses: actions/download-artifact@v4
         with:
           name: github-pages
           path: site
-        # This allows the step to fail on the very first run 
-        # when the artifact does not yet exist.
+        # CRITICAL: Ensures job doesn't fail on first run when history doesn't exist
         continue-on-error: true 
 
       - name: Download Linux Allure Results
@@ -127,7 +125,7 @@ jobs:
             # Generate the new report
             allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
 
-            # Copy to historical location (merges with downloaded history)
+            # Copy to historical location
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
             
@@ -154,15 +152,23 @@ jobs:
           done
 
           echo "<h2>Report History</h2>" >> "$SITE_DIR/index.html"
-          # Historical builds - lists all build folders now present in the merged 'site' directory
-          for BUILD in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$'); do
-            for OS in ubuntu-latest windows-latest; do
-              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
-              fi
-            done
-          done
+          
+          # FIX: Use 'find' instead of 'ls | grep' for reliable cross-platform directory detection.
+          # Finds all numerically named directories directly under 'site', sorts them newest first.
+          HISTORICAL_BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*\/[0-9]+$" | xargs -n 1 basename | sort -nr)
+          
+          if [ -z "$HISTORICAL_BUILDS" ]; then
+              echo "<p>No historical builds found in the '$SITE_DIR' directory.</p>" >> "$SITE_DIR/index.html"
+          else
+              for BUILD in $HISTORICAL_BUILDS; do
+                for OS in ubuntu-latest windows-latest; do
+                  if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
+                    TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                    echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+                  fi
+                done
+              done
+          fi
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 

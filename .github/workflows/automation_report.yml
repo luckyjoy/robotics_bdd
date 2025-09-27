@@ -39,29 +39,34 @@ jobs:
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
-      # Run tests per OS
+      # Linux tests
       # -----------------------------
-      - name: Run tests
+      - name: Run tests on Linux
+        if: runner.os == 'Linux'
+        shell: bash
         run: |
-          # Linux
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            rm -rf allure-results
-            pytest -m navigation --alluredir=allure-results | tee pytest.log
-            mkdir -p allure-results
-            cp supports/ubuntu.properties allure-results/environment.properties
-            cp supports/categories.json allure-results/
-          fi
-
-          # Windows
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
-            pytest -m navigation --alluredir=allure-results
-            Copy-Item supports\windows.properties allure-results\environment.properties -Force
-            Copy-Item supports\categories.json allure-results\ -Force
-          fi
+          echo "Running on Linux"
+          rm -rf allure-results
+          pytest -m navigation --alluredir=allure-results | tee pytest.log
+          mkdir -p allure-results
+          cp supports/ubuntu.properties allure-results/environment.properties
+          cp supports/categories.json allure-results/
 
       # -----------------------------
-      # Upload artifacts per OS
+      # Windows tests
+      # -----------------------------
+      - name: Run tests on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "Running on Windows"
+          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
+          pytest -m navigation --alluredir=allure-results
+          Copy-Item supports\windows.properties allure-results\environment.properties -Force
+          Copy-Item supports\categories.json allure-results\ -Force
+
+      # -----------------------------
+      # Upload Allure Results per OS
       # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
@@ -89,7 +94,7 @@ jobs:
           fetch-depth: 0
 
       # -----------------------------
-      # Download artifacts from both OSes
+      # Download artifacts
       # -----------------------------
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -115,12 +120,13 @@ jobs:
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
       # -----------------------------
-      # Generate Allure report per OS
+      # Generate Allure Reports
       # -----------------------------
       - name: Generate Allure Reports
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
+
           mkdir -p "$SITE_DIR/$BUILD_NUMBER"
           mkdir -p "$SITE_DIR/latest"
 
@@ -139,32 +145,27 @@ jobs:
           done
 
       # -----------------------------
-      # Rebuild index.html with OS labels
+      # Rebuild index.html
       # -----------------------------
       - name: Rebuild Index
         run: |
           SITE_DIR="site"
-          echo "<html><body><h1>Allure Reports</h1><h2>Latest Reports</h2><ul>" > "$SITE_DIR/index.html"
+          echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
 
-          # Latest report per OS
+          # Latest per OS
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              OS_LABEL="Ubuntu"
-              [ "$OS" = "windows-latest" ] && OS_LABEL="Windows"
-              echo "<li><a href='latest/$OS/'>${OS_LABEL} Latest Report</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              echo "<li><a href='latest/$OS/'>Latest Report ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
             fi
           done
 
-          echo "<h2>Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
-
+          # Historical builds per OS
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
             for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$dir/$OS" ]; then
                 TS=$(cat "$SITE_DIR/$dir/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                OS_LABEL="Ubuntu"
-                [ "$OS" = "windows-latest" ] && OS_LABEL="Windows"
-                echo "<li><a href='${dir}/${OS}/'>Build #${dir} (${OS_LABEL})</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+                echo "<li><a href='${dir}/${OS}/'>Build #${dir} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
               fi
             done
           done
@@ -181,14 +182,14 @@ jobs:
       - uses: actions/deploy-pages@v4
 
       # -----------------------------
-      # Add badges for each OS
+      # Add Workflow Badges
       # -----------------------------
       - name: Add Workflow Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          UBUNTU_LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/"
-          WINDOWS_LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/"
+          LATEST_UBU="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/"
+          LATEST_WIN="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/"
 
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)]($UBUNTU_LATEST)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)]($WINDOWS_LATEST)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)]($LATEST_UBU)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-green)]($LATEST_WIN)" >> $GITHUB_STEP_SUMMARY

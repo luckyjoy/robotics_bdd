@@ -19,8 +19,8 @@ jobs:
 
     permissions:
       contents: write
-      pages: write
-      id-token: write
+      # Removed pages: write and id-token: write as they are not needed for testing/artifact upload
+      # and can trigger the unwanted default Pages workflow.
 
     steps:
       - name: Checkout repository
@@ -73,8 +73,8 @@ jobs:
     needs: run-tests
     permissions:
       contents: write
-      # Removed 'pages: write' to explicitly avoid any tie-ins to the GitHub Pages built-in deployment system
-      id-token: write
+      # Only contents: write is needed for the custom peaceiris action to push to the branch.
+      # Removed id-token: write and pages: write entirely.
 
     steps:
       - name: Checkout repository (Primary branch)
@@ -187,8 +187,6 @@ jobs:
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
           
       # CRITICAL FIX 3: Deploy the full, comprehensive 'site' folder to gh-pages
-      # Since 'site' now contains the index, the new build, AND the old builds, 
-      # we can safely replace the target branch content entirely.
       - name: Deploy to GitHub Pages (Final Robust Fix)
         uses: peaceiris/actions-gh-pages@v3
         with:

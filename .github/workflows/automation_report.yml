@@ -2,11 +2,9 @@ name: Robotics BDD Simulation CI/CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   schedule:
     - cron: '0 7 * * *'
 
@@ -17,55 +15,67 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     timeout-minutes: 30
-
-    permissions:
-      contents: write
-      pages: write
-      id-token: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
-          echo "Installing Python dependencies..."
+          echo "Installing required Python packages..."
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      - name: Debug runner info
+      # -----------------------------
+      # Clean previous results
+      # -----------------------------
+      - name: Clean allure-results (Linux/macOS)
+        if: runner.os != 'Windows'
         run: |
-          echo "RUNNER_OS=${RUNNER_OS}"
-          python --version
-          pip list
-
-      - name: Clean previous results
-        run: |
-          echo "Cleaning allure-results folder..."
-          if [ -d "allure-results" ]; then rm -rf allure-results; fi
-
-      - name: Copy support files per OS
-        run: |
-          echo "Copying support files for $RUNNER_OS..."
-          mkdir -p allure-results
-          if [ "$RUNNER_OS" == "Linux" ] || [ "$RUNNER_OS" == "macOS" ]; then
-            cp supports/ubuntu.* allure-results/ || true
-          elif [ "$RUNNER_OS" == "Windows" ]; then
-            cp supports/windows.* allure-results/ || true
+          echo "Cleaning allure-results folder on Linux/macOS..."
+          if [ -d "allure-results" ]; then
+            rm -rf allure-results
           fi
-          ls -la allure-results
 
-      - name: Run tests
+      - name: Clean allure-results (Windows)
+        if: runner.os == 'Windows'
         run: |
-          echo "Running tests for $RUNNER_OS..."
-          pytest -m navigation --alluredir=allure-results | tee pytest.log
+          Write-Host "Cleaning allure-results folder on Windows..."
+          if (Test-Path "allure-results") { Remove-Item -Recurse -Force allure-results }
 
+      # -----------------------------
+      # Run tests
+      # -----------------------------
+      - name: Run pytest navigation tests
+        run: |
+          echo "Running pytest navigation tests..."
+          pytest -m navigation --alluredir=allure-results
+
+      # -----------------------------
+      # Copy environment files
+      # -----------------------------
+      - name: Copy supports files (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          echo "Copying supports files for Linux/macOS..."
+          cp supports/ubuntu.properties allure-results/environment.properties || true
+          cp supports/categories.json allure-results/ || true
+
+      - name: Copy supports files (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Write-Host "Copying supports files for Windows..."
+          Copy-Item supports\windows.properties allure-results\environment.properties -ErrorAction SilentlyContinue
+          Copy-Item supports\categories.json allure-results\ -ErrorAction SilentlyContinue
+
+      # -----------------------------
+      # Upload artifacts
+      # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
         with:
@@ -77,31 +87,35 @@ jobs:
     runs-on: ubuntu-latest
     needs: run-tests
     timeout-minutes: 30
-    environment:
-      name: github-pages
-
+    environment: github-pages
     permissions:
       contents: write
       pages: write
       id-token: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Download previous artifacts
-        run: |
-          echo "Downloading previous Allure results..."
-        # Download Linux artifact
-      - uses: actions/download-artifact@v4
+      # -----------------------------
+      # Download artifacts from both OSes
+      # -----------------------------
+      - name: Download Linux Allure Results
+        uses: actions/download-artifact@v4
         with:
           name: allure-results-ubuntu-latest
-          path: site/ubuntu-latest
-      - uses: actions/download-artifact@v4
+          path: allure-results/ubuntu-latest
+
+      - name: Download Windows Allure Results
+        uses: actions/download-artifact@v4
         with:
           name: allure-results-windows-latest
-          path: site/windows-latest
+          path: allure-results/windows-latest
 
+      # -----------------------------
+      # Setup Allure CLI
+      # -----------------------------
       - name: Setup Allure CLI
         run: |
           echo "Setting up Allure CLI..."
@@ -110,40 +124,47 @@ jobs:
           mkdir -p allure-commandline
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
-          allure --version
 
+      # -----------------------------
+      # Generate Allure Reports
+      # -----------------------------
       - name: Generate Allure Reports
         run: |
-          echo "Generating Allure Reports..."
+          echo "Generating Allure reports..."
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
           mkdir -p "$SITE_DIR/$BUILD_NUMBER"
           mkdir -p "$SITE_DIR/latest"
 
           for OS in ubuntu-latest windows-latest; do
-            echo "Generating report for $OS..."
+            echo "Processing $OS..."
             VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
             mkdir -p "$VERSIONED_REPORT_DIR"
-            allure generate "site/$OS" --output "$VERSIONED_REPORT_DIR" --clean
+            allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
+
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
             mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
+
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
             cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
 
-      - name: Rebuild index.html
+      # -----------------------------
+      # Rebuild index.html
+      # -----------------------------
+      - name: Rebuild Index
         run: |
           echo "Rebuilding index.html..."
           SITE_DIR="site"
           echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
 
-          # Latest reports
+          # Latest reports per OS
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              echo "<li><a href='latest/$OS/'>Latest Report ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              echo "<li><a href='latest/$OS/'>${OS} Latest Report</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
             fi
           done
 
@@ -158,23 +179,23 @@ jobs:
           done
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
-          echo "Index.html contents:"
-          cat "$SITE_DIR/index.html"
 
+      # -----------------------------
+      # Deploy to GitHub Pages
+      # -----------------------------
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
       - uses: actions/deploy-pages@v4
 
-      - name: Add workflow summary badges
+      # -----------------------------
+      # Add Workflow Badges
+      # -----------------------------
+      - name: Add Workflow Badges
         run: |
-          echo "Adding workflow summary badges..."
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
-          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
-
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)](${LATEST}ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)](${LATEST}windows-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/History-All-green)](${HISTORICAL})" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/)](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY

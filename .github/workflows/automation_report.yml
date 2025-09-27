@@ -39,29 +39,36 @@ jobs:
           pip install pytest pytest-bdd allure-pytest pytest-html
 
       # -----------------------------
+      # Prepare allure-results folder per OS
+      # -----------------------------
+      - name: Prepare allure-results (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          rm -rf allure-results
+          mkdir -p allure-results
+          cp supports/ubuntu.properties allure-results/environment.properties
+          cp supports/categories.json allure-results/
+
+      - name: Prepare allure-results (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path allure-results
+          Copy-Item supports\windows.properties allure-results\environment.properties
+          Copy-Item supports\categories.json allure-results\
+
+      # -----------------------------
       # Run tests per OS
       # -----------------------------
-      - name: Prepare allure-results
-        run: |
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            rm -rf allure-results
-          else
-            Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
-          fi
-
       - name: Run tests (Linux)
         if: runner.os == 'Linux'
         run: |
           pytest -m navigation --alluredir=allure-results | tee pytest.log
-          cp supports/ubuntu.properties allure-results/environment.properties
-          cp supports/categories.json allure-results/ || true
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
         run: |
           pytest -m navigation --alluredir=allure-results
-          Copy-Item supports\windows.properties allure-results\environment.properties
-          Copy-Item supports\categories.json allure-results\ -ErrorAction SilentlyContinue
 
       # -----------------------------
       # Upload artifacts per OS
@@ -134,7 +141,6 @@ jobs:
 
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
-
             mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
@@ -143,7 +149,7 @@ jobs:
           done
 
       # -----------------------------
-      # Rebuild index.html with OS labels and history
+      # Rebuild index.html with OS labels
       # -----------------------------
       - name: Rebuild Index
         run: |
@@ -180,14 +186,12 @@ jobs:
       - uses: actions/deploy-pages@v4
 
       # -----------------------------
-      # Add workflow badges
+      # Add badges to workflow summary
       # -----------------------------
       - name: Add Workflow Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
-          HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
-
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "[![Latest Report](https://img.shields.io/badge/Latest-Report-blue)]($LATEST)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Historical Reports](https://img.shields.io/badge/Historical-Reports-green)]($HISTORICAL)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Latest Report Ubuntu](https://img.shields.io/badge/Latest-Report-Ubuntu-blue)](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Latest Report Windows](https://img.shields.io/badge/Latest-Report-Windows-blue)](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Historical Reports](https://img.shields.io/badge/Historical-Reports-green)](https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY

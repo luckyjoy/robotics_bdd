@@ -2,9 +2,11 @@ name: Robotics BDD Simulation CI/CD
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+    branches:
+      - main
   schedule:
     - cron: '0 7 * * *'
 
@@ -36,33 +38,26 @@ jobs:
         run: |
           pip install pytest pytest-bdd allure-pytest pytest-html
 
-      # -----------------------------
-      # Run tests on Linux
-      # -----------------------------
-      - name: Run tests on Linux
-        if: runner.os == 'Linux'
+      - name: Prepare Allure results
         run: |
-          rm -rf allure-results
+          # Clean previous results
+          if [ -d "allure-results" ]; then rm -rf allure-results; fi
           mkdir -p allure-results
-          pytest -m navigation --alluredir=allure-results | tee pytest.log
-          cp supports/ubuntu.properties allure-results/environment.properties
-          cp supports/categories.json allure-results/
 
-      # -----------------------------
-      # Run tests on Windows
-      # -----------------------------
-      - name: Run tests on Windows
-        if: runner.os == 'Windows'
+          # Copy OS-specific environment
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            cp supports/ubuntu.properties allure-results/environment.properties || true
+          else
+            cp supports/windows.properties allure-results/environment.properties || true
+          fi
+
+          # Copy categories.json (shared)
+          cp supports/categories.json allure-results/ || true
+
+      - name: Run tests
         run: |
-          Remove-Item -Recurse -Force allure-results -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path allure-results -Force
-          pytest -m navigation --alluredir=allure-results
-          Copy-Item supports\windows.properties allure-results\environment.properties -Force
-          Copy-Item supports\categories.json allure-results\ -Force
+          pytest -m navigation --alluredir=allure-results | tee pytest.log
 
-      # -----------------------------
-      # Upload artifacts per OS
-      # -----------------------------
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
         with:
@@ -88,24 +83,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      # -----------------------------
-      # Download artifacts from both OSes
-      # -----------------------------
-      - name: Download Linux Allure Results
+      - name: Download Allure Results
         uses: actions/download-artifact@v4
         with:
           name: allure-results-ubuntu-latest
           path: allure-results/ubuntu-latest
-
-      - name: Download Windows Allure Results
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: allure-results-windows-latest
           path: allure-results/windows-latest
 
-      # -----------------------------
-      # Setup Allure CLI
-      # -----------------------------
       - name: Setup Allure CLI
         run: |
           ALLURE_VERSION=2.25.0
@@ -114,9 +101,6 @@ jobs:
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
-      # -----------------------------
-      # Generate Allure reports and maintain history
-      # -----------------------------
       - name: Generate Allure Reports
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
@@ -125,28 +109,29 @@ jobs:
           mkdir -p "$SITE_DIR/latest"
 
           for OS in ubuntu-latest windows-latest; do
-            VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
-            mkdir -p "$VERSIONED_REPORT_DIR"
-            allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
+            REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
+            mkdir -p "$REPORT_DIR"
+            allure generate "allure-results/$OS" --output "$REPORT_DIR" --clean
 
+            # Copy to historical build folder
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
-            cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
-            mkdir -p "$SITE_DIR/latest/$OS"
-            cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
+            cp -r "$REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
 
+            # Copy to latest folder
+            mkdir -p "$SITE_DIR/latest/$OS"
+            cp -r "$REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
+
+            # Add timestamp
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
             cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
 
-      # -----------------------------
-      # Rebuild index.html
-      # -----------------------------
       - name: Rebuild Index
         run: |
           SITE_DIR="site"
           echo "<html><body><h1>Allure Reports</h1><ul>" > "$SITE_DIR/index.html"
 
-          # Latest report per OS
+          # Latest reports
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
@@ -154,7 +139,7 @@ jobs:
             fi
           done
 
-          # Historical builds per OS
+          # Historical builds
           for dir in $(ls -1v $SITE_DIR | grep -E '^[0-9]+$' | sort -nr); do
             for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$dir/$OS" ]; then
@@ -166,24 +151,20 @@ jobs:
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
-      # -----------------------------
-      # Deploy to GitHub Pages
-      # -----------------------------
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
       - uses: actions/deploy-pages@v4
 
-      # -----------------------------
-      # Add badges to workflow summary
-      # -----------------------------
       - name: Add Workflow Badges
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
-          LATEST="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/"
+          LATEST_UBU="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/"
+          LATEST_WIN="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/windows-latest/"
           HISTORICAL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
 
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "[![Latest Report](https://img.shields.io/badge/Latest-Report-blue)]($LATEST)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Latest Report (Ubuntu)](https://img.shields.io/badge/Latest-Ubuntu-blue)]($LATEST_UBU)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Latest Report (Windows)](https://img.shields.io/badge/Latest-Windows-blue)]($LATEST_WIN)" >> $GITHUB_STEP_SUMMARY
           echo "[![Historical Reports](https://img.shields.io/badge/Historical-Reports-green)]($HISTORICAL)" >> $GITHUB_STEP_SUMMARY

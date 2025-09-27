@@ -28,7 +28,7 @@ echo A new build has been triggred at secured Jenkins server: https://localhost:
 echo.
 echo Open secured GitHub server and Jenkins server
 echo.
-sleep 2
+sleep 4
 
  start "" "https://github.com/luckyjoy/robotics_bdd/actions"
 echo.

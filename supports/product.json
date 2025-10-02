@@ -1,0 +1,39 @@
+{
+  "Title": "Robotics Behavior-Driven Development (BDD) Simulation Framework Documentation",
+  "Version": "1.0.0",
+  "Date": "2025-09-30",
+  "ProductName": "Robotics BDD Simulation Framework",
+  "ProductModel": "BDD-Sim-PyBullet",
+  "ProductVersion": "1.0.0",
+  "FirmwareVersion": "Gazebo_Pioneer3DX (Robot Model)",
+  "ProductManufacturer": "Bang Thien Nguyen",
+  "ProductManager": "Bang Thien Nguyen",
+  "TargetEnvironment": "Robotics Simulation and Verification",
+  "Interface": "Gherkin/Behave (BDD Language), Python 3.10+",
+  "FormFactor": "Software Framework/Library",
+  "PlatformSupport": {
+    "OperatingSystems": [
+      "Windows 2025",
+      "Linux (Typical ROS/Simulation Environments)",
+      "macOS"
+    ],
+    "SimulationEngine": [
+      "PyBullet (Physics Engine)",
+      "Gazebo (Robot Model Interface)"
+    ],
+    "TestTypes": [
+      "Integration Testing",
+      "BDD-driven Acceptance Tests",
+      "Allure Test Reporting 2.35.1"
+    ]
+  },
+  "KeyFeatures": [
+    "Comprehensive 3D Navigation and Movement Test Suites (Forward, Diagonal, Circular)",
+    "Pick and Place Operation Validation including Gripper Blocking/Collision Scenarios",
+    "Robot Safety Constraint Enforcement (Boundary Checks and Single/Multi-Obstacle Collision Avoidance)",
+    "Sensor Data Integrity Testing (Kalman Filter Convergence and Object Detection Range)",
+    "Locomotion State Verification (Walking, Crouching) from various 3D positions",
+    "Real-time Requirement Traceability and HTML Report Generation"
+  ],
+  "Copyright": "© 2025 Bang Thien Nguyen. All rights reserved."
+}

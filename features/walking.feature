@@ -4,7 +4,7 @@ Feature: Robot Walking
   Verify walking and crouching behaviors
 
   @stand
-  Scenario Outline: Robot starts walking from different positions
+  Scenario Outline: <REQ_WAL_01> Robot starts walking from different positions
     Given a robot at position [<start_x>, <start_y>, <start_z>]
     When the robot starts walking
     Then the robot should be walking
@@ -17,7 +17,7 @@ Feature: Robot Walking
       | 1       | 1       | 1       |
 	  
   @ground
-  Scenario Outline: Robot crouches from different positions
+  Scenario Outline: <REQ_WAL_02> Robot crouches from different positions
     Given a robot at position [<start_x>, <start_y>, <start_z>]
     When the robot crouches so that its chest touches the ground
     Then the robot should be in crouched position
@@ -29,7 +29,7 @@ Feature: Robot Walking
       | 1       | 1       | 1       |
 
   @walking
-  Scenario Outline: Robot walks forward by variable distances
+  Scenario Outline: <REQ_WAL_03> Robot walks forward by variable distances
     Given a robot at position [<start_x>, <start_y>, <start_z>]
     When the robot walks forward by <distance> units
     Then the robot should be at position [<end_x>, <end_y>, <end_z>]

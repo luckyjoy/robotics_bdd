@@ -4,7 +4,7 @@ Feature: Robot Navigation
   Test various movements of the robot in 3D space
 
   @move
-  Scenario Outline: Robot moves in a single direction
+  Scenario Outline: <REQ_NAV_01> Robot moves in a single direction
     Given the robot is at position [<start_x>, <start_y>, <start_z>]
     When the robot moves <direction> by <distance>
     Then the robot should be at position [<end_x>, <end_y>, <end_z>]
@@ -19,7 +19,7 @@ Feature: Robot Navigation
       | 0       | 0       | 1       | down      | 1        | 0     | 0     | 0     |
 
   @diagonal
-  Scenario Outline: Robot moves diagonally in 3D space
+  Scenario Outline: <REQ_NAV_02> Robot moves diagonally in 3D space
     Given the robot is at position [<start_x>, <start_y>, <start_z>]
     When the robot moves diagonally by [<dx>, <dy>, <dz>]
     Then the robot should be at position [<end_x>, <end_y>, <end_z>]
@@ -36,7 +36,7 @@ Feature: Robot Navigation
       | 0       | 0       | 1       | 1  | 0  | -1 | 1     | 0     | 0     |
 
   @forward_backward
-  Scenario Outline: Robot moves forward/backward multiple steps
+  Scenario Outline: <REQ_NAV_03> Robot moves forward/backward multiple steps
     Given the robot is at position [<start_x>, <start_y>, <start_z>]
     When the robot moves <direction> by <distance>
     Then the robot should be at position [<end_x>, <end_y>, <end_z>]
@@ -49,7 +49,7 @@ Feature: Robot Navigation
       | 0       | 0       | 2       | down      | 2        | 0     | 0     | 0     |
 
   @zigzag
-  Scenario Outline: Robot zigzags forward and backward
+  Scenario Outline: <REQ_NAV_04> Robot zigzags forward and backward
     Given the robot is at position [<start_x>, <start_y>, <start_z>]
     When the robot moves <pattern> by <dist1> and <dist2> twice
     Then the robot should be at position [<end_x>, <end_y>, <end_z>]
@@ -60,7 +60,7 @@ Feature: Robot Navigation
       | 2       | 2       | 0       | backward and left  | 1     | 1     | 0     | 0     | 0     |
 
   @circle
-  Scenario Outline: Robot moves in a circle and returns to origin
+  Scenario Outline: <REQ_NAV_05> Robot moves in a circle and returns to origin
     Given the robot is at position [0, 0, 0]
     When the robot moves in a <direction> circle with radius 1
     Then the robot should return to position [0, 0, 0]

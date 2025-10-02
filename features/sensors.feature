@@ -4,7 +4,7 @@ Feature: Sensor and Filtering
   Test robot sensors and data filtering
 
   @kalman_filter
-  Scenario Outline: Kalman filter converges to an accurate estimate
+  Scenario Outline: <REQ_SEN_01> Kalman filter converges to an accurate estimate
     Given a robot with a Kalman filter
     When noisy measurements of position [<true_x>, <true_y>, <true_z>] are applied
     Then the filter's estimate should converge approximately to [<true_x>, <true_y>, <true_z>]
@@ -17,7 +17,7 @@ Feature: Sensor and Filtering
       | 1.0    | 1.0    | 1.0    |
 
   @object_detection
-  Scenario Outline: Sensor detects objects at various positions within range
+  Scenario Outline: <REQ_SEN_02> Sensor detects objects at various positions within range
     Given a sensor with range <range>
     And an object is placed at [<obj_x>, <obj_y>, <obj_z>]
     When the sensor scans
@@ -34,7 +34,7 @@ Feature: Sensor and Filtering
       | 8.5   | 7.4   | 9     | 8     |
 	  
   @object_detection_negative
-  Scenario Outline: Sensor does not detect objects out of range
+  Scenario Outline: <REQ_SEN_03> Sensor does not detect objects out of range
     Given a sensor with range <range>
     And an object is placed at [<obj_x>, <obj_y>, <obj_z>]
     When the sensor scans

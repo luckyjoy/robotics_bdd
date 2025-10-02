@@ -1,0 +1,12 @@
+{
+  "name": "Robotics BDD Validation Runner",
+  "type": "CI_Pipeline",
+  "url": "https://github.com/luckyjoy/robotics_bdd/actions",
+  "buildName": "Framework v1.2.0 | Target v1.20.34 | Environment: PyBullet",
+  "reportUrl": "https://luckyjoy.github.io/robotics_bdd/",
+  "data": {
+    "Validation Engineer": "TBD",
+    "Product Model": "BDD-Sim-PyBullet",
+    "Test Framework": "Gherkin (Behave)"
+  }
+}

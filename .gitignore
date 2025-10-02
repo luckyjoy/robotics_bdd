@@ -3,7 +3,7 @@ data/
 temp/
 logs/
 examples/
-tools/
+supports/*.py
 allure-results/
 
 # VM images & snapshots (HUGE files, never commit)

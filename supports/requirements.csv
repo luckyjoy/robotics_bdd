@@ -1,0 +1,42 @@
+requirement_id,requirement_description
+
+# Navigation
+REQ_NAV_01: The robot shall be able to move a specified distance in any single primary direction (forward, backward, left, right, up, or down) and arrive at the calculated end position.
+
+REQ_NAV_02: The robot shall be able to move diagonally in 3D space by accepting deltas for Δx, Δy, and Δz offsets and arriving at the calculated end position.
+
+REQ_NAV_03: The robot shall be able to execute single-direction movements (forward, backward, up, down) over multiple steps/units of distance.
+
+REQ_NAV_04: The robot shall be able to perform complex movement patterns, such as zigzagging (alternating movements in two orthogonal directions) twice, and confirm its final position.
+
+REQ_NAV_05: The robot shall be able to execute a complete circular path (clockwise or counter-clockwise) with a specified radius and accurately return to its starting position.
+
+# Pick and Play
+REQ_PAP_01: The robot shall successfully pick up an object from a starting 3D position and move it to a different target 3D position, ensuring the object is correctly placed at the destination.
+
+REQ_PAP_02: The robot shall detect when the gripper mechanism is blocked and prevent the initiation of a pick operation to avoid mechanical failure.
+
+REQ_PAP_03: The pick-and-place system shall reliably execute the sequence across a diverse set of varying starting and ending 3D coordinates.
+
+REQ_PAP_04: The robot shall consistently prevent object pick-up when the gripper is obstructed, verifying failure states at different initial positions.
+
+# Safety
+REQ_SAF_01: The robot shall enforce operational boundary constraints by preventing any movement that would result in its position crossing a defined limit.
+
+REQ_SAF_02: The robot's arm movement system shall incorporate collision detection and automatically stop before physically contacting a detected single obstacle.
+
+REQ_SAF_03: The robot's arm collision avoidance system shall correctly identify and stop movement before contacting the nearest obstacle when multiple obstacles are present in the path.
+
+# Sensors
+REQ_SEN_01: The integrated Kalman filter shall process noisy position measurements and converge its output estimate to the true position approximately within acceptable tolerance limits.
+
+REQ_SEN_02: The robot's sensor system shall successfully detect and report the presence of objects located within the sensor's specified operational range.
+
+REQ_SEN_03: The robot's sensor system shall accurately filter out and not report the presence of objects located outside the sensor's specified operational range.
+
+# Walking
+REQ_WAL_01: The robot shall be able to successfully initiate and maintain a walking state from various starting 3D positions.
+
+REQ_WAL_02: The robot shall be able to execute a crouch maneuver, ensuring its chest successfully reaches the ground level, regardless of its starting position.
+
+REQ_WAL_03: The robot shall be able to walk forward a variable, specified distance and accurately stop at the calculated final 3D position.

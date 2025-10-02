@@ -61,6 +61,8 @@ jobs:
           # 1. Copy categories.json (Explicitly named for clarity)
           # Allure expects this file in the root directory specified by --alluredir.
           cp supports/categories.json allure-results/categories.json 2>/dev/null || echo "No categories.json file found"
+          cp supports/executor.json allure-results/categories.json   2>/dev/null || echo "No executor.json file found"
+          
 
           # 2. Copy environment properties based on OS, renaming to environment.properties
           # Allure expects this file in the root directory specified by --alluredir.

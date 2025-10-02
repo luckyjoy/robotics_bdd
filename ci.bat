@@ -8,7 +8,7 @@ git add .
 rem echo Git pushed a dummy file for CI Demo
 echo.
 echo git commit -m "Add a dummy file to trigger Jenkins Webhooks and Github Workflow Actions ..."
-git commit -m "Add a dummy file to trigger Jenkins/Github CI..."
+git commit -m "Add a dummy file to trigger CI..."
 
 REM Ensure branch is main
 git branch -M main

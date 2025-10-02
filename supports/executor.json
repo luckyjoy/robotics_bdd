@@ -1,9 +1,11 @@
 {
-  "name": "Robotics BDD Validation Runner",
+  "name": "Robotics BDD Framework Runner",
   "type": "CI_Pipeline",
-  "url": "https://github.com/luckyjoy/robotics_bdd/actions",
-  "buildName": "Framework v1.2.0 | Target v1.20.34 | Environment: PyBullet",
-  "reportUrl": "https://luckyjoy.github.io/robotics_bdd/",
+  "url": "${env.JENKINS_URL}",
+  "buildOrder": "${env.BUILD_ID}",
+  "buildName": "Robotics BDD #${env.BUILD_ID}",
+  "buildUrl": "${env.BUILD_URL}",
+  "reportUrl": "${env.BUILD_URL}artifact/${ALLURE_REPORT_DIR}/index.html",
   "data": {
     "Validation Engineer": "TBD",
     "Product Model": "BDD-Sim-PyBullet",

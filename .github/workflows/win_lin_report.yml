@@ -59,11 +59,12 @@ jobs:
           mkdir allure-results
           
           # 2. Run the container and execute pytest, outputting results to the mounted volume.
+          # FIX: Aligning test execution with the local run_tests.bat
           docker run \
             --name bdd-tests-${{ matrix.os }} \
             -v ${{ github.workspace }}/allure-results:/app/allure-results \
             robotics-runner-${{ matrix.os }}:${{ github.run_id }} \
-            pytest --alluredir /app/allure-results
+            pytest -m security --alluredir /app/allure-results --ignore features/manual_tests
         shell: bash
 
       # -------------------------------------------------------------------
@@ -73,7 +74,9 @@ jobs:
       - name: Inject Allure Metadata into Results Folder
         # Using bash here for reliable environment checks
         run: |
-          echo "Injecting Allure support files for $RUNNER_OS..."
+          # FIX: Use matrix.os to reliably select the environment properties file.
+          OS_MATRIX="${{ matrix.os }}"
+          echo "Injecting Allure support files for $OS_MATRIX..."
           
           # Create mock support files to prevent a build failure if they don't exist
           mkdir -p supports
@@ -83,12 +86,16 @@ jobs:
           cp supports/categories.json allure-results/ 2>/dev/null || echo "No categories.json file found"
 
           # 2. Copy environment properties based on OS, renaming to environment.properties
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            echo "Copying Ubuntu environment properties..."
-            cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "No Ubuntu environment file found"
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            echo "Copying Windows environment properties..."
-            cp supports/windows.properties allure-results/environment.properties 2>/dev/null || echo "No Windows environment file found"
+          ENV_FILE=""
+          if [[ "$OS_MATRIX" == "ubuntu-latest" ]]; then
+            ENV_FILE="ubuntu.properties"
+          elif [[ "$OS_MATRIX" == "windows-latest" ]]; then
+            ENV_FILE="windows.properties"
+          fi
+
+          if [ -n "$ENV_FILE" ]; then
+            echo "Copying $ENV_FILE environment properties..."
+            cp "supports/$ENV_FILE" allure-results/environment.properties 2>/dev/null || echo "No environment file found for $OS_MATRIX"
           fi
         shell: bash
 

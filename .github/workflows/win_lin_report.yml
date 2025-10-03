@@ -39,13 +39,9 @@ jobs:
       # -------------------------------------------------------------------
       # DOCKER BUILD AND RUN STEPS
       # -------------------------------------------------------------------
-      - name: List Files for Docker Build Context (Diagnostic)
-        run: ls -F
-        shell: sh
-
       - name: Build Docker Image
-        # This step uses the Dockerfile in your repository root (the Canvas file).
-        run: docker build -t robotics-runner-${{ matrix.os }}:${{ github.run_id }} .
+        # Explicitly setting the Dockerfile name to ensure the runner finds it.
+        run: docker build -t robotics-runner-${{ matrix.os }}:${{ github.run_id }} -f Dockerfile .
         shell: sh
 
       - name: Run tests inside Docker container and collect Allure data

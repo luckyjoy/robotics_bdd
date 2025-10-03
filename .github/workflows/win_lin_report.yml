@@ -101,17 +101,17 @@ jobs:
           mkdir -p allure-results
           cp supports/categories.json allure-results/ 2>/dev/null || true
           cat > allure-results/executor.json <<EOL
-          {
-            "name": "GitHub Actions",
-            "type": "github",
-            "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-            "buildOrder": ${{ github.run_number }},
-            "buildName": "Run ${{ github.run_number }}",
-            "buildUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-            "reportUrl": "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/latest/ubuntu-latest/",
-            "reportName": "Allure Report (Ubuntu)"
-          }
-          EOL
+{
+  "name": "GitHub Actions",
+  "type": "github",
+  "url": "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}",
+  "buildOrder": ${GITHUB_RUN_NUMBER},
+  "buildName": "Run ${GITHUB_RUN_NUMBER}",
+  "buildUrl": "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}",
+  "reportUrl": "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY}/latest/ubuntu-latest/",
+  "reportName": "Allure Report (Ubuntu)"
+}
+EOL
           cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "OS=Ubuntu" > allure-results/environment.properties
         shell: bash
 
@@ -126,11 +126,11 @@ jobs:
           $executor = @{
             name      = "GitHub Actions"
             type      = "github"
-            url       = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            buildOrder= ${{ github.run_number }}
-            buildName = "Run ${{ github.run_number }}"
-            buildUrl  = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            reportUrl = "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/latest/windows-latest/"
+            url       = "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            buildOrder= ${GITHUB_RUN_NUMBER}
+            buildName = "Run ${GITHUB_RUN_NUMBER}"
+            buildUrl  = "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            reportUrl = "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY}/latest/windows-latest/"
             reportName= "Allure Report (Windows)"
           } | ConvertTo-Json -Compress
           $executor | Set-Content 'allure-results\executor.json'
@@ -234,16 +234,47 @@ jobs:
         run: |
           SITE_DIR="site"
           echo "<html><head><title>Allure Reports - Robotics BDD</title><style>body { font-family: Inter, sans-serif; }</style></head><body><h1>Robotics BDD Test Reports</h1><hr><h2>Latest Reports</h2><ul>" > "$SITE_DIR/index.html"
+
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
               echo "<li><a href='latest/$OS/index.html'>Latest Report ($OS)</a> - Last run: ${TS}</li>" >> "$SITE_DIR/index.html"
             fi
           done
+
           echo "</ul><hr><h2>All Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
+
           HISTORICAL_BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*/[0-9]+$" | xargs -n 1 basename | sort -nr)
-          for BUILD in $HISTORICAL_BUILDS; do
-            for OS in ubuntu-latest windows-latest; do
-              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "<li><a href='${BUILD}/${OS}/index.html'>Build #${BUILD}
+          if [ -z "$HISTORICAL_BUILDS" ]; then
+            echo "<p>No historical builds found.</p>" >> "$SITE_DIR/index.html"
+          else
+            for BUILD in $HISTORICAL_BUILDS; do
+              for OS in ubuntu-latest windows-latest; do
+                if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
+                  TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                  echo "<li><a href='${BUILD}/${OS}/index.html'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+                fi
+              done
+            done
+          fi
+
+          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
+        shell: bash
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: site
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
+
+      - name: Add workflow badges to summary
+        run: |
+          REPO_NAME=${GITHUB_REPOSITORY##*/}
+          OWNER=${GITHUB_REPOSITORY_OWNER}
+          echo "### Robotics BDD Simulation CI/CD Report Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Ubuntu Latest Report](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Windows Latest Report](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Report History](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY

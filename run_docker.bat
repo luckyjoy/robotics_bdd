@@ -45,7 +45,7 @@ IF !ERRORLEVEL! EQU 0 (
 
 rem --- 2. FORCE BUILD if image not found ---
 echo Image not found locally. Starting Docker build process...
-docker build -t %IMAGE_NAME% .
+docker build --no-cache -t %IMAGE_NAME% .
 
 IF !ERRORLEVEL! NEQ 0 (
     echo.

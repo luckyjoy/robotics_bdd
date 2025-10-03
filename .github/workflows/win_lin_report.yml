@@ -40,8 +40,8 @@ jobs:
       # DOCKER BUILD AND RUN STEPS
       # -------------------------------------------------------------------
       - name: Build Docker Image
+        # This step uses the Dockerfile in your repository root (the Canvas file).
         run: docker build -t robotics-runner-${{ matrix.os }}:${{ github.run_id }} .
-        # Use sh shell for compatibility even on Windows runners (using git bash/sh)
         shell: sh
 
       - name: Run tests inside Docker container and collect Allure data
@@ -50,8 +50,7 @@ jobs:
           rm -rf allure-results
           mkdir allure-results
           
-          # 2. Run the container. The key command executes all tests and outputs results 
-          # to the mounted allure-results directory on the host machine.
+          # 2. Run the container and execute pytest, outputting results to the mounted volume.
           docker run \
             --name bdd-tests-${{ matrix.os }} \
             -v ${{ github.workspace }}/allure-results:/app/allure-results \
@@ -68,21 +67,19 @@ jobs:
         run: |
           echo "Injecting Allure support files for $RUNNER_OS..."
           
-          # 1. Create mock support files if they don't exist, to prevent errors.
+          # Create mock support files to prevent a build failure if they don't exist
           mkdir -p supports
           touch supports/categories.json supports/ubuntu.properties supports/windows.properties
 
-          # 2. Copy categories.json (Required for custom categorization)
+          # 1. Copy categories.json (Required for custom categorization)
           cp supports/categories.json allure-results/ 2>/dev/null || echo "No categories.json file found"
 
-          # 3. Copy environment properties based on OS, renaming to environment.properties
+          # 2. Copy environment properties based on OS, renaming to environment.properties
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             echo "Copying Ubuntu environment properties..."
-            # Note: You need to create supports/ubuntu.properties
             cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "No Ubuntu environment file found"
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             echo "Copying Windows environment properties..."
-            # Note: You need to create supports/windows.properties
             cp supports/windows.properties allure-results/environment.properties 2>/dev/null || echo "No Windows environment file found"
           fi
         shell: bash
@@ -153,7 +150,6 @@ jobs:
           mkdir -p "$SITE_DIR/latest"
           
           # 2. Copy historical reports from the cloned gh-pages branch into the new site directory
-          # This copies previous build folders (e.g., '10', '11')
           echo "Copying historical history and data from $HISTORY_DIR to $SITE_DIR..."
           find "$HISTORY_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*\/[0-9]+$" -exec cp -r {} "$SITE_DIR/" \; 2>/dev/null || echo "No numeric history folders to copy."
 

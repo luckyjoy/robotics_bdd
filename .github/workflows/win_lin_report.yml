@@ -194,7 +194,7 @@ jobs:
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
-      - name: Generate Allure Reports
+      - name: Generate Allure Reports with History
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
@@ -203,14 +203,16 @@ jobs:
           rm -rf "$SITE_DIR"
           mkdir -p "$SITE_DIR/latest"
 
+          # Copy all historical build folders
           find "$HISTORY_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*/[0-9]+$" -exec cp -r {} "$SITE_DIR/" \; || true
 
           for OS in ubuntu-latest windows-latest; do
             VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
             HISTORY_SOURCE="$SITE_DIR/latest/$OS/history"
 
+            # Copy previous history into allure-results for trend
+            mkdir -p "allure-results/$OS/history"
             if [ -d "$HISTORY_SOURCE" ]; then
-              mkdir -p "allure-results/$OS/history"
               cp -r "$HISTORY_SOURCE/"* "allure-results/$OS/history/" || true
             fi
 
@@ -218,11 +220,13 @@ jobs:
               --output "$VERSIONED_REPORT_DIR" \
               --clean || echo "Generated without history"
 
-            mkdir -p "$SITE_DIR/latest/$OS"
-            cp -r "$VERSIONED_REPORT_DIR/history" "$SITE_DIR/latest/$OS/" || true
+            # Update site directories
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
+            mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
+
+            # Save build timestamp
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
             cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
@@ -243,36 +247,8 @@ jobs:
           echo "</ul><hr><h2>All Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
 
           HISTORICAL_BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*/[0-9]+$" | xargs -n 1 basename | sort -nr)
-          if [ -z "$HISTORICAL_BUILDS" ]; then
-            echo "<p>No historical builds found.</p>" >> "$SITE_DIR/index.html"
-          else
-            for BUILD in $HISTORICAL_BUILDS; do
-              for OS in ubuntu-latest windows-latest; do
-                if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                  TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                  echo "<li><a href='${BUILD}/${OS}/index.html'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
-                fi
-              done
-            done
-          fi
-
-          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
-        shell: bash
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: site
-          publish_branch: gh-pages
-          force_orphan: true
-          commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
-
-      - name: Add workflow badges to summary
-        run: |
-          REPO_NAME=${GITHUB_REPOSITORY##*/}
-          OWNER=${GITHUB_REPOSITORY_OWNER}
-          echo "### Robotics BDD Simulation CI/CD Report Links" >> $GITHUB_STEP_SUMMARY
-          echo "- [Ubuntu Latest Report](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "- [Windows Latest Report](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "- [Report History](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY
+          for BUILD in $HISTORICAL_BUILDS; do
+            for OS in ubuntu-latest windows-latest; do
+              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
+                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                echo "

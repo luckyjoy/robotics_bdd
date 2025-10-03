@@ -100,7 +100,7 @@ jobs:
         run: |
           mkdir -p allure-results
           cp supports/categories.json allure-results/ 2>/dev/null || true
-          cat > allure-results/executor.json <<EOL
+          cat > allure-results/executor.json <<'EOL'
 {
   "name": "GitHub Actions",
   "type": "github",

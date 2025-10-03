@@ -39,7 +39,7 @@ echo.
 echo Checking for existing Docker image: %IMAGE_NAME%
 docker images -q %IMAGE_NAME% | findstr /R "[0-9a-f]" >nul
 IF !ERRORLEVEL! EQU 0 (
-    echo Docker Image found from last build with `docker build -t %IMAGE_NAME%` 
+    echo Docker Image found from last build with `docker build --no-cache -t %IMAGE_NAME% .` 
     GOTO :test_execution
 )
 

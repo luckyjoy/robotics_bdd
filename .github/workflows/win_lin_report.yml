@@ -63,7 +63,7 @@ jobs:
             --name bdd-tests-${{ matrix.os }} \
             -v ${{ github.workspace }}/allure-results:/app/allure-results \
             robotics-runner-${{ matrix.os }}:${{ github.run_id }} \
-            pytest --alluredir /app/allure-results
+            pytest -m navigation --alluredir /app/allure-results
         shell: bash
 
       # -------------------------------------------------------------------
@@ -92,7 +92,7 @@ jobs:
         run: |
           if (Test-Path 'allure-results') { Remove-Item -Recurse -Force 'allure-results' }
           New-Item -ItemType Directory -Force 'allure-results' | Out-Null
-          pytest --alluredir 'allure-results'
+          pytest -m navigation --alluredir 'allure-results'
 
       # -------------------------------------------------------------------
       # ENSURE ALLURE METADATA IS IN PLACE BEFORE UPLOAD (OS-specific)

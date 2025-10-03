@@ -39,10 +39,18 @@ jobs:
       # -------------------------------------------------------------------
       # DOCKER BUILD AND RUN STEPS
       # -------------------------------------------------------------------
+      - name: Diagnostic: List Files for Docker Build Context
+        # Using bash to list files in the current directory (the root of the checked-out repo).
+        # This will show you exactly what Docker should be able to see.
+        run: ls -F
+        shell: bash
+
       - name: Build Docker Image
-        # Explicitly setting the Dockerfile name to ensure the runner finds it.
-        run: docker build -t robotics-runner-${{ matrix.os }}:${{ github.run_id }} -f Dockerfile .
-        shell: sh
+        # Reverting to the simpler command. The previous explicit -f flag should not have been needed
+        # if the file existed. If this fails again, you MUST confirm the 'Dockerfile' exists 
+        # in the repository root (case-sensitive).
+        run: docker build -t robotics-runner-${{ matrix.os }}:${{ github.run_id }} .
+        shell: bash
 
       - name: Run tests inside Docker container and collect Allure data
         run: |
@@ -56,7 +64,7 @@ jobs:
             -v ${{ github.workspace }}/allure-results:/app/allure-results \
             robotics-runner-${{ matrix.os }}:${{ github.run_id }} \
             pytest --alluredir /app/allure-results
-        shell: sh
+        shell: bash
 
       # -------------------------------------------------------------------
       # ENSURE ALLURE METADATA IS IN PLACE BEFORE UPLOAD
@@ -137,6 +145,7 @@ jobs:
           mkdir -p allure-commandline
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
+        shell: bash
 
       - name: Generate Allure Reports (With History Fix)
         run: |
@@ -181,6 +190,7 @@ jobs:
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
             cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
+        shell: bash
 
       - name: Rebuild index.html (Navigation Page)
         run: |
@@ -212,6 +222,7 @@ jobs:
           fi
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
+        shell: bash
           
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
@@ -231,3 +242,4 @@ jobs:
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY
+        shell: bash

@@ -8,7 +8,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 7 * * *'
+    - cron: '0 7 * * *' # 07:00 UTC daily
 
 permissions:
   contents: write
@@ -28,28 +28,24 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python: ['3.10']
 
-    permissions:
-      contents: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # ---------------- LINUX PATH ----------------
+      # ---------------- LINUX ----------------
       - name: Build Docker Image (Linux only)
         if: matrix.os == 'ubuntu-latest'
         run: docker build -t robotics-runner-${{ matrix.os }}:${{ github.run_id }} .
         shell: bash
 
-      - name: Run tests inside Docker container and collect Allure data (Linux)
+      - name: Run tests inside Docker container (Linux)
         if: matrix.os == 'ubuntu-latest'
         continue-on-error: true
         run: |
           rm -rf allure-results
           mkdir allure-results
-
           docker run \
             --name bdd-tests-${{ matrix.os }} \
             -v ${{ github.workspace }}/allure-results:/app/allure-results \
@@ -63,7 +59,7 @@ jobs:
           docker rm -f bdd-tests-${{ matrix.os }} || true
           docker rmi robotics-runner-${{ matrix.os }}:${{ github.run_id }} || true
 
-      # ---------------- WINDOWS PATH ----------------
+      # ---------------- WINDOWS ----------------
       - name: Set up Python (Windows)
         if: matrix.os == 'windows-latest'
         uses: actions/setup-python@v5
@@ -89,7 +85,7 @@ jobs:
             pip install pytest allure-pytest
           }
 
-      - name: Run tests & collect Allure (Windows native)
+      - name: Run tests & collect Allure (Windows)
         if: matrix.os == 'windows-latest'
         continue-on-error: true
         shell: pwsh
@@ -99,24 +95,20 @@ jobs:
           pytest -m navigation --alluredir 'allure-results'
 
       # ---------------- ALLURE METADATA ----------------
-      - name: Inject Allure Metadata into Results Folder (Linux)
+      - name: Inject Allure Metadata (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           mkdir -p allure-results
-
-          # categories.json
           cp supports/categories.json allure-results/ 2>/dev/null || true
-          # executor.json fallback
           if [ ! -f "supports/executor.json" ]; then
             echo '{"name":"GitHub Actions","type":"github","url":"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}","buildOrder":${{ github.run_number }},"buildName":"Run ${{ github.run_number }}","buildUrl":"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' > allure-results/executor.json
           else
             cp supports/executor.json allure-results/
           fi
-          # environment.properties
           cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "OS=Ubuntu" > allure-results/environment.properties
         shell: bash
 
-      - name: Inject Allure Metadata into Results Folder (Windows)
+      - name: Inject Allure Metadata (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
@@ -155,7 +147,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout repository (Primary branch)
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -196,75 +188,71 @@ jobs:
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
-      - name: Generate Allure Reports (With History Fix)
+      - name: Generate Allure Reports (With History Injection)
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
           HISTORY_DIR="_history"
 
-          if [ -d "$SITE_DIR" ]; then rm -rf "$SITE_DIR"; fi
+          rm -rf "$SITE_DIR"
           mkdir -p "$SITE_DIR/latest"
 
-          # copy old build dirs
-          find "$HISTORY_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*/[0-9]+$" -exec cp -r {} "$SITE_DIR/" \; 2>/dev/null || echo "No numeric history folders to copy."
+          # copy previous builds into site
+          find "$HISTORY_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*/[0-9]+$" -exec cp -r {} "$SITE_DIR/" \; || true
 
           for OS in ubuntu-latest windows-latest; do
             VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
             HISTORY_SOURCE="$SITE_DIR/latest/$OS/history"
 
-            mkdir -p "$(dirname "$HISTORY_SOURCE")"
-            if [ -d "$SITE_DIR/latest/$OS/history" ]; then
-              echo "Using previous history for $OS"
+            # inject previous history into new allure-results
+            if [ -d "$HISTORY_SOURCE" ]; then
+              echo "Injecting history for $OS..."
+              mkdir -p "allure-results/$OS/history"
+              cp -r "$HISTORY_SOURCE/"* "allure-results/$OS/history/" || true
             fi
 
-            # generate new report while preserving history
+            # generate report
             allure generate "allure-results/$OS" \
               --output "$VERSIONED_REPORT_DIR" \
-              --clean \
-              --history-dir "$HISTORY_SOURCE" || echo "Generated without history"
+              --clean || echo "Generated without history"
 
+            # save history for next run
+            mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR/history" "$SITE_DIR/latest/$OS/" || true
 
+            # save build-specific
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
 
-            mkdir -p "$SITE_DIR/latest/$OS"
+            # update latest
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
+            # timestamp
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
             cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
         shell: bash
 
-      - name: Rebuild index.html (Navigation Page)
+      - name: Rebuild index.html
         run: |
           SITE_DIR="site"
-          echo "<html><head><title>Allure Reports History - Robotics BDD</title><style>body { font-family: Inter, sans-serif; }</style></head><body><h1>Robotics BDD Test Reports</h1><hr><h2>Latest Reports</h2><ul>" > "$SITE_DIR/index.html"
-
+          echo "<html><head><title>Allure Reports - Robotics BDD</title><style>body { font-family: Inter, sans-serif; }</style></head><body><h1>Robotics BDD Test Reports</h1><hr><h2>Latest Reports</h2><ul>" > "$SITE_DIR/index.html"
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
               echo "<li><a href='latest/$OS/index.html'>Latest Report ($OS)</a> - Last run: ${TS}</li>" >> "$SITE_DIR/index.html"
             fi
           done
-
           echo "</ul><hr><h2>All Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
-
           HISTORICAL_BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*/[0-9]+$" | xargs -n 1 basename | sort -nr)
-
-          if [ -z "$HISTORICAL_BUILDS" ]; then
-              echo "<p>No historical builds found.</p>" >> "$SITE_DIR/index.html"
-          else
-              for BUILD in $HISTORICAL_BUILDS; do
-                for OS in ubuntu-latest windows-latest; do
-                  if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                    TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                    echo "<li><a href='${BUILD}/${OS}/index.html'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
-                  fi
-                done
-              done
-          fi
-
+          for BUILD in $HISTORICAL_BUILDS; do
+            for OS in ubuntu-latest windows-latest; do
+              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
+                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                echo "<li><a href='${BUILD}/${OS}/index.html'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              fi
+            done
+          done
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
         shell: bash
 
@@ -281,7 +269,6 @@ jobs:
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
           OWNER=${GITHUB_REPOSITORY_OWNER}
-
           echo "### Robotics BDD Simulation CI/CD Report Links" >> $GITHUB_STEP_SUMMARY
           echo "- [Ubuntu Latest Report](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
           echo "- [Windows Latest Report](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY

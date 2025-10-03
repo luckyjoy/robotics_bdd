@@ -76,14 +76,14 @@ docker run --rm ^
   -v "%ARTIFACT_PATH%\allure-results":/app/allure-results ^
   %IMAGE_NAME% ^
   pytest -m navigation --alluredir=allure-results --ignore=features/manual_tests
-sleep 1
+timeout /t 1 /nobreak >nul
 
 rem Capture the exit code for reporting status only.
 SET PYTEST_EXIT_CODE=!ERRORLEVEL!
 
 rem --- Report Status ---
 echo.
-echo Pytest finished with Exit Code: !PYTEST_EXIT_CODE! (0=Success, 1=Fail, 5=No Tests).
+echo Docker Pytest finished with Exit Code: !PYTEST_EXIT_CODE! (0=Success, 1=Fail, 5=No Tests).
 echo Report generation will proceed regardless of the outcome.
 echo ---------------------------------------------------------
 

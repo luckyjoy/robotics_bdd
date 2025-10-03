@@ -1,7 +1,7 @@
 @echo off
 
 echo %RANDOM% > supports/dummy.txt
-echo Add dummy file dummy.txt
+echo Add dummy file dummy.txt and make a git push to main
 
 git add .
 

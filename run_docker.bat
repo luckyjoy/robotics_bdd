@@ -6,13 +6,25 @@ SET ARTIFACT_PATH=C:\my_work\robotics_bdd
 rem === Robotics BDD Docker Test Runner and Allure Report Generator ===
 
 rem --- Display Header ---
-echo.
 echo =========================================================
 echo Running Robotics BDD Docker Simulation Tests...
-echo Image: %IMAGE_NAME%
+echo Docker Image: %IMAGE_NAME%
 echo =========================================================
 echo.
 
+rem --- Diagnostic: Check Docker Status and Version ---
+echo Checking Docker service and version...
+docker --version
+IF !ERRORLEVEL! NEQ 0 (
+    echo.
+    echo =========================================================
+    echo ERROR: DOCKER COMMAND FAILED!
+    echo Please ensure Docker Desktop is installed and running.
+    echo =========================================================
+    GOTO :script_end
+)
+echo Docker is ready.
+echo.
 rem --- Cleanup Previous Artifacts ---
 echo Cleaning up previous test artifacts for a fresh run...
 rmdir /s /q "%ARTIFACT_PATH%\allure-results" 2>nul
@@ -24,10 +36,10 @@ echo Cleanup complete.
 
 rem --- 1. Check for Existing Docker Image (Optimization) ---
 echo.
-echo Checking for existing image: %IMAGE_NAME%
+echo Checking for existing Docker image: %IMAGE_NAME%
 docker images -q %IMAGE_NAME% | findstr /R "[0-9a-f]" >nul
-IF %ERRORLEVEL% EQU 0 (
-    echo Image found. Skipping build.
+IF !ERRORLEVEL! EQU 0 (
+    echo Docker Image found from last build with `docker build -t %IMAGE_NAME%` 
     GOTO :test_execution
 )
 
@@ -35,10 +47,10 @@ rem --- 2. FORCE BUILD if image not found ---
 echo Image not found locally. Starting Docker build process...
 docker build -t %IMAGE_NAME% .
 
-IF %ERRORLEVEL% NEQ 0 (
+IF !ERRORLEVEL! NEQ 0 (
     echo.
     echo =========================================================
-    echo ERROR: DOCKER IMAGE BUILD FAILED! (Exit Code: %ERRORLEVEL%)
+    echo ERROR: DOCKER IMAGE BUILD FAILED! (Exit Code: !ERRORLEVEL!)
     echo Please check the Dockerfile and ensure Docker Desktop is running.
     echo =========================================================
     GOTO :script_end
@@ -58,12 +70,13 @@ copy supports\executor.json "%ARTIFACT_PATH%\allure-results\" >nul
 
 echo.
 rem Run tests with required arguments.
-echo docker run --rm -v "%ARTIFACT_PATH%\allure-results":/app/allure-results %IMAGE_NAME%  pytest -m navigation --alluredir=allure-results --ignore=features/manual_tests
+echo docker run --rm -v "%ARTIFACT_PATH%\allure-results":/app/allure-results %IMAGE_NAME% pytest -m navigation --alluredir=allure-results --ignore=features/manual_tests
   
 docker run --rm ^
   -v "%ARTIFACT_PATH%\allure-results":/app/allure-results ^
   %IMAGE_NAME% ^
   pytest -m navigation --alluredir=allure-results --ignore=features/manual_tests
+sleep 1
 
 rem Capture the exit code for reporting status only.
 SET PYTEST_EXIT_CODE=!ERRORLEVEL!
@@ -120,4 +133,4 @@ rem The script ends here, but the Docker process continues to run in the separat
 :script_end
 ENDLOCAL
 echo.
-echo Script finished.
+echo Test Suite with Docker Finished.

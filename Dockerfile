@@ -58,4 +58,4 @@ RUN pip install --no-cache-dir \
 COPY . /app
 
 # Set the default command to run pytest, which can still be overridden.
-CMD ["pytest", "--ignore=features/manual_tests", "--alluredir=allure-results", "-m", "security"]
+CMD ["pytest", "--ignore=features/manual_tests", "--alluredir=allure-results", "-m", "navigation"]

@@ -35,7 +35,9 @@ def pytest_configure(config):
         "safety: Safety-related tests",
         "walking: Walking-related tests",
         "sensors: Sensor-related tests",
+        "security: Security and Access Control tests",
     ]
+    
     for mark in markers:
         config.addinivalue_line("markers", mark)
 

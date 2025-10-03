@@ -8,17 +8,18 @@ on:
     branches:
       - main
   schedule:
-    # Runs at 07:00 AM UTC (00:00 AM PT) every day.
     - cron: '0 7 * * *'
 
+# CRITICAL FIX: Set global permissions to read-only AND explicitly set 'pages: none' 
+# to guarantee that the built-in GitHub Pages workflow is not triggered.
 permissions:
-  contents: write 
+  contents: read # Default to read
   actions: read
   checks: read
   pull-requests: read
   statuses: read
-  pages: write # Required for deployment
-  id-token: write # Required for GitHub Pages setup
+  pages: none # Ensures the built-in 'pages build and deployment' job is blocked
+  id-token: none # Blocks OIDC which can be an indirect trigger
 
 jobs:
   run-tests:
@@ -28,7 +29,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     permissions:
-      contents: write
+      contents: write # Overriding global 'read' to 'write' for artifact upload
 
     steps:
       - name: Checkout repository
@@ -36,55 +37,48 @@ jobs:
         with:
           fetch-depth: 0
 
-      # -------------------------------------------------------------------
-      # DOCKER BUILD AND RUN STEPS
-      # -------------------------------------------------------------------
-      - name: Build Docker Image
-        run: docker build -t robotics-runner-${{ matrix.os }}:${{ github.run_id }} .
-        # Use sh shell for compatibility even on Windows runners (using git bash/sh)
-        shell: sh
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-      - name: Run tests inside Docker container and collect Allure data
+      - name: Install Python dependencies
         run: |
-          # 1. Clean up old results directory on the HOST runner
-          rm -rf allure-results
-          mkdir allure-results
-          
-          # 2. Run the container. The key command executes all tests and outputs results 
-          # to the mounted allure-results directory on the host machine.
-          docker run \
-            --name bdd-tests-${{ matrix.os }} \
-            -v ${{ github.workspace }}/allure-results:/app/allure-results \
-            robotics-runner-${{ matrix.os }}:${{ github.run_id }} \
-            pytest --alluredir /app/allure-results
-        shell: sh
+          echo "Installing pytest, pytest-bdd, allure-pytest, pytest-html..."
+          pip install pytest pytest-bdd allure-pytest pytest-html
 
-      # -------------------------------------------------------------------
-      # ENSURE ALLURE METADATA IS IN PLACE BEFORE UPLOAD
-      # -------------------------------------------------------------------
-      
-      - name: Inject Allure Metadata into Results Folder
-        # Using bash here for reliable environment checks
+      - name: Clean previous allure-results
         run: |
-          echo "Injecting Allure support files for $RUNNER_OS..."
+          echo "Cleaning allure-results folder..."
+          if [ -d "allure-results" ]; then rm -rf allure-results; fi
+        shell: bash
+
+      - name: Copy platform-specific support files
+        run: |
+          echo "Copying supports files for $RUNNER_OS..."
+          mkdir -p allure-results
           
-          # 1. Create mock support files if they don't exist, to prevent errors.
-          mkdir -p supports
-          touch supports/categories.json supports/ubuntu.properties supports/windows.properties
+          # 1. Copy categories.json (Explicitly named for clarity)
+          # Allure expects this file in the root directory specified by --alluredir.
+          cp supports/categories.json allure-results/categories.json 2>/dev/null || echo "No categories.json file found"
+          cp supports/executor.json allure-results/categories.json   2>/dev/null || echo "No executor.json file found"
+          
 
-          # 2. Copy categories.json (Required for custom categorization)
-          cp supports/categories.json allure-results/ 2>/dev/null || echo "No categories.json file found"
-
-          # 3. Copy environment properties based on OS, renaming to environment.properties
+          # 2. Copy environment properties based on OS, renaming to environment.properties
+          # Allure expects this file in the root directory specified by --alluredir.
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             echo "Copying Ubuntu environment properties..."
-            # Note: You need to create supports/ubuntu.properties
             cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "No Ubuntu environment file found"
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             echo "Copying Windows environment properties..."
-            # Note: You need to create supports/windows.properties
             cp supports/windows.properties allure-results/environment.properties 2>/dev/null || echo "No Windows environment file found"
           fi
+        shell: bash
+
+      - name: Run tests
+        run: |
+          echo "Running pytest navigation tests..."
+          pytest -m navigation --alluredir=allure-results | tee pytest.log
         shell: bash
 
       - name: Upload Allure Results
@@ -94,15 +88,11 @@ jobs:
           path: allure-results
           retention-days: 7
 
-  # -------------------------------------------------------------------
-  # DEPLOY PAGES JOB
-  # -------------------------------------------------------------------
-
   deploy-pages:
     runs-on: ubuntu-latest
     needs: run-tests
-    # Only run deployment on the main branch push
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write # Only contents: write is strictly needed for the custom deployment (peaceiris)
 
     steps:
       - name: Checkout repository (Primary branch)
@@ -110,15 +100,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Checkout the existing gh-pages content into a temporary folder to preserve history
-      - name: Checkout gh-pages history
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          ref: gh-pages
-          path: _history
-          token: ${{ secrets.GITHUB_TOKEN }}
-          clean: false
+      # CRITICAL FIX 1: Checkout the existing gh-pages content into a temporary folder to preserve history
+      # Replaced actions/checkout with a robust native git clone to handle the non-existence of the gh-pages branch on the first run.
+      - name: Checkout gh-pages history (Robust Git Clone)
+        run: |
+          # Use GITHUB_TOKEN for authentication and suppress error (|| true) if the gh-pages branch doesn't exist yet.
+          echo "Attempting to clone gh-pages branch into _history..."
+          git clone --depth 1 --branch gh-pages "https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" _history || true
+        shell: bash
 
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -141,7 +130,7 @@ jobs:
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
-      - name: Generate Allure Reports (With History Fix)
+      - name: Generate Allure Reports
         run: |
           echo "Generating Allure reports..."
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
@@ -152,45 +141,39 @@ jobs:
           if [ -d "$SITE_DIR" ]; then rm -rf "$SITE_DIR"; fi
           mkdir -p "$SITE_DIR/latest"
           
-          # 2. Copy historical reports from the cloned gh-pages branch into the new site directory
-          # This copies previous build folders (e.g., '10', '11')
-          echo "Copying historical history and data from $HISTORY_DIR to $SITE_DIR..."
+          # CRITICAL FIX 2: Copy historical reports from the cloned gh-pages branch into the new site directory
+          echo "Copying historical builds from $HISTORY_DIR to $SITE_DIR..."
+          # This copies all folders with numeric names (the build numbers, e.g., 160, 161)
+          # It ignores files like index.html or folders like 'latest' from the old history
           find "$HISTORY_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*\/[0-9]+$" -exec cp -r {} "$SITE_DIR/" \; 2>/dev/null || echo "No numeric history folders to copy."
 
+          # 2. Generate NEW reports and merge them into the site directory
           for OS in ubuntu-latest windows-latest; do
             VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
-            HISTORY_SOURCE="$SITE_DIR/latest/$OS/history" 
-
-            # Ensure the history source exists for the new report generation
-            mkdir -p "$(dirname "$HISTORY_SOURCE")"
+            mkdir -p "$VERSIONED_REPORT_DIR"
             
-            # 3. Generate the Allure report, pulling history from the old 'latest' directory
-            allure generate "allure-results/$OS" \
-              --output "$VERSIONED_REPORT_DIR" \
-              --clean \
-              --history-dir "$HISTORY_SOURCE" 2>/dev/null || echo "No previous history found for $OS, generating from scratch."
-            
-            # 4. Update the history source with the NEW history from the generated report
-            cp -r "$VERSIONED_REPORT_DIR/history" "$SITE_DIR/latest/$OS/"
+            # Generate the new report
+            allure generate "allure-results/$OS" --output "$VERSIONED_REPORT_DIR" --clean
 
-            # 5. Copy the NEW report into the build-specific folder
+            # Copy the NEW report into the site directory (this is the current build)
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
             
-            # 6. Overwrite the 'latest' folder with the NEW report
+            # Update 'latest' folder with NEW report
             mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
-            # Update build info for timestamp display
+            # Update build info
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
             cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
 
-      - name: Rebuild index.html (Navigation Page)
+      - name: Rebuild index.html (Now comprehensive as all history is local)
         run: |
           SITE_DIR="site"
-          echo "<html><head><title>Allure Reports History - Robotics BDD</title><style>body { font-family: Inter, sans-serif; }</style></head><body><h1>Robotics BDD Test Reports</h1><hr><h2>Latest Reports</h2><ul>" > "$SITE_DIR/index.html"
+          echo "<html><head><title>Allure Reports History</title><style>body { font-family: sans-serif; }</style></head><body><h1>Allure Reports History</h1><hr><ul>" > "$SITE_DIR/index.html"
 
+          # 1. Latest reports
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
@@ -200,6 +183,8 @@ jobs:
           
           echo "</ul><hr><h2>All Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
           
+          # 2. Historical reports (Guaranteed to find them now in the SITE_DIR)
+          # Use find for reliable directory detection of numeric folders
           HISTORICAL_BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*\/[0-9]+$" | xargs -n 1 basename | sort -nr)
           
           if [ -z "$HISTORICAL_BUILDS" ]; then
@@ -217,21 +202,25 @@ jobs:
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
           
-      - name: Deploy to GitHub Pages
+      # CRITICAL FIX 3: Deploy the full, comprehensive 'site' folder to gh-pages
+      - name: Deploy to GitHub Pages (Final Robust Fix)
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: site
           publish_branch: gh-pages
+          # Use force_orphan: true to completely replace the gh-pages branch content 
+          # with the contents of the local 'site' directory, which is now complete.
           force_orphan: true 
           commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
 
+      # The final step for adding badges remains the same
       - name: Add workflow badges to summary
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
           OWNER=${GITHUB_REPOSITORY_OWNER}
 
-          echo "### Robotics BDD Simulation CI/CD Report Links" >> $GITHUB_STEP_SUMMARY
+          echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY

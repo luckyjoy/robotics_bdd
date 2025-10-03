@@ -1,4 +1,5 @@
 pytest
+pytest-timeout
 pytest_bdd
 pytest_html
 allure-pytest

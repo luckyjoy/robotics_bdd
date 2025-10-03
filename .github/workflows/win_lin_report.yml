@@ -100,18 +100,16 @@ jobs:
         run: |
           mkdir -p allure-results
           cp supports/categories.json allure-results/ 2>/dev/null || true
-          cat > allure-results/executor.json <<'EOL'
-{
-  "name": "GitHub Actions",
-  "type": "github",
-  "url": "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}",
-  "buildOrder": ${GITHUB_RUN_NUMBER},
-  "buildName": "Run ${GITHUB_RUN_NUMBER}",
-  "buildUrl": "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}",
-  "reportUrl": "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY}/latest/ubuntu-latest/",
-  "reportName": "Allure Report (Ubuntu)"
-}
-EOL
+          echo '{
+            "name": "GitHub Actions",
+            "type": "github",
+            "url": "https://github.com/'"${GITHUB_REPOSITORY}"'/actions/runs/'"${GITHUB_RUN_ID}"'",
+            "buildOrder": '"${GITHUB_RUN_NUMBER}"',
+            "buildName": "Run '"${GITHUB_RUN_NUMBER}"'",
+            "buildUrl": "https://github.com/'"${GITHUB_REPOSITORY}"'/actions/runs/'"${GITHUB_RUN_ID}"'",
+            "reportUrl": "https://'${GITHUB_REPOSITORY_OWNER}'.github.io/'"${GITHUB_REPOSITORY}"'/latest/ubuntu-latest/",
+            "reportName": "Allure Report (Ubuntu)"
+          }' > allure-results/executor.json
           cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "OS=Ubuntu" > allure-results/environment.properties
         shell: bash
 
@@ -196,7 +194,7 @@ EOL
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
-      - name: Generate Allure Reports (With History Injection)
+      - name: Generate Allure Reports
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"

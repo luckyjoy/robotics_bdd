@@ -100,16 +100,18 @@ jobs:
         run: |
           mkdir -p allure-results
           cp supports/categories.json allure-results/ 2>/dev/null || true
-          echo '{
-            "name": "GitHub Actions",
-            "type": "github",
-            "url": "https://github.com/'"${GITHUB_REPOSITORY}"'/actions/runs/'"${GITHUB_RUN_ID}"'",
-            "buildOrder": '"${GITHUB_RUN_NUMBER}"',
-            "buildName": "Run '"${GITHUB_RUN_NUMBER}"'",
-            "buildUrl": "https://github.com/'"${GITHUB_REPOSITORY}"'/actions/runs/'"${GITHUB_RUN_ID}"'",
-            "reportUrl": "https://'${GITHUB_REPOSITORY_OWNER}'.github.io/'"${GITHUB_REPOSITORY}"'/latest/ubuntu-latest/",
-            "reportName": "Allure Report (Ubuntu)"
-          }' > allure-results/executor.json
+          cat > allure-results/executor.json <<EOF
+{
+  "name": "GitHub Actions",
+  "type": "github",
+  "url": "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}",
+  "buildOrder": ${GITHUB_RUN_NUMBER},
+  "buildName": "Run ${GITHUB_RUN_NUMBER}",
+  "buildUrl": "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}",
+  "reportUrl": "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY}/latest/ubuntu-latest/",
+  "reportName": "Allure Report (Ubuntu)"
+}
+EOF
           cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "OS=Ubuntu" > allure-results/environment.properties
         shell: bash
 
@@ -167,30 +169,22 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           clean: false
 
-      - name: Download Linux Allure Results
+      - name: Download Allure Results
         uses: actions/download-artifact@v4
         with:
           name: allure-results-ubuntu-latest
           path: allure-results/ubuntu-latest
 
-      - name: Download Windows Allure Results
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: allure-results-windows-latest
           path: allure-results/windows-latest
 
-      - name: Cache Allure CLI
-        uses: actions/cache@v3
-        with:
-          path: allure-commandline
-          key: allure-cli-${{ runner.os }}-2.25.0
-
       - name: Setup Allure CLI
-        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           ALLURE_VERSION=2.25.0
-          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
           mkdir -p allure-commandline
+          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
@@ -203,14 +197,13 @@ jobs:
           rm -rf "$SITE_DIR"
           mkdir -p "$SITE_DIR/latest"
 
-          # Copy all historical build folders
+          # Copy historical builds
           find "$HISTORY_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*/[0-9]+$" -exec cp -r {} "$SITE_DIR/" \; || true
 
           for OS in ubuntu-latest windows-latest; do
             VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
             HISTORY_SOURCE="$SITE_DIR/latest/$OS/history"
 
-            # Copy previous history into allure-results for trend
             mkdir -p "allure-results/$OS/history"
             if [ -d "$HISTORY_SOURCE" ]; then
               cp -r "$HISTORY_SOURCE/"* "allure-results/$OS/history/" || true
@@ -220,13 +213,11 @@ jobs:
               --output "$VERSIONED_REPORT_DIR" \
               --clean || echo "Generated without history"
 
-            # Update site directories
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
             mkdir -p "$SITE_DIR/latest/$OS"
             cp -r "$VERSIONED_REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
 
-            # Save build timestamp
             date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
             cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
           done
@@ -245,10 +236,32 @@ jobs:
           done
 
           echo "</ul><hr><h2>All Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
-
           HISTORICAL_BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*/[0-9]+$" | xargs -n 1 basename | sort -nr)
           for BUILD in $HISTORICAL_BUILDS; do
             for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
                 TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "
+                echo "<li><a href='${BUILD}/${OS}/index.html'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              fi
+            done
+          done
+          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
+        shell: bash
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: site
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
+
+      - name: Add workflow badges to summary
+        run: |
+          REPO_NAME=${GITHUB_REPOSITORY##*/}
+          OWNER=${GITHUB_REPOSITORY_OWNER}
+          echo "### Robotics BDD Simulation CI/CD Report Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Ubuntu Latest Report](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Windows Latest Report](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Report History](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY

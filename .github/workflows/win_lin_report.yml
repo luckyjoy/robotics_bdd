@@ -38,7 +38,6 @@ jobs:
 
       # DOCKER BUILD AND RUN STEPS
       - name: Diagnostic: List Files for Docker Build Context
-        # Lists files to confirm the Dockerfile is visible in the root context.
         run: ls -F
         shell: bash
 

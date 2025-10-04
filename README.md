@@ -53,7 +53,7 @@ pip install -r requirements.txt
 Ensure consistent results by running the full suite inside Docker.
 
 ### 🧱 Docker Image  
-Image: **`robotics-tdd-local:latest`** — based on `python:3.10-slim`, includes:  
+Image: **`robotics-bdd-local:latest`** — based on `python:3.10-slim`, includes:  
 - Java JRE 21 + Allure CLI for reporting  
 - Preinstalled dependencies from `requirements.txt`  
 - `/app` as working directory

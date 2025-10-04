@@ -41,4 +41,5 @@ Thumbs.db
 .DS_Store
 *.tmp
 *.swp
-*.bat
+g.bat
+build.bat

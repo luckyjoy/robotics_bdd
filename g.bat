@@ -13,5 +13,8 @@ git branch -M main
 echo git remote add origin https://github.com/luckyjoy/robotics_bdd.git 
 git remote add origin https://github.com/luckyjoy/robotics_bdd.git 
 
+echo git push origin main
+git push origin main
+
 echo Done.
 

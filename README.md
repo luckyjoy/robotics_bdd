@@ -1,108 +1,88 @@
-🤖 Robotics Behavior-Driven Development (BDD) Framework
-A robust, BDD-driven framework for validating the functionality, path planning, and critical safety protocols of a simulated mobile manipulator robots.
+# 🤖 Robotics Behavior-Driven Development (BDD) Framework
 
-Author: Bang Thien Nguyen | Contact: ontario1998@gmail.com
+A robust, BDD-driven framework for validating the functionality, path planning, and critical safety protocols of simulated mobile manipulator robots.
 
-💡 Project Overview
-This framework implements Behavior-Driven Development (BDD) using pytest-bdd to create a living documentation and validation layer for the robot's control logic. All requirements are documented as human-readable Gherkin scenarios (Given-When-Then), ensuring clear collaboration between technical and non-technical stakeholders.
+---
 
-Core Component
+## 👤 Author & Contact  
+**Author:** Bang Thien Nguyen  
+**Contact:** ontario1998@gmail.com  
 
-Technology
+---
 
-Role
+## 💡 Project Overview  
+This framework implements **Behavior-Driven Development (BDD)** using `pytest-bdd` to create **living documentation** and validation for robot control logic.  
+All requirements are defined as **human-readable Gherkin scenarios (Given–When–Then)**, ensuring clear collaboration between developers, QA, and stakeholders.
 
-Test Syntax
+| **Component** | **Technology** | **Role** |
+|----------------|----------------|-----------|
+| Test Syntax | **Gherkin (.feature)** | Defines human-readable scenario-based test cases. |
+| Test Runner | **pytest** | Industry-standard Python test execution framework. |
+| BDD Integration | **pytest-bdd** | Maps Gherkin steps to Python step definitions. |
+| Reporting | **Allure / pytest-html** | Generates professional, interactive test reports. |
 
-Gherkin (.feature files)
+---
 
-Defines test cases using unambiguous scenario descriptions.
+## 🚀 Getting Started  
 
-Test Runner
+### 🔧 Prerequisites  
+- 🐋 Docker Desktop *(required for containerized execution)*  
+- 💻 Windows Command Prompt *(to run `run_docker.bat`)*  
+- 🐍 (Optional) Python 3.10+ *(for local testing)*  
+- 📈 (Optional) Allure command-line tool *(for local report viewing)*  
 
-pytest
+---
 
-Industry-standard Python testing tool.
+### ⚙️ Installation  
 
-BDD Integration
-
-pytest-bdd
-
-Maps Gherkin steps to executable Python code (step definitions).
-
-Reporting
-
-Allure & pytest-html
-
-Generates professional, interactive HTML reports for test traceability.
-
-🚀 Getting Started
-Prerequisites
-Docker Desktop (required for the containerized test runner)
-
-Windows Command Prompt (to execute run_docker.bat)
-
-(Optional for local development) Python 3.10+
-
-(Optional for local development) Allure command-line tool
-
-Installation
-Clone the Repository:
-
+Clone the repository:  
+```bash
 git clone <your-repository-url>
 cd robotics_bdd
+```
 
-Install Dependencies: (Only necessary if running tests without Docker)
-
+Install dependencies (only if running outside Docker):  
+```bash
 pip install -r requirements.txt
+```
 
-🐳 Dockerized Execution (Recommended)
-To ensure a clean, consistent testing environment that matches the CI/CD pipeline, use the provided Docker setup.
+---
 
-Docker Image (Dockerfile)
-The image, tagged robotics-tdd-local:latest, is a complete, self-contained environment based on python:3.10-slim. It includes:
+## 🐳 Dockerized Execution (Recommended)
 
-Java JRE 21 and the Allure Command Line tool for report generation.
+Ensure consistent results by running the full suite inside Docker.
 
-All Python dependencies (pytest, allure-pytest, etc.) installed via requirements.txt.
+### 🧱 Docker Image  
+Image: **`robotics-tdd-local:latest`** — based on `python:3.10-slim`, includes:  
+- Java JRE 21 + Allure CLI for reporting  
+- Preinstalled dependencies from `requirements.txt`  
+- `/app` as working directory
 
-The application code is copied into the /app working directory.
+### ▶️ Run Tests via Script  
+Use the included Windows batch file to automate build, test, and report steps.
 
-Running the Test Suite (run_docker.bat)
-The run_docker.bat script is the primary entry point for testing and report generation on a local Windows machine. It handles the entire lifecycle:
+**Script:** `run_docker.bat`  
+**Workflow:**  
 
-Check Docker Status: Verifies Docker Desktop is running.
+| **Step** | **Description** |
+|-----------|-----------------|
+| 1️⃣ Check Docker | Verifies Docker Desktop is active. |
+| 2️⃣ Clean Up | Removes old `allure-results` and `reports` directories. |
+| 3️⃣ Build / Pull | Builds or updates the Docker image. |
+| 4️⃣ Execute Tests | Runs BDD tests (e.g., navigation) and stores results. |
+| 5️⃣ Generate Report | Produces Allure HTML output. |
+| 6️⃣ Serve Report | Opens Allure report locally on **http://localhost:8080**. |
 
-Clean Artifacts: Deletes previous allure-results and reports folders in your local project path (C:\my_work\robotics_bdd).
-
-Build or Pull Image: If the robotics-tdd-local:latest image doesn't exist locally, it runs docker build --no-cache.
-
-Execute Tests: Runs the Docker container, mounting the local allure-results directory to collect test output.
-
-# Runs all tests tagged 'navigation'
-docker run --rm ... %IMAGE_NAME% pytest -m navigation --alluredir=allure-results
-
-Generate Report: Runs a containerized allure generate command to create static HTML files in the local reports folder.
-
-Serve Report: Launches a final container running a Python HTTP server and opens the interactive Allure report in your default web browser (Port 8080) in a new console window.
-
-Execution Command:
-
+Command to execute:  
+```bash
 run_docker.bat
+```
 
-Build Optimization and Cleanup
-To ensure Docker only caches necessary files and ignores large, irrelevant artifacts during the build process, you should use a .dockerignore file.
+---
 
-File
+### 🧹 Build Optimization – `.dockerignore` Example  
 
-Purpose
-
-.dockerignore
-
-Prevents large artifacts like Python cache (__pycache__), virtual environments (venv), and test reports from being copied into the Docker build context, which significantly speeds up build times.
-
-Example .dockerignore Content:
-
+```
 # Python artifacts
 __pycache__
 *.pyc
@@ -121,135 +101,79 @@ venv/
 /allure-results
 /reports
 *.log
+```
 
-🌳 Framework Architecture
-The structure enforces separation between simulation logic, feature specifications, and executable code.
+---
 
+## 🌳 Framework Architecture  
+
+```
 robotics_bdd/
 ├─ README.md
-├─ run_docker.bat                   # Windows batch script for Docker build/run/report
-├─ Dockerfile                       # Defines the isolated testing environment
-├─ .dockerignore                    # Excludes unnecessary files from Docker build context
-├─ Jenkinsfile                      # CI/CD pipeline definition
-├─ pytest.ini                       # pytest configuration (markers)
+├─ run_docker.bat
+├─ Dockerfile
+├─ .dockerignore
+├─ Jenkinsfile
+├─ pytest.ini
 ├─ requirements.txt
-... (rest of framework structure)
+├─ features/                  # Gherkin feature files
+├─ steps/                     # Python step definitions
+├─ src/                       # Simulation and robot logic
+├─ supports/                  # Configs, test data, allure metadata
+```
 
-🏷️ Test Tags and Execution
-Tests are grouped using pytest markers (tags) to allow for selective execution.
+---
 
-Tag
+## 🏷️ Test Tags & Execution  
 
-Focus Area
+| **Tag** | **Focus Area** | **Description** |
+|----------|----------------|-----------------|
+| `navigation` | Path Planning | Safe movement, obstacle avoidance, waypoint following. |
+| `pick_and_place` | Manipulation | Object handling, kinematics, and dynamic interactions. |
+| `safety` | System Integrity | Collision prevention, boundary constraints, error handling. |
+| `walking` | Gait Control | Posture, speed, stability, locomotion transitions. |
+| `sensors` | Data Fusion | Sensor accuracy and Kalman Filter convergence. |
 
-Description
+### 🧪 Run Tests Locally (Without Docker)  
 
-navigation
+| **Mode** | **Command** |
+|-----------|-------------|
+| Run All Tests | `pytest --verbose` |
+| Run by Tag | `pytest -m sensors --verbose` |
+| Sequential (OR) | `pytest -m "navigation or pick_and_place"` |
+| Parallel | `pytest -m "navigation or safety" -n auto` |
 
-Path Planning
+---
 
-Safe movement, obstacle avoidance, and waypoint following.
+## 📊 Professional Test Reporting  
 
-pick_and_place
-
-Manipulation
-
-Object handling, arm kinematics, and dynamic manipulation sequences.
-
-safety
-
-System Integrity
-
-Collision prevention, boundary limits, and critical error handling.
-
-walking
-
-Gait Control
-
-Posture, speed, stability, and movement transitions during locomotion.
-
-sensors
-
-Data Fusion
-
-Accuracy and convergence of sensor filtering (e.g., Kalman Filter).
-
-Running Test Suites (Local Python Environment Only)
-If you are running tests locally without using Docker, these commands apply:
-
-Execution Mode
-
-Command
-
-Run All Tests
-
-pytest --verbose
-
-Run Specific Tag
-
-pytest -m sensors --verbose
-
-Sequential Execution (OR)
-
-pytest -m "navigation or pick_and_place"
-
-Parallel Execution (OR)
-
-pytest -m "navigation or safety" -n auto
-
-📊 Professional Test Reporting
-1. Interactive Allure Report (Recommended for Analysis)
-Allure generates a rich, interactive HTML dashboard suitable for detailed test analysis, CI/CD integration, and trend monitoring.
-
-Generate Raw Results:
-
+### 1️⃣ **Interactive Allure Report (Recommended)**  
+```bash
 pytest -m "pick_and_place or safety" --alluredir=allure-results
-
-Serve Interactive Report:
-
 allure serve allure-results
+```
+> Opens an interactive HTML dashboard with detailed execution insights.
 
-This opens the report in your default web browser.
-
-2. Static HTML Report (pytest-html)
-Generates a single, self-contained HTML file for simple archiving and sharing.
-
+### 2️⃣ **Static HTML Report (pytest-html)**  
+```bash
 pytest --html=reports/report.html --self-contained-html
+```
 
-📝 Test Coverage Summary
-Feature Area
+---
 
-Objective
+## 📝 Test Coverage Summary  
 
-Value Proposition
+| **Feature Area** | **Objective** | **Value Proposition** |
+|-------------------|---------------|------------------------|
+| Navigation | Validate robust, collision-free movement. | Reliable, safe path planning. |
+| Pick and Place | Verify precise manipulation and object handling. | Ensures stable and successful grasping. |
+| Safety | Enforce operational safety boundaries. | Protects integrity and prevents damage. |
+| Sensor Fusion | Confirm stable sensor-based state estimation. | Verifies consistent environment awareness. |
+| Walking | Validate smooth and safe locomotion dynamics. | Prevents falls, ensures stability and control. |
 
-Navigation
+---
 
-Validate robust, collision-free movement across the environment.
-
-Ensures the robot reliably reaches targets while adhering to safety clearances.
-
-Pick and Place
-
-Confirm reliable object interaction and arm dexterity within reach limits.
-
-Guarantees consistent success rates for manipulation tasks.
-
-Safety
-
-Enforce non-negotiable operational limits and error handling.
-
-Prevents equipment damage and maintains system integrity (e.g., chest height, boundary limits).
-
-Sensor Fusion
-
-Ensure the accuracy and stability of sensor-based state estimation.
-
-Validates the integrity of the robot's perception system (Kalman Filter convergence).
-
-Walking
-
-Verify stable and safe locomotion dynamics.
-
-Prevents tripping/falling and maintains optimal posture during movement.
-
+**📁 Repository:** *Robotics BDD Framework*  
+**🧠 Approach:** Behavior-Driven Development (BDD)  
+**📈 Reporting:** Allure + pytest-html  
+**⚙️ CI/CD Integration:** Jenkins + Docker  

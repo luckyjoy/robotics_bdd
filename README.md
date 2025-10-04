@@ -1,5 +1,5 @@
 🤖 Robotics Behavior-Driven Development (BDD) Framework
-A robust, BDD-driven framework for validating the functionality, path planning, and critical safety protocols of a simulated mobile manipulator robot.
+A robust, BDD-driven framework for validating the functionality, path planning, and critical safety protocols of a simulated mobile manipulator robots.
 
 Author: Bang Thien Nguyen | Contact: ontario1998@gmail.com
 

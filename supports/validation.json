@@ -10,7 +10,7 @@
   "QA_Manager": "TBD",
   "Validation_Engineer": "TBD",
   "TargetEnvironment": "PyBullet and Gazebo Simulation Environments",
-  "TestFramework": "Gherkin (Feature files) and Python (Step definitions)",
+  "TestFramework": "Gherkin (Feature files), Pytest (Step definitions), Allure HTML Report",
   "PlatformSupport": {
     "OperatingSystems": [
       "Linux (Ubuntu 20.04+ Recommended)",

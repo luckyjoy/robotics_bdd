@@ -152,6 +152,10 @@ robotics_bdd/
 pytest -m "pick_and_place or safety" --alluredir=allure-results
 allure serve allure-results
 ```
+
+📸 *Preview:*  
+![Allure Report Preview](https://luckyjoy.github.io/robotics_bdd/latest/ubuntu-latest/)
+
 > Opens an interactive HTML dashboard with detailed execution insights.
 
 ### 2️⃣ **Static HTML Report (pytest-html)**  
@@ -161,19 +165,78 @@ pytest --html=reports/report.html --self-contained-html
 
 ---
 
-## 📝 Test Coverage Summary  
+## 🧭 Test Coverage Summary
 
-| **Feature Area** | **Objective** | **Value Proposition** |
-|-------------------|---------------|------------------------|
-| Navigation | Validate robust, collision-free movement. | Reliable, safe path planning. |
-| Pick and Place | Verify precise manipulation and object handling. | Ensures stable and successful grasping. |
-| Safety | Enforce operational safety boundaries. | Protects integrity and prevents damage. |
-| Sensor Fusion | Confirm stable sensor-based state estimation. | Verifies consistent environment awareness. |
-| Walking | Validate smooth and safe locomotion dynamics. | Prevents falls, ensures stability and control. |
+| Feature | Objective | Value Proposition |
+|----------|------------|------------------|
+| **Navigation** | Validate safe, collision-free motion | Ensures reliable target reaching |
+| **Pick & Place** | Verify arm dexterity | Guarantees object handling success |
+| **Safety** | Enforce operational constraints | Prevents boundary violations |
+| **Sensor Fusion** | Validate perception accuracy | Confirms Kalman convergence |
+| **Walking** | Test locomotion stability | Maintains posture and control |
+
+---
+
+## ⚙️ CI/CD Integration
+
+| System | Description |
+|--------|--------------|
+| **Jenkinsfile** | Automates build → test → report |
+| **GitHub Actions** | Easily adaptable for cloud CI/CD |
+| **Allure + pytest** | Generates professional analytics dashboards |
+| **Dockerized Execution** | Guarantees repeatable test environments |
 
 ---
 
 **📁 Repository:** *Robotics BDD Framework*  
 **🧠 Approach:** Behavior-Driven Development (BDD)  
 **📈 Reporting:** Allure + pytest-html  
-**⚙️ CI/CD Integration:** Jenkins + Docker  
+**⚙️ CI/CD Integration:** Jenkins/Github + Docker  
+
+---
+
+### 📈 Example CI/CD Badges
+
+![Jenkins](https://img.shields.io/badge/jenkins-pipeline%20passing-brightgreen?style=flat-square&logo=jenkins)
+![GitHub Actions](https://img.shields.io/github/actions/workflow/status/yourusername/robotics_bdd/ci.yml?style=flat-square&logo=github)
+![Allure Tests](https://img.shields.io/badge/tests-58%20passed%2C%202%20failed-yellow?style=flat-square&logo=allure)
+
+---
+
+## 🤝 Contributing Guidelines
+
+We welcome contributions to improve and expand this framework!  
+
+### 🧩 How to Contribute
+1. **Fork** the repository  
+2. **Create a branch**: `git checkout -b feature/my-improvement`  
+3. **Write clean, BDD-compliant code**  
+4. **Run local tests** (`pytest` or `run_docker.bat`)  
+5. **Submit a Pull Request** describing your enhancement  
+
+### ✅ Code Style
+- Follow **PEP8** conventions  
+- Use **pytest markers** consistently  
+- Ensure **Allure reports** run without errors  
+- Write **docstrings** for all new functions  
+
+### 🧪 Before Submitting
+Run:
+```bash
+pytest --maxfail=1 --disable-warnings -q
+```
+and make sure all tests pass locally.
+
+---
+
+## 🪪 License
+
+This project is released under the **MIT License** — free to use, modify, and distribute.
+
+---
+
+📬 *For collaboration inquiries, reach out at* [ontario1998@gmail.com](mailto:ontario1998@gmail.com)
+
+---
+
+> _“Build robots that test themselves before they move — that’s true autonomy.”_

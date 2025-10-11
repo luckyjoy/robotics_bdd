@@ -2,7 +2,7 @@
 SETLOCAL EnableDelayedExpansion
 SET IMAGE_NAME=robotics-bdd-local:latest
 REM IMPORTANT: Ensure this path is the root of your local Git repository.
-SET ARTIFACT_PATH=C:\my_work\robotics_bdd 
+SET ARTIFACT_PATH=%CD%
 
 rem === Robotics BDD Docker Test Runner and Allure Report Generator ===
 
@@ -82,17 +82,22 @@ move "%ARTIFACT_PATH%\prd_summary.html" "%BUILD_FOLDER%\" 2>nul
 move "%ARTIFACT_PATH%\test_coverage_report.html" "%BUILD_FOLDER%\" 2>nul
 
 rem -------------------------------------------------------------------
-rem --- 3. Update Dashboard (index.html) with New Build Number ---
+rem --- 3. Update Dashboard (index.html) with New Build Number (POWER SHELL) ---
 rem -------------------------------------------------------------------
 echo.
-echo Dynamically updating index.html with Build #%BUILD_NUMBER%...
+echo Dynamically updating index.html with Build #%BUILD_NUMBER% using PowerShell...
 
 rem Use PowerShell to replace the placeholder '{{BUILD_NUMBER}}' in index.html with the actual build number.
-powershell -Command "(gc index.html) -replace '{{BUILD_NUMBER}}', '%BUILD_NUMBER%' | Out-File -encoding ASCII index.html"
+rem The -Raw parameter reads the whole file as one string, making replacement more robust.
+powershell -Command "$bn='%BUILD_NUMBER%'; (Get-Content index.html -Raw) -replace '{{BUILD_NUMBER}}', $bn | Set-Content -Encoding UTF8 index.html"
 
 IF !ERRORLEVEL! NEQ 0 (
     echo.
-    echo ERROR: Failed to update index.html with PowerShell. Check file permissions or PowerShell execution policy.
+    echo =========================================================
+    echo ERROR: Failed to update index.html via PowerShell.
+    echo Please ensure the index.html file exists and is not locked.
+    echo If this error persists, manually run: git checkout index.html
+    echo =========================================================
     GOTO :script_end
 )
 

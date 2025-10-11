@@ -153,7 +153,10 @@ pytest -m "pick_and_place or safety" --alluredir=allure-results
 allure serve allure-results
 ```
 
-📸 *Preview:* ![Allure Report Preview](https://github.com/luckyjoy/robotics_bdd/blob/main/reports/allure_report.jpg)
+📸 *Preview:* 
+![Allure Overview Report](https://github.com/luckyjoy/robotics_bdd/blob/main/reports/allure_report.jpg)
+
+![Allure Pytest Suites Report](https://github.com/luckyjoy/robotics_bdd/blob/main/reports/allure_suites.jpg)
 
 > Opens an interactive HTML dashboard with detailed execution insights.
 

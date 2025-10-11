@@ -154,7 +154,9 @@ allure serve allure-results
 ```
 
 📸 *Preview:* 
+
 ![Allure Overview Report](https://github.com/luckyjoy/robotics_bdd/blob/main/reports/allure_report.jpg)
+
 
 ![Allure Pytest Suites Report](https://github.com/luckyjoy/robotics_bdd/blob/main/reports/allure_suites.jpg)
 

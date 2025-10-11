@@ -43,3 +43,4 @@ Thumbs.db
 *.swp
 g.bat
 build.bat
+ci.bat

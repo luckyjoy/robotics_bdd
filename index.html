@@ -1,157 +1,145 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Robotics BDD Project Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f7f9fc;
-        }
-        /* Style adjustments for better visibility of file path instructions */
-        .file-note {
-            font-size: 0.8rem;
-            color: #4f46e5; /* Indigo color for the build number note */
-            font-weight: 600;
-            margin-top: 5px;
-        }
-        .build-warning {
-            color: #ef4444;
-            font-weight: 700;
-        }
-    </style>
-</head>
-<body class="min-h-screen p-4 sm:p-8">
-
-    <div class="max-w-4xl mx-auto bg-white shadow-xl rounded-xl p-6 sm:p-10 border border-gray-100">
-        
-        <!-- Script to define the current build number (Placeholder to be replaced by batch script) -->
-        <script>
-            // This placeholder is automatically replaced by the CI script (run_pytest.bat)
-            const LATEST_BUILD_NUMBER = '1'; 
-        </script>
-
-        <!-- Header -->
-        <header class="mb-8 border-b pb-4">
-            <h1 class="text-4xl font-extrabold text-blue-800 tracking-tight">
-                Robotics BDD Project Reports
-            </h1>
-            <p class="mt-2 text-lg text-gray-600">
-                Reports for **Build #<span id="build-display" class="font-bold text-indigo-600"></span>**. Navigate to the archived results below.
-            </p>
-            <p class="mt-1 text-sm text-gray-400">
-                Live dashboard URL: https://robotics-bdd.netlify.app/
-            </p>
-            <p id="build-alert" class="mt-4 hidden build-warning">
-                ?????? WARNING: Build number is a placeholder. Links will not work until a new build is run and deployed.
-            </p>
-        </header>
-
-        <!-- Reports Grid -->
-        <section>
-            <h2 class="text-2xl font-bold text-gray-700 mb-6">Latest Artifacts</h2>
-            
-            <div id="reports-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                <!-- Reports will be dynamically injected here via JS to use LATEST_BUILD_NUMBER -->
-                
-            </div>
-            
-        </section>
-
-        <!-- Footer -->
-        <footer class="mt-12 pt-4 border-t text-center text-sm text-gray-400">
-            Automation links constructed dynamically. Last dashboard refresh: <span id="timestamp"></span>
-        </footer>
-
-    </div>
-    
-    <script>
-        // Check if the placeholder was replaced by the script
-        let build = LATEST_BUILD_NUMBER;
-        const isPlaceholder = build === '1';
-        
-        if (isPlaceholder) {
-            // Set a display placeholder and show a warning
-            build = 'N/A (Placeholder)';
-            document.getElementById('build-alert').classList.remove('hidden');
-        }
-
-        document.getElementById('build-display').textContent = build;
-        document.getElementById('timestamp').textContent = new Date().toLocaleString();
-
-        const reports = [
-            {
-                title: "1. Live Test Execution Report (Allure)",
-                description: "Detailed results, history, and test case status from the latest CI run.",
-                href: `/reports/${build}/allure/`,
-                icon: '<svg class="w-7 h-7 text-green-600 mr-3 group-hover:text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>',
-                colorClass: 'bg-green-50 border-green-300 hover:border-green-500 text-green-600',
-                linkNote: `Path: /reports/${build}/allure/`
-            },
-            {
-                title: "2. Validation Plan",
-                description: "Formal document detailing the validation strategy and criteria.",
-                href: `/reports/${build}/Validation_Plan.html`,
-                icon: '<svg class="w-6 h-6 text-red-500 mr-3 group-hover:text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0l-1-1m1 1l1-1"></path></svg>',
-                colorClass: 'bg-gray-50 border-gray-200 hover:border-red-300 text-red-500',
-                linkNote: `Path: /reports/${build}/Validation_Plan.html`
-            },
-            {
-                title: "3. Automation Rate Report",
-                description: "Percentage of test scenarios currently automated.",
-                href: `/reports/${build}/automation_rate_report.html`,
-                icon: '<svg class="w-6 h-6 text-blue-500 mr-3 group-hover:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>',
-                colorClass: 'bg-gray-50 border-gray-200 hover:border-blue-300 text-blue-500',
-                linkNote: `Path: /reports/${build}/automation_rate_report.html`
-            },
-            {
-                title: "4. PRD Summary Report",
-                description: "Summary of Product Requirement Document verification status.",
-                href: `/reports/${build}/prd_summary.html`,
-                icon: '<svg class="w-6 h-6 text-yellow-600 mr-3 group-hover:text-yellow-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>',
-                colorClass: 'bg-gray-50 border-gray-200 hover:border-yellow-300 text-yellow-600',
-                linkNote: `Path: /reports/${build}/prd_summary.html`
-            },
-            {
-                title: "5. Code Test Coverage Report",
-                description: "Detailed analysis of code coverage by the automated tests.",
-                href: `/reports/${build}/test_coverage_report.html`,
-                icon: '<svg class="w-6 h-6 text-indigo-500 mr-3 group-hover:text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10M19 7v10M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z"></path></svg>',
-                colorClass: 'bg-gray-50 border-gray-200 hover:border-indigo-300 text-indigo-500',
-                linkNote: `Path: /reports/${build}/test_coverage_report.html`
-            }
-        ];
-
-        const grid = document.getElementById('reports-grid');
-        reports.forEach(report => {
-            const html = `
-                <a href="${report.href}" class="relative block p-4 sm:p-6 ${report.colorClass.replace(/bg-gray-50|hover:bg-white/g, 'bg-gray-50 hover:bg-white')} rounded-xl transition duration-300 group border shadow-md hover:shadow-lg">
-                    <div class="flex items-start">
-                        ${report.icon}
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-800 group-hover:text-current">
-                                ${report.title}
-                            </h3>
-                            <p class="text-sm text-gray-500 mt-1">
-                                ${report.description}
-                            </p>
-                            <p class="file-note !text-indigo-600">
-                                ${report.linkNote}
-                            </p>
-                        </div>
-                    </div>
-                    <svg class="w-5 h-5 ${report.colorClass.match(/text-([a-z]+)-(\d+)/)[0]} ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-                </a>
-            `;
-            grid.innerHTML += html;
-        });
-
-    </script>
-
-</body>
-</html>
-
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1
+LINE:{{BUILD_NUMBER}=1

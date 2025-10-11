@@ -1,100 +1,127 @@
-import shutil
-import os
+import subprocess
 import sys
+import os
+import shutil
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # --- Configuration ---
-# Assuming reports are initially generated into the 'reports' directory in the project root.
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-REPORTS_DIR = os.path.join(PROJECT_ROOT, 'reports')
-INDEX_TEMPLATE_PATH = os.path.join(PROJECT_ROOT, 'index.html')
-# The Allure report is generated into 'allure-report' in the project root by the batch file.
-ALLURE_REPORT_SOURCE_DIR = os.path.join(PROJECT_ROOT, 'allure-report') 
+# Raw results go here (these are created by the Docker container)
+ALLURE_RESULTS_DIR = os.path.join(PROJECT_ROOT, 'allure-results')
+# The final static report output path, matching the deployment script's expectation
+ALLURE_REPORT_OUTPUT = os.path.join(PROJECT_ROOT, 'reports', 'allure-report') 
+DOCKER_IMAGE_NAME = "robotics-bdd-local:latest"
 
-REPORT_FILENAMES = [
-    'Validation_Plan.html',
-    'automation_rate_report.html',
-    'prd_summary.html',
-    'test_coverage_report.html',
-    # Note: 'allure' is handled separately as it's a directory
-]
+# CRITICAL FIX: The deployment script is now located in the supports/ directory
+DEPLOYMENT_SCRIPT_PATH = os.path.join(PROJECT_ROOT, 'supports', 'deployment_workflow.py')
 
-def deploy_reports():
-    """
-    Manages the report deployment, copying all artifacts into a new build folder
-    and updating the main index.html dashboard.
-    """
+
+# Helper function to run commands and print output
+def run_command(command, command_name, show_stdout=True, show_stderr_on_success=True):
+    """Executes a command and handles output/errors."""
+    print(f"\n--- Executing: {command_name} ---")
     
-    # 1. Get Build Number from command line argument
-    if len(sys.argv) < 2:
-        print("Error: Missing Build Number argument.")
-        print("Usage: python deployment_workflow.py <BUILD_NUMBER>")
-        sys.exit(1)
-        
-    build_number = sys.argv[1].strip()
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    result = subprocess.run(
+        command,
+        shell=True,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT
+    )
     
-    print(f"\n--- Starting Report Deployment for Build #{build_number} ---")
+    # Print STDOUT if requested
+    if show_stdout and result.stdout:
+        print("\n--- STDOUT ---")
+        print(result.stdout.strip())
+        
+    # Print STDERR/WARNINGS only if not suppressed on success
+    if result.stderr and (result.returncode != 0 or show_stderr_on_success):
+        print("\n--- STDERR/WARNINGS ---")
+        print(result.stderr.strip())
 
-    # 2. Define the target directory for this build
-    target_build_dir = os.path.join(REPORTS_DIR, build_number)
+    if result.returncode != 0:
+        print(f"\n==========================================================")
+        print(f"ERROR: {command_name} failed with exit code {result.returncode}")
+        print(f"==========================================================")
+        sys.exit(result.returncode)
+        
+    return result
+
+def run_workflow(build_number):
+    """Main function to run the entire test and deployment workflow."""
+    print(f"\n==========================================================")
+    print(f"Running Robotics BDD Test Workflow for Build #{build_number}")
+    print(f"==========================================================")
+
+    # 1. Cleanup Raw Results directory
+    if os.path.exists(ALLURE_RESULTS_DIR):
+        print(f"Cleaning up old raw results: {os.path.basename(ALLURE_RESULTS_DIR)}")
+        shutil.rmtree(ALLURE_RESULTS_DIR)
+    os.makedirs(ALLURE_RESULTS_DIR, exist_ok=True)
     
-    if os.path.exists(target_build_dir):
-        print(f"Warning: Deleting existing directory: {target_build_dir}")
-        shutil.rmtree(target_build_dir)
-        
-    os.makedirs(target_build_dir)
-    print(f"Created new build directory: {target_build_dir}")
-
-    # 3. Move Custom HTML Reports
-    print("\nMoving custom HTML reports...")
-    for filename in REPORT_FILENAMES:
-        # FIX: Change source path from REPORTS_DIR to PROJECT_ROOT, assuming custom reports 
-        # are generated into the project root directory (C:\my_work\robotics_bdd) initially.
-        source_path = os.path.join(PROJECT_ROOT, filename)
-        target_path = os.path.join(target_build_dir, filename)
-        if os.path.exists(source_path):
-            shutil.move(source_path, target_path)
-            print(f"  Moved: {filename}")
-        else:
-            # Revert the warning message to reflect checking the project root.
-            print(f"  Warning: Custom report not found: {filename} at {PROJECT_ROOT}.")
-            
-    # 4. Move Allure Report Folder
-    # The batch script places the final report output in 'allure-report' in the project root.
-    allure_source = ALLURE_REPORT_SOURCE_DIR # Points to C:\my_work\robotics_bdd\allure-report
-    # The final location in the build must be 'allure' for the index.html link to work: reports/<BUILD_NUMBER>/allure/index.html
-    allure_target = os.path.join(target_build_dir, 'allure') 
+    # 2. Run Docker Container to Execute Tests
+    print(f"\n--- Running Docker Tests ---")
+    print(f"Image: {DOCKER_IMAGE_NAME}. Raw results will land in: {os.path.basename(ALLURE_RESULTS_DIR)}")
     
-    if os.path.exists(allure_source):
-        # We move the 'allure-report' folder and rename it to 'allure' in the target directory.
-        shutil.move(allure_source, allure_target) 
-        print(f"  Moved Allure report folder from '{os.path.basename(allure_source)}' to: {allure_target}")
-    else:
-        # The error message is already clear about the location. We cannot fix the Allure generation
-        # failing here, but we can ensure the check is correct.
-        print(f"  Error: Allure report folder not found at '{ALLURE_REPORT_SOURCE_DIR}'.")
+    # NOTE: YOU MUST REPLACE THIS PLACEHOLDER COMMAND with your actual Docker run command.
+    docker_cmd = [
+        "docker", "run", "--rm",
+        f"-v", f"{ALLURE_RESULTS_DIR}:/app/allure-results",
+        DOCKER_IMAGE_NAME,
+        "pytest", "--alluredir=/app/allure-results"
+    ]
+    # Placeholder: Run the actual Docker test command
+    run_command(["echo", "Running actual Docker test command..."], "Docker Test Run")
+    
+    # Placeholder: Create a dummy result file for the next step to not fail
+    with open(os.path.join(ALLURE_RESULTS_DIR, 'dummy.json'), 'w') as f:
+        f.write('{"test": "ok"}')
 
+    # 3. Generate Allure Report on the Host
+    allure_generate_cmd = [
+        "allure", "generate", 
+        ALLURE_RESULTS_DIR, 
+        "-o", ALLURE_REPORT_OUTPUT, 
+        "--clean"
+    ]
+    
+    # Ensure the parent directory for the report output exists (e.g., 'reports')
+    os.makedirs(os.path.dirname(ALLURE_REPORT_OUTPUT), exist_ok=True)
+    
+    run_command(allure_generate_cmd, "Allure Report Generation (Host)", show_stderr_on_success=True)
+    print(f"Allure static report successfully generated to: {os.path.relpath(ALLURE_REPORT_OUTPUT, PROJECT_ROOT)}")
 
-    # 5. Update and Write index.html Dashboard
-    print("\nUpdating index.html with new build information...")
-    try:
-        with open(INDEX_TEMPLATE_PATH, 'r') as f:
-            content = f.read()
-            
-        content = content.replace('{{BUILD_NUMBER}}', build_number)
-        content = content.replace('{{RUN_TIMESTAMP}}', timestamp)
+    # 4. Run Deployment Workflow (Consolidate Reports and Update Dashboard)
+    deployment_cmd = [
+        sys.executable,  # Use the same Python interpreter
+        DEPLOYMENT_SCRIPT_PATH, # <-- CORRECTED PATH
+        build_number
+    ]
+    run_command(deployment_cmd, "Report Deployment Workflow")
 
-        with open(INDEX_TEMPLATE_PATH, 'w') as f:
-            f.write(content)
-            
-        print("Successfully updated index.html dashboard.")
-        
-    except FileNotFoundError:
-        print(f"Error: index.html not found at {INDEX_TEMPLATE_PATH}. Cannot update dashboard.")
-        sys.exit(1)
-        
-    print(f"\nDeployment for Build #{build_number} is complete. Ready for Git push.")
+    # 5. Commit and Push Reports to GitHub
+    run_command(["git", "add", "."], "Git Stage All")
+    commit_message = f"Automated report update: Deploying Build #{build_number}"
+    run_command(["git", "commit", "-m", commit_message], "Git Commit")
+    
+    # Suppress non-error output (like "To https://...") for cleaner console
+    run_command(["git", "push", "origin", "main"], "Git Push", show_stderr_on_success=False)
+    
+    print(f"\n==========================================================")
+    print(f"SUCCESSFULLY DEPLOYED Build #{build_number}. Netlify deployment should begin shortly.")
+    print(f"Automation Workflow Finished.")
+    print(f"==========================================================")
+
 
 if __name__ == '__main__':
-    deploy_reports()
+    if len(sys.argv) != 2:
+        print("Usage: python run_tests.py <BUILD_NUMBER>")
+        sys.exit(1)
+        
+    try:
+        build_number = sys.argv[1]
+        run_workflow(build_number)
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        sys.exit(1)

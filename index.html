@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robotics BDD Project Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fc;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 sm:p-8">
+
+    <div class="max-w-4xl mx-auto bg-white shadow-xl rounded-xl p-6 sm:p-10 border border-gray-100">
+        
+        <!-- Header -->
+        <header class="mb-8 border-b pb-4">
+            <h1 class="text-4xl font-extrabold text-blue-800 tracking-tight">
+                Robotics BDD Project Reports
+            </h1>
+            <p class="mt-2 text-lg text-gray-600">
+                Quick access to the latest automation, simulation, and coverage reports for the project.
+            </p>
+            
+            <!-- NEW DYNAMIC INFO BLOCK -->
+            <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                <p class="mb-1"><strong>Latest Deployed Build:</strong> <span id="build-number" class="font-bold text-lg text-blue-800">1</span></p>
+                <p><strong>Reports Generated On:</strong> <span id="run-timestamp" class="font-medium">2025-10-11 15:49:12 Pacific Daylight Time</span></p>
+            </div>
+            <!-- END DYNAMIC INFO BLOCK -->
+
+        </header>
+
+        <!-- Dynamic Link Generation -->
+        <script>
+            // Define the latest build number, which is replaced by the Python script
+            const LATEST_BUILD_NUMBER = '1'; 
+
+            /**
+             * Updates the link URLs based on the current build number.
+             * @param {string} reportName - The name of the report file (e.g., 'allure/index.html').
+             * @returns {string} The full, dynamic URL.
+             */
+            function getReportUrl(reportName) {
+                // If the script fails to replace the placeholder, default to a generic path
+                const build = LATEST_BUILD_NUMBER.startsWith('{{') ? 'latest' : LATEST_BUILD_NUMBER;
+                return `reports/${build}/${reportName}`;
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const linkMap = [
+                    // Report links that go into the build folder
+                    { id: 'allure-link', report: 'allure/index.html' },
+                    { id: 'automation-rate-link', report: 'automation_rate_report.html' },
+                    { id: 'prd-summary-link', report: 'prd_summary.html' },
+                    { id: 'coverage-link', report: 'test_coverage_report.html' }
+                ];
+
+                linkMap.forEach(item => {
+                    const element = document.getElementById(item.id);
+                    if (element) {
+                        element.href = getReportUrl(item.report);
+                    }
+                });
+
+                // Set initial text for non-link elements if placeholder replacement failed (for local testing)
+                if (LATEST_BUILD_NUMBER.startsWith('{{')) {
+                    document.getElementById('build-number').textContent = 'N/A (Run script first)';
+                    document.getElementById('run-timestamp').textContent = 'N/A (Run script first)';
+                }
+            });
+        </script>
+        
+        <!-- Report Links Container -->
+        <div class="space-y-4">
+
+            <!-- Allure Report Card -->
+            <a href="#" id="allure-link" class="group block p-6 bg-gray-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative">
+                <div class="flex items-start">
+                    <!-- Icon (e.g., Bar Chart) -->
+                    <svg class="w-8 h-8 text-red-500 mr-4 group-hover:text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-0h-4M18 10V6m-2 4h4m-2 2v4m-4-0V8m8 8V8m-4 8V8m8 0V4"></path></svg>
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 group-hover:text-red-700">
+                            Comprehensive Allure Test Report (Build #<span class="text-red-500">1</span>)
+                        </h3>
+                        <p class="text-sm text-gray-500 mt-1">
+                            Detailed run status, test steps, failures, and execution history.
+                        </p>
+                    </div>
+                </div>
+                <!-- Arrow Icon -->
+                <svg class="w-5 h-5 text-red-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </a>
+
+            <!-- Automation Rate Card -->
+            <a href="#" id="automation-rate-link" class="group block p-6 bg-gray-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative">
+                <div class="flex items-start">
+                    <!-- Icon (e.g., Trending Up) -->
+                    <svg class="w-8 h-8 text-green-500 mr-4 group-hover:text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 group-hover:text-green-700">
+                            Automation Rate Report
+                        </h3>
+                        <p class="text-sm text-gray-500 mt-1">
+                            Tracks automation coverage percentage across all scenarios.
+                        </p>
+                    </div>
+                </div>
+                <!-- Arrow Icon -->
+                <svg class="w-5 h-5 text-green-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </a>
+            
+            <!-- PRD Summary Card -->
+            <a href="#" id="prd-summary-link" class="group block p-6 bg-gray-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative">
+                <div class="flex items-start">
+                    <!-- Icon (e.g., Document) -->
+                    <svg class="w-8 h-8 text-yellow-500 mr-4 group-hover:text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 group-hover:text-yellow-700">
+                            PRD Coverage Summary
+                        </h3>
+                        <p class="text-sm text-gray-500 mt-1">
+                            Traceability matrix showing test coverage against Product Requirements Document.
+                        </p>
+                    </div>
+                </div>
+                <!-- Arrow Icon -->
+                <svg class="w-5 h-5 text-yellow-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </a>
+
+            <!-- Test Coverage Report Card -->
+            <a href="#" id="coverage-link" class="group block p-6 bg-gray-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative">
+                <div class="flex items-start">
+                    <!-- Icon (e.g., Code) -->
+                    <svg class="w-8 h-8 text-purple-500 mr-4 group-hover:text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 group-hover:text-purple-700">
+                            Test Coverage Report
+                        </h3>
+                        <p class="text-sm text-gray-500 mt-1">
+                            Detailed line-by-line coverage of the underlying code base.
+                        </p>
+                    </div>
+                </div>
+                <!-- Arrow Icon -->
+                <svg class="w-5 h-5 text-purple-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </a>
+            
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-10 pt-4 border-t text-center text-sm text-gray-400">
+            Deployed via automated CI/CD pipeline.
+        </footer>
+
+    </div>
+
+</body>
+</html>

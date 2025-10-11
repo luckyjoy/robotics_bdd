@@ -29,7 +29,7 @@
             <!-- NEW DYNAMIC INFO BLOCK -->
             <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
                 <p class="mb-1"><strong>Latest Deployed Build:</strong> <span id="build-number" class="font-bold text-lg text-blue-800">1</span></p>
-                <p><strong>Reports Generated On:</strong> <span id="run-timestamp" class="font-medium">2025-10-11 15:49:12 Pacific Daylight Time</span></p>
+                <p><strong>Reports Generated On:</strong> <span id="run-timestamp" class="font-medium">2025-10-11 15:55:47 Pacific Daylight Time</span></p>
             </div>
             <!-- END DYNAMIC INFO BLOCK -->
 
@@ -55,6 +55,7 @@
                 const linkMap = [
                     // Report links that go into the build folder
                     { id: 'allure-link', report: 'allure/index.html' },
+                    { id: 'validation-plan-link', report: 'Validation_Plan.html' }, // ADDED VALIDATION PLAN
                     { id: 'automation-rate-link', report: 'automation_rate_report.html' },
                     { id: 'prd-summary-link', report: 'prd_summary.html' },
                     { id: 'coverage-link', report: 'test_coverage_report.html' }
@@ -94,6 +95,24 @@
                 </div>
                 <!-- Arrow Icon -->
                 <svg class="w-5 h-5 text-red-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </a>
+
+            <!-- Validation Plan Card -->
+            <a href="#" id="validation-plan-link" class="group block p-6 bg-gray-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative">
+                <div class="flex items-start">
+                    <!-- Icon (e.g., Clipboard/Checklist) -->
+                    <svg class="w-8 h-8 text-blue-500 mr-4 group-hover:text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5l3-3m0 0l3 3m-3-3v10"></path></svg>
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 group-hover:text-blue-700">
+                            Validation Plan Document
+                        </h3>
+                        <p class="text-sm text-gray-500 mt-1">
+                            The formal document detailing the validation strategy and acceptance criteria.
+                        </p>
+                    </div>
+                </div>
+                <!-- Arrow Icon -->
+                <svg class="w-5 h-5 text-blue-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </a>
 
             <!-- Automation Rate Card -->

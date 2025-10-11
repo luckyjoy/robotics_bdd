@@ -12,7 +12,7 @@ rem --- 1. Cleanup and Preparation ---
 rem Delete old results to ensure a fresh run.
 IF EXIST allure-results rmdir /s /q allure-results >nul
 echo Running pytest and collecting results into allure-results...
-pytest --alluredir=allure-results
+pytest -m navigation --alluredir=allure-results
 echo.
 
 rem --- 2. Copy Environment Properties and Categories ---

@@ -17,7 +17,8 @@ Feature: Robot Navigation
       | 0       | 0       | 0       | right     | 1        | 1     | 0     | 0     |
       | 0       | 0       | 0       | up        | 1        | 0     | 0     | 1     |
       | 0       | 0       | 1       | down      | 1        | 0     | 0     | 0     |
-
+    # | 0       | 1       | 0       | right     | 1        | 1     | 0     | 0     |
+	  
   @diagonal
   Scenario Outline: <REQ_NAV_02> Robot moves diagonally in 3D space
     Given the robot is at position [<start_x>, <start_y>, <start_z>]

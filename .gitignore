@@ -1,11 +1,11 @@
 # Existing ignored dirs
 data/
 temp/
-logs/
+logs
 examples/
 supports/*.py
 allure-results/
-tmp/
+tmp
 
 # VM images & snapshots (HUGE files, never commit)
 *.qcow2

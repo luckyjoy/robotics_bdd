@@ -34,16 +34,17 @@
             
             <!-- DYNAMIC INFO BLOCK - USES PLACEHOLDERS -->
             <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                <!-- Python script will replace 5 and 2025-10-11 21:37:59 Pacific Daylight Time below -->
                 <p class="font-bold">Latest Deployed Build: #<span id="build-number-display">5</span></p>
-                <p>Last Updated: <span id="timestamp-display">2025-10-12 04:17:52 UTC</span></p>
+                <p>Last Updated: <span id="timestamp-display">2025-10-11 21:37:59 Pacific Daylight Time</span></p>
             </div>
         </header>
 
         <!-- Dynamic Link Generation Script -->
         <script>
-            // Placeholders used by the build script (replace with actual values)
-            const BUILD_NUMBER_PLACEHOLDER = '5';
-            const RUN_TIMESTAMP_PLACEHOLDER = '2025-10-12 04:17:52 UTC';
+            // This script handles only the report links and contains NO client-side logic
+            // to modify the build number/timestamp text.
+            
             const REPORT_BASE_PATH = 'reports/latest/';
 
             /**
@@ -56,20 +57,8 @@
             }
 
             document.addEventListener('DOMContentLoaded', () => {
-                const buildDisplay = document.getElementById('build-number-display');
-                const timestampDisplay = document.getElementById('timestamp-display');
-                
-                // Fallback for local testing if placeholders aren't replaced
-                if (buildDisplay.textContent === BUILD_NUMBER_PLACEHOLDER) {
-                    buildDisplay.textContent = 'N/A (Build script pending)';
-                }
-                if (timestampDisplay.textContent === RUN_TIMESTAMP_PLACEHOLDER) {
-                    timestampDisplay.textContent = 'N/A (Build script pending)';
-                }
-
                 // Map of link IDs to their respective report file names
                 const linkMap = [
-                    // FIX: Allure report is the index.html file directly in reports/latest/
                     { id: 'allure-link', fileName: 'index.html' }, 
                     { id: 'automation-rate-link', fileName: 'automation_rate_report.html' },
                     { id: 'validation-plan-link', fileName: 'Validation_Plan.html' },
@@ -91,7 +80,6 @@
         <div class="space-y-4">
 
             <!-- Report 1: Allure Test Report (Simulation Results) -->
-            <!-- Link ID 'allure-link' is set by JS to reports/latest/index.html -->
             <a href="#" id="allure-link" target="_blank" class="block group">
                 <div class="relative flex items-center justify-between p-6 bg-red-50 border border-red-200 rounded-xl transition duration-150 ease-in-out card-lift">
                     <div class="flex items-start">

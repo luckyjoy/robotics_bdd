@@ -26,142 +26,91 @@
                 Quick access to the latest automation, simulation, and coverage reports for the project.
             </p>
             
-            <!-- NEW DYNAMIC INFO BLOCK -->
-            <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-                <p class="mb-1"><strong>Latest Deployed Build:</strong> <span id="build-number" class="font-bold text-lg text-blue-800">3</span></p>
-                <p><strong>Reports Generated On:</strong> <span id="run-timestamp" class="font-medium">2025-10-11 17:55:12 Pacific Daylight Time</span></p>
+            <!-- NEW DYNAMIC INFO BLOCK: RESTORED PLACEHOLDERS -->
+            <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                <p class="font-semibold text-blue-800">Latest Deployed Build: <span class="text-lg font-bold">{{BUILD_NUMBER}}</span></p>
+                <p class="text-blue-700">Last Updated: {{RUN_TIMESTAMP}}</p>
             </div>
-            <!-- END DYNAMIC INFO BLOCK -->
-
+            
         </header>
 
-        <!-- Dynamic Link Generation -->
-        <script>
-            // Define the latest build number, which is replaced by the Python script
-            const LATEST_BUILD_NUMBER = '3'; 
-
-            /**
-             * Generates a stable URL pointing to the 'latest' report folder.
-             * The deployment script ensures 'reports/latest' always holds the newest artifacts.
-             * @param {string} reportPath - The relative path to the report file/folder.
-             * @returns {string} The stable, dynamic URL pointing to the latest report.
-             */
-            function getReportUrl(reportPath) {
-                // We use the fixed 'latest' path for all links.
-                return `reports/latest/${reportPath}`;
-            }
-
-            document.addEventListener('DOMContentLoaded', () => {
-                const linkMap = [
-                    // Allure report now points directly to the index.html inside the latest folder
-                    { id: 'allure-link', report: 'allure-report/index.html' }, 
-                    { id: 'validation-plan-link', report: 'Validation_Plan.html' },
-                    { id: 'automation-rate-link', report: 'automation_rate_report.html' },
-                    { id: 'prd-summary-link', report: 'prd_summary.html' },
-                    { id: 'coverage-link', report: 'test_coverage_report.html' }
-                ];
-
-                linkMap.forEach(item => {
-                    const element = document.getElementById(item.id);
-                    if (element) {
-                        element.href = getReportUrl(item.report);
-                    }
-                });
-
-                // Set initial text for non-link elements if placeholder replacement failed (for local testing)
-                if (LATEST_BUILD_NUMBER.startsWith('{{')) {
-                    document.getElementById('build-number').textContent = 'N/A (Run script first)';
-                    document.getElementById('run-timestamp').textContent = 'N/A (Run script first)';
-                    
-                    // Also update the Allure card's displayed build number placeholder
-                    const allureHeaderSpan = document.querySelector('#allure-build-number');
-                    if (allureHeaderSpan) {
-                         allureHeaderSpan.textContent = 'N/A';
-                    }
-                }
-            });
-        </script>
-        
-        <!-- Report Links Container -->
+        <!-- Reports Grid -->
         <div class="space-y-4">
-
-            <!-- Allure Report Card (Direct Link) -->
-            <!-- This link now points to the served static file, relying on the external web host (e.g., Netlify) 
-                 to provide the necessary server environment for Allure's XHR data loading. -->
-            <a href="#" id="allure-link" class="group block p-6 bg-red-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative border border-red-200" target="_blank">
+            
+            <!-- 1. Allure Report Link -->
+            <a href="reports/latest/allure-report/index.html" class="group relative flex items-center justify-between p-6 bg-white rounded-xl shadow hover:shadow-lg transition duration-200 transform hover:scale-[1.01] hover:bg-gray-50 border border-gray-200">
                 <div class="flex items-start">
-                    <!-- Icon (e.g., Bar Chart) -->
-                    <svg class="w-8 h-8 text-red-700 mr-4 group-hover:text-red-800 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-0h-4M18 10V6m-2 4h4m-2 2v4m-4-0V8m8 8V8m-4 8V8m8 0V4"></path></svg>
-                    <div>
-                        <h3 class="text-xl font-semibold text-gray-800 group-hover:text-red-700">
-                            Comprehensive Allure Test Report (Build #<span id="allure-build-number" class="font-bold">3</span>)
-                        </h3>
-                        <p class="text-sm text-gray-500 mt-1">
-                            Click to view the fully interactive, served report with history, graphs, and steps.
-                        </p>
-                    </div>
-                </div>
-                <!-- Arrow Icon -->
-                <svg class="w-5 h-5 text-red-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-            </a>
-
-
-            <!-- Validation Plan Card -->
-            <a href="#" id="validation-plan-link" class="group block p-6 bg-gray-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative" target="_blank">
-                <div class="flex items-start">
-                    <!-- Icon (e.g., Clipboard/Checklist) -->
-                    <svg class="w-8 h-8 text-blue-500 mr-4 group-hover:text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5l3-3m0 0l3 3m-3-3v10"></path></svg>
-                    <div>
-                        <h3 class="text-xl font-semibold text-gray-800 group-hover:text-blue-700">
-                            Validation Plan Document
-                        </h3>
-                        <p class="text-sm text-gray-500 mt-1">
-                            The formal document detailing the validation strategy and acceptance criteria.
-                        </p>
-                    </div>
-                </div>
-                <!-- Arrow Icon -->
-                <svg class="w-5 h-5 text-blue-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-            </a>
-
-            <!-- Automation Rate Card -->
-            <a href="#" id="automation-rate-link" class="group block p-6 bg-gray-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative" target="_blank">
-                <div class="flex items-start">
-                    <!-- Icon (e.g., Trending Up) -->
-                    <svg class="w-8 h-8 text-green-500 mr-4 group-hover:text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    <!-- Icon (e.g., Checkbox) -->
+                    <svg class="w-8 h-8 text-green-500 mr-4 group-hover:text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     <div>
                         <h3 class="text-xl font-semibold text-gray-800 group-hover:text-green-700">
+                            Allure Test Report
+                        </h3>
+                        <p class="text-sm text-gray-500 mt-1">
+                            Comprehensive test results, failures, trends, and execution details.
+                        </p>
+                    </div>
+                </div>
+                <!-- Arrow Icon -->
+                <svg class="w-5 h-5 text-green-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            </a>
+
+            <!-- 2. Validation Plan Link -->
+            <a href="reports/latest/Validation_Plan.html" class="group relative flex items-center justify-between p-6 bg-white rounded-xl shadow hover:shadow-lg transition duration-200 transform hover:scale-[1.01] hover:bg-gray-50 border border-gray-200">
+                <div class="flex items-start">
+                    <!-- Icon (e.g., Clipboard) -->
+                    <svg class="w-8 h-8 text-indigo-500 mr-4 group-hover:text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 group-hover:text-indigo-700">
+                            Validation Plan Report
+                        </h3>
+                        <p class="text-sm text-gray-500 mt-1">
+                            Alignment between requirements and tested scenarios (Requirement Traceability Matrix).
+                        </p>
+                    </div>
+                </div>
+                <!-- Arrow Icon -->
+                <svg class="w-5 h-5 text-indigo-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            </a>
+
+            <!-- 3. Automation Rate Link -->
+            <a href="reports/latest/automation_rate_report.html" class="group relative flex items-center justify-between p-6 bg-white rounded-xl shadow hover:shadow-lg transition duration-200 transform hover:scale-[1.01] hover:bg-gray-50 border border-gray-200">
+                <div class="flex items-start">
+                    <!-- Icon (e.g., Chart) -->
+                    <svg class="w-8 h-8 text-yellow-500 mr-4 group-hover:text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 7h12a2 2 0 002-2V5a2 2 0 00-2-2H6a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 group-hover:text-yellow-700">
                             Automation Rate Report
                         </h3>
                         <p class="text-sm text-gray-500 mt-1">
-                            Tracks automation coverage percentage across all scenarios.
+                            Trend analysis showing the ratio of automated vs. manual test cases over time.
                         </p>
                     </div>
                 </div>
                 <!-- Arrow Icon -->
-                <svg class="w-5 h-5 text-green-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-            </a>
-            
-            <!-- PRD Summary Card -->
-            <a href="#" id="prd-summary-link" class="group block p-6 bg-gray-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative" target="_blank">
-                <div class="flex items-start">
-                    <!-- Icon (e.g., Document) -->
-                    <svg class="w-8 h-8 text-yellow-500 mr-4 group-hover:text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                    <div>
-                        <h3 class="text-xl font-semibold text-gray-800 group-hover:text-yellow-700">
-                            PRD Coverage Summary
-                        </h3>
-                        <p class="text-sm text-gray-500 mt-1">
-                            Traceability matrix showing test coverage against Product Requirements Document.
-                        </p>
-                    </div>
-                </div>
-                <!-- Arrow Icon -->
-                <svg class="w-5 h-5 text-yellow-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                <svg class="w-5 h-5 text-yellow-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
             </a>
 
-            <!-- Test Coverage Report Card -->
-            <a href="#" id="coverage-link" class="group block p-6 bg-gray-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative" target="_blank">
+            <!-- 4. PRD Summary Link -->
+            <a href="reports/latest/prd_summary.html" class="group relative flex items-center justify-between p-6 bg-white rounded-xl shadow hover:shadow-lg transition duration-200 transform hover:scale-[1.01] hover:bg-gray-50 border border-gray-200">
+                <div class="flex items-start">
+                    <!-- Icon (e.g., Document) -->
+                    <svg class="w-8 h-8 text-red-500 mr-4 group-hover:text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 group-hover:text-red-700">
+                            PRD Summary Report
+                        </h3>
+                        <p class="text-sm text-gray-500 mt-1">
+                            High-level status of the product requirements document (PRD) coverage.
+                        </p>
+                    </div>
+                </div>
+                <!-- Arrow Icon -->
+                <svg class="w-5 h-5 text-red-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            </a>
+
+            <!-- 5. Test Coverage Link -->
+            <a href="reports/latest/test_coverage_report.html" class="group relative flex items-center justify-between p-6 bg-white rounded-xl shadow hover:shadow-lg transition duration-200 transform hover:scale-[1.01] hover:bg-gray-50 border border-gray-200">
                 <div class="flex items-start">
                     <!-- Icon (e.g., Code) -->
                     <svg class="w-8 h-8 text-purple-500 mr-4 group-hover:text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
@@ -175,15 +124,10 @@
                     </div>
                 </div>
                 <!-- Arrow Icon -->
-                <svg class="w-5 h-5 text-purple-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                <svg class="w-5 h-5 text-purple-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
             </a>
             
         </div>
-
-        <!-- Footer -->
-        <footer class="mt-10 pt-4 border-t text-center text-sm text-gray-400">
-            Deployed via automated CI/CD pipeline.
-        </footer>
 
     </div>
 

@@ -1,32 +1,11 @@
-netlify.toml
-Base: Defines the starting directory for the build process (repository root).
-
 [build]
 base = "."
-Command:
-This command runs your Python script, which is responsible for:
-1. Running tests (via Docker/Pytest)
-2. Generating reports into the 'reports' directory (including the 'allure-report' subfolder).
-3. Generating the crucial '_redirects' file.
-4. Updating the 'index.html' dashboard.
-5. Committing and pushing the files to trigger the Netlify deploy.
-Note: Netlify will deploy the results of this Git push on the next build cycle.
-Since your Python script handles the commit/push, we simply need a command that runs it.
-However, to explicitly filter the final deployment content, we use the copy method.
-If you are using a CI system (like GitHub Actions) to run 'run_tests.py'
-and commit the results before Netlify starts its build, you can use the simplest command:
-command = "echo 'Reports already generated and committed. Deploying static files.'"
-If you rely on Netlify to execute the Python script:
-Note: Netlify's build is read-only after cloning. Running Git commands here won't work
-unless you've set up a complex deploy key. The best practice is to assume the reports
-already exist from a previous CI run and simply deploy the static assets.
+The build command creates a 'dist' folder and copies all necessary static assets into it.
 
 command = "mkdir -p dist && cp index.html dist/ && cp _redirects dist/ && cp -r reports dist/"
-Publish: Specifies that ONLY the contents of 'dist' will be deployed publicly.
-This successfully excludes all source code (features, .py files, Dockerfile, etc.).
+This specifies that ONLY the contents of 'dist' will be deployed publicly.
 
 publish = "dist"
-Configuration for serverless functions (if needed later)
 
 [functions]
 directory = "netlify/functions"

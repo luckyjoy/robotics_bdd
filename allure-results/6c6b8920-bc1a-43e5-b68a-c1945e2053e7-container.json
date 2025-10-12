@@ -1,0 +1,1 @@
+{"uuid": "b59f0fd4-20fe-44b1-90d5-f1a1fad0bc6a", "befores": [{"name": "pytestbdd_stepdef_when_the robot moves {direction} by {distance:g}", "status": "passed", "start": 1760288470739, "stop": 1760288470740}], "start": 1760288470739, "stop": 1760288470752}

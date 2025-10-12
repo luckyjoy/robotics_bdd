@@ -1,0 +1,1 @@
+{"uuid": "ec2c65d6-7ae6-4cb5-af9d-742f69c41eca", "befores": [{"name": "pytestbdd_stepdef_then_the robot should return to position [{x:g}, {y:g}, {z:g}]", "status": "passed", "start": 1760288471520, "stop": 1760288471520}], "start": 1760288471520, "stop": 1760288471521}

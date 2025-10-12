@@ -82,14 +82,13 @@ jobs:
           }
           EOF
 
-      # This step will now continue even if tests fail, allowing results to be uploaded.
-      # The job will still be marked as failed, which is the correct CI behavior.
       - name: Run tests
+        id: run_pytest
         continue-on-error: true
         shell: bash
         run: |
           echo "Running pytest navigation tests..."
-          pytest -m sensors --alluredir=allure-results | tee pytest.log
+          pytest -m navigation --alluredir=allure-results | tee pytest.log
 
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
@@ -98,8 +97,12 @@ jobs:
           path: allure-results
           retention-days: 7
 
+      # This new step ensures the entire job is marked as failed if the tests fail.
+      - name: Mark job as failed if tests failed
+        if: steps.run_pytest.outcome == 'failure'
+        run: exit 1
+
   deploy-pages:
-    # This job will now run even if the run-tests job fails.
     if: always()
     runs-on: ubuntu-latest
     needs: run-tests
@@ -158,12 +161,16 @@ jobs:
           SITE_DIR="site"
           HISTORY_DIR="_history"
 
-          rm -rf "$SITE_DIR"
+          # Copy previous build history into the site directory before generating new content
+          if [ -d "$HISTORY_DIR" ]; then
+              cp -r "$HISTORY_DIR"/* "$SITE_DIR/" 2>/dev/null || echo "No previous builds found in history to copy."
+          fi
+          
           mkdir -p "$SITE_DIR/latest"
           
           for OS in ubuntu-latest windows-latest; do
             RESULTS_DIR="allure-results/$OS"
-            HISTORY_SOURCE_DIR="$HISTORY_DIR/latest/$OS/history"
+            HISTORY_SOURCE_DIR="$SITE_DIR/latest/$OS/history" # Use history from the site dir
             REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
 
             if [ -d "$HISTORY_SOURCE_DIR" ]; then
@@ -203,7 +210,7 @@ jobs:
 
           echo "</ul><hr><h2>Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
 
-          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regex ".*/[0-9]+$" | xargs -n 1 basename | sort -nr)
+          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" | xargs -n 1 basename | sort -nr)
           for BUILD in $BUILDS; do
             for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
@@ -221,7 +228,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: site
           publish_branch: gh-pages
-          force_orphan: true
+          # The "force_orphan" option was removed to prevent deleting the branch history.
           commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
 
       - name: Add workflow badges to summary

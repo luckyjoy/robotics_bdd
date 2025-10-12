@@ -1,16 +1,14 @@
 [build]
-Defines the starting directory for the build process (repository root).
-
+# Defines the starting directory for the build process (repository root).
 base = "."
-The build command runs the Python script to prepare the reports.
-Then, it creates a 'dist' folder and copies the final assets (index, redirects, reports) for deployment.
 
+# The build command runs the Python script to prepare the reports.
+# Then, it creates a 'dist' folder and copies the final assets (index, redirects, reports) for deployment.
 command = "rm -rf .netlify/cache && python run_docker.py 100 && mkdir -p dist && cp index.html dist/ && cp _redirects dist/ && cp -r reports dist/"
-This specifies that ONLY the contents of 'dist' will be deployed publicly.
 
+# This specifies that ONLY the contents of 'dist' will be deployed publicly.
 publish = "dist"
 
 [functions]
-Defines the directory for serverless functions, if used.
-
+# Defines the directory for serverless functions, if used.
 directory = "netlify/functions"

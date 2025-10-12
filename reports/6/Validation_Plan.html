@@ -1,0 +1,1702 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Robotics BDD Simulation Framework Validation Plan</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .resizable-container { display: flex; height: 100vh; }
+  #toc-panel { min-width: 250px; max-width: 50%; }
+  #resize-bar { width: 8px; cursor: ew-resize; background-color: #e2e8f0; transition: background-color 0.2s ease; }
+  #resize-bar:hover { background-color: #cbd5e1; }
+  #content-panel { flex-grow: 1; overflow-y: auto; }
+  /* Rotate the chevron icon only when the details element is open */
+  details > summary .chevron { transform: rotate(0deg); }
+  details[open] > summary .chevron { transform: rotate(90deg); }
+</style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+<div class="resizable-container">
+  <div id="toc-panel" class="flex-shrink-0 bg-white shadow-xl p-6 overflow-y-auto">
+    <h2 class="text-2xl font-bold mb-4 text-gray-900">📑 Table of Contents</h2>
+    <nav>
+      <ul class="space-y-1 text-sm font-medium">
+        <li><a href="#product-summary" class="block p-2 rounded hover:bg-gray-200">Product Summary</a></li>
+        <li><a href="#validation-summary" class="block p-2 rounded hover:bg-gray-200">Validation Summary</a></li>
+        <li><a href="#test-purposes" class="block p-2 rounded hover:bg-gray-200">Test Purposes</a></li>
+        <li><a href="#framework-capabilities" class="block p-2 rounded hover:bg-gray-200">Framework Capabilities</a></li>
+        <li><a href="#platform-support" class="block p-2 rounded hover:bg-gray-200">Platform Support</a></li>
+        <li><a href="#key-features" class="block p-2 rounded hover:bg-gray-200">Key Features</a></li>
+        <li><a href="#challenges" class="block p-2 rounded hover:bg-gray-200">Challenges</a></li>
+        <li><a href="#limitations" class="block p-2 rounded hover:bg-gray-200">Limitations</a></li>
+        <li><a href="#schedule-and-roles" class="block p-2 rounded hover:bg-gray-200">Schedule & Roles</a></li>
+        <li><a href="#automated-features" class="block p-2 rounded hover:bg-gray-200">Automated Features</a></li>
+        <li><a href="#manual-features" class="block p-2 rounded hover:bg-gray-200">Manual Features</a></li>
+        <li><a href="#traceability-matrix" class="block p-2 rounded hover:bg-gray-200">Traceability Matrix</a></li>
+        <li><a href="#revisions" class="block p-2 rounded hover:bg-gray-200">Revision History</a></li>
+      </ul>
+    </nav>
+  </div>
+
+  <div id="resize-bar"></div>
+
+  <div id="content-panel" class="flex-1 p-8 overflow-y-auto">
+    <header class="bg-white rounded-xl shadow-lg p-6 mb-8">
+      <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Robotics BDD Simulation Framework Validation Plan</h1>
+      <p class="text-gray-500 text-sm mb-4">Auto Generated on 2025-10-11 16:12:09</p> <div class="text-gray-600 text-lg">
+        <span class="font-semibold">Version: 1.2.0</span>
+        <span class="mx-2 text-gray-400">|</span> 
+        <span class="font-semibold">Revised Date: 2025-09-30</span>
+      </div>
+    </header>
+
+    <section id="product-summary" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <h2 class="text-2xl font-semibold text-gray-900 mb-4">Product Summary</h2>
+      <ul class="list-disc list-inside text-gray-600 space-y-1">
+        <li><strong>Product Name:</strong> Robotics BDD Simulation Framework</li>
+        <li><strong>Product Model:</strong> BDD-Sim-PyBullet</li>
+        <li><strong>Product Manufacturer:</strong> TBD</li>
+        <li><strong>Target System Component:</strong> Pioneer3DX Mobile Robot (Simulated)</li>
+        <li><strong>Target System Version:</strong> 1.20.34</li>
+        <li><strong>Target Environment:</strong> PyBullet and Gazebo Simulation Environments</li>
+        <li><strong>Test Framework:</strong> Gherkin (Feature files), Pytest (Step definitions), Allure HTML Report</li>
+      </ul>
+    </section>
+
+    <section id="validation-summary" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <h2 class="text-2xl font-semibold text-gray-900 mb-4">Validation Summary</h2>
+      <p class="text-gray-600"><strong>Objective:</strong> To rigorously validate the BDD simulation framework's adherence to specified robot behaviors (Navigation, Safety, Sensing, Locomotion) within physics-based environments.</p>
+      
+      <div class="grid md:grid-cols-2 gap-6 mt-6 pt-4 border-t border-gray-200">
+        <div>
+          <h3 class="text-xl font-semibold text-green-700 mb-3">In Scope</h3>
+          <ul class="list-disc list-inside space-y-2">
+            <li class="text-green-700">Navigation: Movement in 3D, diagonal, zigzag, and circular paths.</li><li class="text-green-700">Pick_and_Place: Object manipulation and blocked gripper scenarios.</li><li class="text-green-700">Safety: Boundary constraints and single/multi-obstacle avoidance.</li><li class="text-green-700">Sensing: Kalman filter convergence and object detection accuracy.</li><li class="text-green-700">Locomotion: Walking and crouching state verification.</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="text-xl font-semibold text-red-700 mb-3">Out of Scope</h3>
+          <ul class="list-disc list-inside space-y-2">
+            <li class="text-red-700">Performance tests (e.g., maximum CPU usage, loop timing) are not included in this scope.</li><li class="text-red-700">Real-world hardware deployment or testing is outside the scope of the simulation framework validation.</li><li class="text-red-700">Advanced AI/ML path planning algorithms beyond basic navigation commands.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="test-purposes" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <h2 class="text-2xl font-semibold text-gray-900 mb-4">Test Purposes</h2>
+      <ul class="list-disc list-inside text-gray-600">
+        <li>Ensure simulation physics models (PyBullet) accurately reflect the Pioneer3DX dynamics.</li><li>Verify the correct implementation of the robot's control logic against Gherkin specifications.</li><li>Automate the regression suite for every code commit.</li><li>Provide clear traceability from requirements (requirements.csv) to test results (Allure Report).</li>
+      </ul>
+    </section>
+
+    <section id="framework-capabilities" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <h2 class="text-2xl font-semibold text-gray-900 mb-4">Framework Capabilities</h2>
+      <ul class="list-disc list-inside text-gray-600">
+        <li>Python 3.10+ Behave/Pytest-BDD framework execution.</li><li>Dynamic scenario execution using Scenario Outlines and data tables.</li><li>Simulation state management (resetting environment and robot position).</li><li>Real-time position and velocity validation checks.</li>
+      </ul>
+    </section>
+
+    <section id="platform-support" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <h2 class="text-2xl font-semibold text-gray-900 mb-4">Platform Support</h2>
+      <div class="grid md:grid-cols-3 gap-6 text-gray-600">
+        <div>
+          <h3 class="font-semibold">Operating Systems</h3>
+          <ul class="list-disc list-inside">
+            <li>Linux (Ubuntu 20.04+ Recommended)</li><li>Windows 10/11</li><li>macOS (Limited Support)</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="font-semibold">Architectures</h3>
+          <ul class="list-disc list-inside">
+            <li>x86-64 (Intel and AMD)</li><li>ARM64 (Simulation Host/Deployment Target)</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="font-semibold">Virtualization / Containerization</h3>
+          <ul class="list-disc list-inside">
+            <li>Docker Containers (Recommended for consistency)</li><li>QEMU/KVM Virtual Machines</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="key-features" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <h2 class="text-2xl font-semibold text-gray-900 mb-4">Key Features</h2>
+      <ul class="list-disc list-inside text-gray-600">
+        <li>BDD-driven, human-readable acceptance criteria for robot behaviors.</li><li>Real-time state and physics validation checks within the simulation.</li><li>High-fidelity positional and sensor data testing.</li><li>Support for multiple simulation engines (PyBullet/Gazebo).</li><li>Automated regression reporting via Allure Test Report.</li>
+      </ul>
+    </section>
+
+    <section id="challenges" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <h2 class="text-2xl font-semibold text-gray-900 mb-4">Challenges</h2>
+      <ul class="list-disc list-inside text-gray-600">
+        <li>Ensuring simulation physics models (PyBullet) accurately reflect the Pioneer3DX dynamics.</li><li>Maintaining stable and consistent behavior across different simulation engine versions (PyBullet vs. Gazebo).</li><li>Handling race conditions during real-time state validation checks.</li><li>Integrating the framework seamlessly into CI/CD pipelines.</li>
+      </ul>
+    </section>
+
+    <section id="limitations" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <h2 class="text-2xl font-semibold text-gray-900 mb-4">Limitations</h2>
+      <ul class="list-disc list-inside text-gray-600">
+        <li>Manual tests are required for subjective evaluation (e.g., visual smoothness, physics realism).</li><li>Performance tests (e.g., maximum CPU usage, loop timing) are not currently included in the BDD scope.</li><li>Requires a running PyBullet or Gazebo instance for execution.</li>
+      </ul>
+    </section>
+
+    <section id="schedule-and-roles" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <h2 class="text-2xl font-semibold text-gray-900 mb-4">Schedule & Roles</h2>
+      <p class="text-gray-600"><strong>Estimated Duration:</strong> 1 days</p>
+      <div class="mt-4 grid md:grid-cols-2 gap-4 text-gray-600">
+        <div><strong>QA Manager:</strong> TBD</div>
+        <div><strong>Validation Engineer:</strong> TBD</div>
+      </div>
+    </section>
+
+    <section id="automated-features" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <details>
+        <summary class="flex items-center justify-between cursor-pointer text-2xl font-semibold text-gray-900 hover:text-blue-700">
+          Automated Features
+          <span class="chevron transition-transform duration-300">▶</span>
+        </summary>
+        <div class="mt-4">
+          <details id="navigation-feature" class="mb-8 bg-white rounded-xl shadow-md">
+  <summary class="flex items-center justify-between cursor-pointer px-6 py-4 text-2xl font-semibold text-gray-900 hover:text-blue-700 transition-colors duration-150">
+    navigation.feature
+    <span class="chevron transition-transform duration-300">▶</span>
+  </summary>
+  <div class="p-6 border-t border-gray-200">
+    <p class="text-gray-600 mb-6"><strong>Feature:</strong> Robot Navigation</p>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_NAV_01&gt; Robot moves in a single direction</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given the robot is at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>When the robot moves <span class="text-blue-600 font-bold">direction</span> by <span class="text-blue-600 font-bold">distance</span></li>
+          <li>Then the robot should be at position [<span class="text-blue-600 font-bold">end_x</span>, <span class="text-blue-600 font-bold">end_y</span>, <span class="text-blue-600 font-bold">end_z</span>]</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">direction</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">distance</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">forward</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">backward</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">left</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">right</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">up</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">down</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">#</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">right</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_NAV_02&gt; Robot moves diagonally in 3D space</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given the robot is at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>When the robot moves diagonally by [<span class="text-blue-600 font-bold">dx</span>, <span class="text-blue-600 font-bold">dy</span>, <span class="text-blue-600 font-bold">dz</span>]</li>
+          <li>Then the robot should be at position [<span class="text-blue-600 font-bold">end_x</span>, <span class="text-blue-600 font-bold">end_y</span>, <span class="text-blue-600 font-bold">end_z</span>]</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">dx</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">dy</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">dz</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">-1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">-1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">-1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">-1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">-1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">-1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">-1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">-1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_NAV_03&gt; Robot moves forward/backward multiple steps</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given the robot is at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>When the robot moves <span class="text-blue-600 font-bold">direction</span> by <span class="text-blue-600 font-bold">distance</span></li>
+          <li>Then the robot should be at position [<span class="text-blue-600 font-bold">end_x</span>, <span class="text-blue-600 font-bold">end_y</span>, <span class="text-blue-600 font-bold">end_z</span>]</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">direction</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">distance</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">forward</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">backward</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">up</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">down</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_NAV_04&gt; Robot zigzags forward and backward</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given the robot is at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>When the robot moves <span class="text-blue-600 font-bold">pattern</span> by <span class="text-blue-600 font-bold">dist1</span> and <span class="text-blue-600 font-bold">dist2</span> twice</li>
+          <li>Then the robot should be at position [<span class="text-blue-600 font-bold">end_x</span>, <span class="text-blue-600 font-bold">end_y</span>, <span class="text-blue-600 font-bold">end_z</span>]</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">pattern</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">dist1</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">dist2</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">forward and right</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">backward and left</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_NAV_05&gt; Robot moves in a circle and returns to origin</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given the robot is at position [0, 0, 0]</li>
+          <li>When the robot moves in a <span class="text-blue-600 font-bold">direction</span> circle with radius 1</li>
+          <li>Then the robot should return to position [0, 0, 0]</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">direction</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">clockwise</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">counter-clockwise</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+  </div>
+</details>
+
+<details id="pick-and-place-feature" class="mb-8 bg-white rounded-xl shadow-md">
+  <summary class="flex items-center justify-between cursor-pointer px-6 py-4 text-2xl font-semibold text-gray-900 hover:text-blue-700 transition-colors duration-150">
+    pick_and_place.feature
+    <span class="chevron transition-transform duration-300">▶</span>
+  </summary>
+  <div class="p-6 border-t border-gray-200">
+    <p class="text-gray-600 mb-6"><strong>Feature:</strong> Pick and Place</p>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_PAP_01&gt; Robot picks an object and moves it to different positions</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a robot with a gripper at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>When the robot picks up an object</li>
+          <li>And the robot moves the object to position [<span class="text-blue-600 font-bold">end_x</span>, <span class="text-blue-600 font-bold">end_y</span>, <span class="text-blue-600 font-bold">end_z</span>]</li>
+          <li>Then the object should be at position [<span class="text-blue-600 font-bold">end_x</span>, <span class="text-blue-600 font-bold">end_y</span>, <span class="text-blue-600 font-bold">end_z</span>]</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">3</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150"> &lt;REQ_PAP_02&gt; &lt;REQ_PAP_04&gt; Robot cannot pick object with blocked gripper at different positions</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a robot with a blocked gripper at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>When the robot tries to pick up an object</li>
+          <li>Then the pick should fail</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">3</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_PAP_03&gt; Robot picks and moves object to various positions</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a robot with a gripper at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>When the robot picks up an object</li>
+          <li>And the robot moves the object to position [<span class="text-blue-600 font-bold">end_x</span>, <span class="text-blue-600 font-bold">end_y</span>, <span class="text-blue-600 font-bold">end_z</span>]</li>
+          <li>Then the object should be at position [<span class="text-blue-600 font-bold">end_x</span>, <span class="text-blue-600 font-bold">end_y</span>, <span class="text-blue-600 font-bold">end_z</span>]</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">3</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+  </div>
+</details>
+
+<details id="safety-feature" class="mb-8 bg-white rounded-xl shadow-md">
+  <summary class="flex items-center justify-between cursor-pointer px-6 py-4 text-2xl font-semibold text-gray-900 hover:text-blue-700 transition-colors duration-150">
+    safety.feature
+    <span class="chevron transition-transform duration-300">▶</span>
+  </summary>
+  <div class="p-6 border-t border-gray-200">
+    <p class="text-gray-600 mb-6"><strong>Feature:</strong> Robot safety</p>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_SAF_01&gt; Robot does not cross boundary from various positions</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a robot at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>When the robot attempts to move to [<span class="text-blue-600 font-bold">target_x</span>, <span class="text-blue-600 font-bold">target_y</span>, <span class="text-blue-600 font-bold">target_z</span>]</li>
+          <li>Then the robot should remain within boundaries</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">target_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">target_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">target_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">3</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">-1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">-1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">4</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">-2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">3</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">10</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">10</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">10</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"># far out-of-bounds</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"># move within bounds</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_SAF_02&gt; Robot arm avoids single obstacle</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a robot at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>And an obstacle is at [<span class="text-blue-600 font-bold">obs_x</span>, <span class="text-blue-600 font-bold">obs_y</span>, <span class="text-blue-600 font-bold">obs_z</span>]</li>
+          <li>When the robot moves its arm to [<span class="text-blue-600 font-bold">target_x</span>, <span class="text-blue-600 font-bold">target_y</span>, <span class="text-blue-600 font-bold">target_z</span>]</li>
+          <li>Then the robot arm should stop before the obstacle</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obs_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obs_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obs_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">target_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">target_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">target_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"># diagonal collision</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"># vertical collision</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_SAF_03&gt; Robot arm avoids multiple obstacles</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a robot at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>And obstacles are at [<span class="text-blue-600 font-bold">obs1_x</span>, <span class="text-blue-600 font-bold">obs1_y</span>, <span class="text-blue-600 font-bold">obs1_z</span>] and [<span class="text-blue-600 font-bold">obs2_x</span>, <span class="text-blue-600 font-bold">obs2_y</span>, <span class="text-blue-600 font-bold">obs2_z</span>]</li>
+          <li>When the robot moves its arm to [<span class="text-blue-600 font-bold">target_x</span>, <span class="text-blue-600 font-bold">target_y</span>, <span class="text-blue-600 font-bold">target_z</span>]</li>
+          <li>Then the robot arm should stop before the nearest obstacle</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obs1_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obs1_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obs1_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obs2_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obs2_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obs2_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">target_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">target_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">target_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">3</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+  </div>
+</details>
+
+<details id="sensors-feature" class="mb-8 bg-white rounded-xl shadow-md">
+  <summary class="flex items-center justify-between cursor-pointer px-6 py-4 text-2xl font-semibold text-gray-900 hover:text-blue-700 transition-colors duration-150">
+    sensors.feature
+    <span class="chevron transition-transform duration-300">▶</span>
+  </summary>
+  <div class="p-6 border-t border-gray-200">
+    <p class="text-gray-600 mb-6"><strong>Feature:</strong> Sensor and Filtering</p>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_SEN_01&gt; Kalman filter converges to an accurate estimate</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a robot with a Kalman filter</li>
+          <li>When noisy measurements of position [<span class="text-blue-600 font-bold">true_x</span>, <span class="text-blue-600 font-bold">true_y</span>, <span class="text-blue-600 font-bold">true_z</span>] are applied</li>
+          <li>Then the filter's estimate should converge approximately to [<span class="text-blue-600 font-bold">true_x</span>, <span class="text-blue-600 font-bold">true_y</span>, <span class="text-blue-600 font-bold">true_z</span>]</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">true_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">true_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">true_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_SEN_02&gt; Sensor detects objects at various positions within range</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a sensor with range <span class="text-blue-600 font-bold">range</span></li>
+          <li>And an object is placed at [<span class="text-blue-600 font-bold">obj_x</span>, <span class="text-blue-600 font-bold">obj_y</span>, <span class="text-blue-600 font-bold">obj_z</span>]</li>
+          <li>When the sensor scans</li>
+          <li>Then the object should be detected</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">range</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obj_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obj_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obj_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2.0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2.0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.4</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">8.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">7.4</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">9</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">8</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_SEN_03&gt; Sensor does not detect objects out of range</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a sensor with range <span class="text-blue-600 font-bold">range</span></li>
+          <li>And an object is placed at [<span class="text-blue-600 font-bold">obj_x</span>, <span class="text-blue-600 font-bold">obj_y</span>, <span class="text-blue-600 font-bold">obj_z</span>]</li>
+          <li>When the sensor scans</li>
+          <li>Then the object should not be detected</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">range</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obj_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obj_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">obj_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1.0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+  </div>
+</details>
+
+<details id="walking-feature" class="mb-8 bg-white rounded-xl shadow-md">
+  <summary class="flex items-center justify-between cursor-pointer px-6 py-4 text-2xl font-semibold text-gray-900 hover:text-blue-700 transition-colors duration-150">
+    walking.feature
+    <span class="chevron transition-transform duration-300">▶</span>
+  </summary>
+  <div class="p-6 border-t border-gray-200">
+    <p class="text-gray-600 mb-6"><strong>Feature:</strong> Robot Walking</p>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_WAL_01&gt; Robot starts walking from different positions</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a robot at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>When the robot starts walking</li>
+          <li>Then the robot should be walking</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_WAL_02&gt; Robot crouches from different positions</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a robot at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>When the robot crouches so that its chest touches the ground</li>
+          <li>Then the robot should be in crouched position</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_WAL_03&gt; Robot walks forward by variable distances</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a robot at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>]</li>
+          <li>When the robot walks forward by <span class="text-blue-600 font-bold">distance</span> units</li>
+          <li>Then the robot should be at position [<span class="text-blue-600 font-bold">end_x</span>, <span class="text-blue-600 font-bold">end_y</span>, <span class="text-blue-600 font-bold">end_z</span>]</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">distance</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">end_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">3</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">3</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">3</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">3</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">24</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">29</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">50</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">51</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">20</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">13</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">10</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+  </div>
+</details>
+
+
+        </div>
+      </details>
+    </section>
+
+    <section id="manual-features" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <details>
+        <summary class="flex items-center justify-between cursor-pointer text-2xl font-semibold text-gray-900 hover:text-blue-700">
+          Manual Features
+          <span class="chevron transition-transform duration-300">▶</span>
+        </summary>
+        <div class="mt-4">
+          <details id="document-inspection-feature" class="mb-8 bg-white rounded-xl shadow-md">
+  <summary class="flex items-center justify-between cursor-pointer px-6 py-4 text-2xl font-semibold text-gray-900 hover:text-blue-700 transition-colors duration-150">
+    document_inspection.feature
+    <span class="chevron transition-transform duration-300">▶</span>
+  </summary>
+  <div class="p-6 border-t border-gray-200">
+    <p class="text-gray-600 mb-6"><strong>Feature:</strong> Documentation Quality Inspection</p>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">Comprehensive Document Content and Legal Inspection</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>When I inspect the document "<span class="text-blue-600 font-bold">document</span>" located at "<span class="text-blue-600 font-bold">filepath</span>"</li>
+          <li>Then the Optimization notice revision is verified to be consistent across all documents</li>
+          <li>And I scan the document for broken links using a link checker tool</li>
+          <li>And the tool reports no broken links were found</li>
+          <li>And the document title is correct and includes the proper product name</li>
+          <li>And the document contains no grammatical errors, typos, or ambiguous information</li>
+          <li>And the content is complete, without missing information required by PRDs or IRDs (e.g., What's New, OS Support Matrix)</li>
+          <li>And the document exists and is not empty, with a manageable file size</li>
+          <li>And the proper FTC, privacy compliant notice is available</li>
+          <li>And the Copyright notice with the correct timestamp appears at the end</li>
+          <li>And the approved company logo is used in the document</li>
+          <li>And if applicable, the document is located in the correct localization folder, such as "<span class="text-blue-600 font-bold">language_folder</span>"</li>
+          <li>And the Copyright notice is in the format "Copyright c [year], ABCDEF Corporation. All rights reserved"</li>
+          <li>And the document metadata fields (Author, Title, Subject, Key Words) are relevant and free from destructive information</li>
+          <li>And document printing is allowed</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">document</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">level</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">filepath</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">language_folder</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">User Guide</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">light</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Documentation/en_US/UserGuide.pdf</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">INSTALL_DIR/Documentation/en_US</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">INSTALL</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">light</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Documentation/en_US/INSTALL.txt</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">INSTALL_DIR/Documentation/en_US</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">README</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">light</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Documentation/en_US/README.md</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">INSTALL_DIR/Documentation/en_US</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">User Guide (Japanese)</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">light</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Documentation/ja_JP/UserGuide.pdf</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">INSTALL_DIR/Documentation/ja_JP</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+  </div>
+</details>
+
+<details id="visual-manual-feature" class="mb-8 bg-white rounded-xl shadow-md">
+  <summary class="flex items-center justify-between cursor-pointer px-6 py-4 text-2xl font-semibold text-gray-900 hover:text-blue-700 transition-colors duration-150">
+    visual_manual.feature
+    <span class="chevron transition-transform duration-300">▶</span>
+  </summary>
+  <div class="p-6 border-t border-gray-200">
+    <p class="text-gray-600 mb-6"><strong>Feature:</strong> Navigation Visual and Locomotion Fidelity</p>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_NAV_05&gt; Circular path execution is smooth and returns to origin</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given the robot is initialized at position [0, 0, 0]</li>
+          <li>And the required path is a circle with radius 1.5 meters</li>
+          <li>When the robot executes the full circular path</li>
+          <li>Then the robot's final position should be within 0.05 units of the origin [0, 0, 0]</li>
+          <li>And the system should confirm the path tracking error (PTE) was below 0.1 units during the execution</li>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">&lt;REQ_NAV_04&gt; Complex zigzag movement follows trajectory precisely</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given the robot is initialized at position [0, 0, 0]</li>
+          <li>When the robot moves Forward by 2 units</li>
+          <li>And the robot moves Right by 1 unit</li>
+          <li>And the robot moves Forward by 2 units</li>
+          <li>And the robot moves Right by 1 unit</li>
+          <li>Then the robot should be at final position [2, 4, 0] with a tolerance of 0.05 units</li>
+          <li>And the robot's path logging confirms exactly two distinct 90-degree pivots were executed</li>
+        </ul>
+      </div>
+    </details>
+    <details class="mb-4 p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow duration-200">
+      <summary class="cursor-pointer font-bold text-blue-800 hover:text-blue-600 transition-colors duration-150">Robot's chest successfully touches ground after crouch</summary>
+      <div class="mt-4 pl-4 border-l-2 border-gray-300">
+        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+          <li>Given a robot is at position [<span class="text-blue-600 font-bold">start_x</span>, <span class="text-blue-600 font-bold">start_y</span>, <span class="text-blue-600 font-bold">start_z</span>] on a surface</li>
+          <li>When the robot executes the crouch maneuver</li>
+          <li>Then the robot's chest (contact point Z) should be less than 0.01 units from the ground plane</li>
+          <li>And the system state should confirm the robot is in "crouched" posture</li>
+          <div class="mt-4"><strong class="text-sm text-gray-700">Examples:</strong></div>
+          <div class="overflow-x-auto">
+            <table class="w-auto divide-y divide-gray-200 mt-2 rounded-lg overflow-hidden border border-gray-300">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_x</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_y</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">start_z</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0</td>
+                </tr>
+                <tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ul>
+      </div>
+    </details>
+  </div>
+</details>
+
+
+        </div>
+      </details>
+    </section>
+
+    <section id="traceability-matrix" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <details>
+        <summary class="flex items-center justify-between cursor-pointer text-2xl font-semibold text-gray-900 hover:text-blue-700">
+          Traceability Matrix
+          <span class="chevron transition-transform duration-300">▶</span>
+        </summary>
+        <div class="mt-4">
+          
+        <p class="text-gray-600 mb-4">This matrix links each product requirement to the Behave scenarios that validate it, ensuring comprehensive test coverage.</p>
+        <div class="overflow-x-auto rounded-lg shadow-sm border border-gray-200">
+            <table class="min-w-full bg-white rounded-lg">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase">Requirement ID</th>
+                        <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase">Description</th>
+                        <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase">Feature File</th>
+                        <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase">Scenario(s)</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+        <tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_NAV_01</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot shall be able to move a specified distance in any single primary direction (forward, backward, left, right, up, or down) and arrive at the calculated end position.</td>
+<td class="px-6 py-4 text-gray-600">navigation.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_NAV_01> Robot moves in a single direction</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_PAP_01</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot shall successfully pick up an object from a starting 3D position and move it to a different target 3D position, ensuring the object is correctly placed at the destination.</td>
+<td class="px-6 py-4 text-gray-600">pick_and_place.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_PAP_01> Robot picks an object and moves it to different positions</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_SAF_01</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot shall enforce operational boundary constraints by preventing any movement that would result in its position crossing a defined limit.</td>
+<td class="px-6 py-4 text-gray-600">safety.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_SAF_01> Robot does not cross boundary from various positions</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_SEN_01</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The integrated Kalman filter shall process noisy position measurements and converge its output estimate to the true position approximately within acceptable tolerance limits.</td>
+<td class="px-6 py-4 text-gray-600">sensors.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_SEN_01> Kalman filter converges to an accurate estimate</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_WAL_01</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot shall be able to successfully initiate and maintain a walking state from various starting 3D positions.</td>
+<td class="px-6 py-4 text-gray-600">walking.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_WAL_01> Robot starts walking from different positions</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_NAV_02</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot shall be able to move diagonally in 3D space by accepting deltas for Δx, Δy, and Δz offsets and arriving at the calculated end position.</td>
+<td class="px-6 py-4 text-gray-600">navigation.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_NAV_02> Robot moves diagonally in 3D space</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_PAP_02</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot shall detect when the gripper mechanism is blocked and prevent the initiation of a pick operation to avoid mechanical failure.</td>
+<td class="px-6 py-4 text-gray-600">pick_and_place.feature</td>
+<td class="px-6 py-4 text-gray-600"> <REQ_PAP_02> <REQ_PAP_04> Robot cannot pick object with blocked gripper at different positions</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_SAF_02</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot's arm movement system shall incorporate collision detection and automatically stop before physically contacting a detected single obstacle.</td>
+<td class="px-6 py-4 text-gray-600">safety.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_SAF_02> Robot arm avoids single obstacle</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_SEN_02</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot's sensor system shall successfully detect and report the presence of objects located within the sensor's specified operational range.</td>
+<td class="px-6 py-4 text-gray-600">sensors.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_SEN_02> Sensor detects objects at various positions within range</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_WAL_02</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot shall be able to execute a crouch maneuver, ensuring its chest successfully reaches the ground level, regardless of its starting position.</td>
+<td class="px-6 py-4 text-gray-600">walking.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_WAL_02> Robot crouches from different positions</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_NAV_03</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot shall be able to execute single-direction movements (forward, backward, up, down) over multiple steps/units of distance.</td>
+<td class="px-6 py-4 text-gray-600">navigation.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_NAV_03> Robot moves forward/backward multiple steps</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_PAP_03</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The pick-and-place system shall reliably execute the sequence across a diverse set of varying starting and ending 3D coordinates.</td>
+<td class="px-6 py-4 text-gray-600">pick_and_place.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_PAP_03> Robot picks and moves object to various positions</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_SAF_03</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot's arm collision avoidance system shall correctly identify and stop movement before contacting the nearest obstacle when multiple obstacles are present in the path.</td>
+<td class="px-6 py-4 text-gray-600">safety.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_SAF_03> Robot arm avoids multiple obstacles</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_SEN_03</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot's sensor system shall accurately filter out and not report the presence of objects located outside the sensor's specified operational range.</td>
+<td class="px-6 py-4 text-gray-600">sensors.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_SEN_03> Sensor does not detect objects out of range</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_WAL_03</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot shall be able to walk forward a variable, specified distance and accurately stop at the calculated final 3D position.</td>
+<td class="px-6 py-4 text-gray-600">walking.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_WAL_03> Robot walks forward by variable distances</td>
+</tr>
+<tr>
+<td rowspan="2" class="px-6 py-4 font-medium text-gray-700">REQ_NAV_04</td>
+<td rowspan="2" class="px-6 py-4 text-gray-600">The robot shall be able to perform complex movement patterns, such as zigzagging (alternating movements in two orthogonal directions) twice, and confirm its final position.</td>
+<td class="px-6 py-4 text-gray-600">navigation.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_NAV_04> Robot zigzags forward and backward</td>
+</tr>
+<tr>
+<td class="px-6 py-4 text-gray-600">visual_manual.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_NAV_04> Complex zigzag movement follows trajectory precisely</td>
+</tr>
+<tr>
+<td rowspan="1" class="px-6 py-4 font-medium text-gray-700">REQ_PAP_04</td>
+<td rowspan="1" class="px-6 py-4 text-gray-600">The robot shall consistently prevent object pick-up when the gripper is obstructed, verifying failure states at different initial positions.</td>
+<td class="px-6 py-4 text-gray-600">pick_and_place.feature</td>
+<td class="px-6 py-4 text-gray-600"> <REQ_PAP_02> <REQ_PAP_04> Robot cannot pick object with blocked gripper at different positions</td>
+</tr>
+<tr>
+<td rowspan="2" class="px-6 py-4 font-medium text-gray-700">REQ_NAV_05</td>
+<td rowspan="2" class="px-6 py-4 text-gray-600">The robot shall be able to execute a complete circular path (clockwise or counter-clockwise) with a specified radius and accurately return to its starting position.</td>
+<td class="px-6 py-4 text-gray-600">navigation.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_NAV_05> Robot moves in a circle and returns to origin</td>
+</tr>
+<tr>
+<td class="px-6 py-4 text-gray-600">visual_manual.feature</td>
+<td class="px-6 py-4 text-gray-600"><REQ_NAV_05> Circular path execution is smooth and returns to origin</td>
+</tr>
+</tbody></table></div>
+        </div>
+      </details>
+    </section>
+
+    <section id="revisions" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+      <h2 class="text-2xl font-semibold text-gray-900 mb-4">Revision History</h2>
+      <ul class="list-disc list-inside text-gray-600">
+        <li><strong>1.0.0</strong> - N/A: Initial structure created for the Robotics BDD Simulation Framework Validation Plan.</li><li><strong>1.1.0</strong> - N/A: Updated product-specific fields: TargetRobotModel, FirmwareVersion, and confirmed Architectures for the robotics simulation environment.</li><li><strong>1.2.0</strong> - N/A: Refactored key names (e.g., TargetRobotModel -> TargetSystemComponent, FirmwareVersion -> TargetSystemVersion, Interface -> TestFramework) to align with the generic validation plan template.</li>
+      </ul>
+    </section>
+
+    <footer class="text-center text-sm text-gray-500 py-6">
+      <p><strong>© 2025 Bang Thien Nguyen. All rights reserved.</strong></p>
+    </footer>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const tocPanel = document.getElementById('toc-panel');
+  const resizeBar = document.getElementById('resize-bar');
+  let isResizing = false;
+  resizeBar.addEventListener('mousedown', () => {
+    isResizing = true;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'ew-resize';
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!isResizing) return;
+    const newWidth = e.clientX;
+    if (newWidth >= 250 && newWidth <= window.innerWidth * 0.5) {
+      tocPanel.style.width = newWidth + 'px';
+    }
+  });
+  document.addEventListener('mouseup', () => {
+    isResizing = false;
+    document.body.style.userSelect = 'auto';
+    document.body.style.cursor = 'default';
+  });
+});
+</script>
+
+</body>
+</html>

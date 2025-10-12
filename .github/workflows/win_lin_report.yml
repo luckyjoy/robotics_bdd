@@ -2,305 +2,78 @@ name: Robotics BDD Simulation CI/CD
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  schedule:
-    - cron: '0 7 * * *'  # 07:00 UTC daily
+    branches:
+      - main
   workflow_dispatch:
 
-permissions:
-  contents: write
-  actions: read
-  checks: read
-  pull-requests: read
-  statuses: read
-  pages: write
-  id-token: write
-
-# Avoid overlapping runs that might fight over gh-pages
-concurrency:
-  group: robotics-bdd-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
-  run-tests:
-    runs-on: ${{ matrix.os }}
+  build-and-report:
     strategy:
-      fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest ]
-        python: [ '3.10' ]
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # -------------------------- LINUX --------------------------
-      - name: Build Docker Image (Linux only)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          docker build -t robotics-runner-${{ matrix.os }}:${{ github.run_id }} .
-
-      - name: Run tests inside Docker container (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          rm -rf allure-results
-          mkdir allure-results
-          docker run \
-            --name bdd-tests-${{ matrix.os }} \
-            -v ${{ github.workspace }}/allure-results:/app/allure-results \
-            robotics-runner-${{ matrix.os }}:${{ github.run_id }} \
-            pytest -m navigation --alluredir /app/allure-results
-
-      - name: Cleanup Docker (Linux only)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          docker rm -f bdd-tests-${{ matrix.os }} || true
-          docker rmi robotics-runner-${{ matrix.os }}:${{ github.run_id }} || true
-
-      # ------------------------- WINDOWS -------------------------
-      - name: Set up Python (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
+          python-version: "3.10"
 
-      - name: Cache pip (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: actions/cache@v3
-        with:
-          path: ~\AppData\Local\pip\Cache
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: ${{ runner.os }}-pip-
-
-      - name: Install dependencies (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if (Test-Path 'requirements.txt') {
-            pip install -r requirements.txt
-          } else {
-            pip install pytest allure-pytest
-          }
+          pip install -r requirements.txt
 
-      - name: Run tests & collect Allure (Windows)
-        if: matrix.os == 'windows-latest'
-        continue-on-error: true
-        shell: pwsh
+      - name: Run Tests with Allure
         run: |
-          if (Test-Path 'allure-results') { Remove-Item -Recurse -Force 'allure-results' }
-          New-Item -ItemType Directory -Force 'allure-results' | Out-Null
-          pytest -m navigation --alluredir 'allure-results'
-
-      # --------------------- ALLURE METADATA ---------------------
-      - name: Inject Allure Metadata (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          set -Eeuo pipefail
           mkdir -p allure-results
-          cp supports/categories.json allure-results/ 2>/dev/null || true
-          cat > allure-results/executor.json <<'JSON'
-          {
-            "name": "GitHub Actions",
-            "type": "github",
-            "url": "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}",
-            "buildOrder": "${GITHUB_RUN_NUMBER}",
-            "buildName": "Run ${GITHUB_RUN_NUMBER}",
-            "buildUrl": "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}",
-            "reportUrl": "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY}/latest/ubuntu-latest/",
-            "reportName": "Allure Report (Ubuntu)"
-          }
-          JSON
-          if [ -f supports/ubuntu.properties ]; then
-            cp supports/ubuntu.properties allure-results/environment.properties
-          else
-            printf "OS=Ubuntu\nRunner=%s\n" "$RUNNER_OS" > allure-results/environment.properties
-          fi
+          pytest --alluredir=allure-results || true
 
-      - name: Inject Allure Metadata (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
+      - name: Generate Allure Report
         run: |
-          New-Item -ItemType Directory -Force 'allure-results' | Out-Null
-          if (-not (Test-Path 'supports\categories.json')) {
-            New-Item -ItemType File -Force 'supports\categories.json' | Out-Null
-          }
-          Copy-Item 'supports\categories.json' 'allure-results\' -ErrorAction SilentlyContinue
-          $executor = @{
-            name      = "GitHub Actions"
-            type      = "github"
-            url       = "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            buildOrder= ${GITHUB_RUN_NUMBER}
-            buildName = "Run ${GITHUB_RUN_NUMBER}"
-            buildUrl  = "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            reportUrl = "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY}/latest/windows-latest/"
-            reportName= "Allure Report (Windows)"
-          } | ConvertTo-Json -Compress
-          Set-Content 'allure-results\executor.json' $executor
-          if (Test-Path 'supports\windows.properties') {
-            Copy-Item 'supports\windows.properties' 'allure-results\environment.properties'
-          } else {
-            Set-Content 'allure-results\environment.properties' "OS=Windows`nRunner=$env:RUNNER_OS"
-          }
+          mkdir -p site/${{ matrix.os }}
+          allure generate allure-results -o site/${{ matrix.os }} --clean
+          date '+%Y-%m-%d %H:%M:%S' > site/${{ matrix.os }}/build-info.txt
 
-      - name: Upload Allure Results
+      - name: Upload Report Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-${{ matrix.os }}
-          path: allure-results
-          retention-days: 7
+          name: ${{ matrix.os }}-report
+          path: site/${{ matrix.os }}
 
-  # -------------------------- DEPLOY PAGES --------------------------
-  deploy-pages:
+  merge-reports:
+    needs: build-and-report
     runs-on: ubuntu-latest
-    needs: run-tests
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Checkout gh-pages history
-        uses: actions/checkout@v4
-        continue-on-error: true
-        with:
-          repository: ${{ github.repository }}
-          ref: gh-pages
-          path: _history
-          token: ${{ secrets.GITHUB_TOKEN }}
-          clean: false
-
-      - name: Ensure history dir exists if gh-pages is empty
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          mkdir -p _history
-
-      - name: Download Linux Allure Results
+      - name: Download Allure Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: allure-results-ubuntu-latest
-          path: allure-results/ubuntu-latest
+          path: site
 
-      - name: Download Windows Allure Results
-        uses: actions/download-artifact@v4
-        with:
-          name: allure-results-windows-latest
-          path: allure-results/windows-latest
-
-      - name: Cache Allure CLI
-        id: cache-allure
-        uses: actions/cache@v3
-        with:
-          path: allure-commandline
-          key: allure-cli-${{ runner.os }}-2.25.0
-
-      - name: Setup Allure CLI (download if cache miss)
-        if: ${{ steps.cache-allure.outputs.cache-hit != 'true' }}
-        shell: bash
+      - name: Move latest reports
         run: |
-          set -Eeuo pipefail
-          ALLURE_VERSION=2.25.0
-          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
-          mkdir -p allure-commandline
-          tar -xzf allure.tgz -C allure-commandline --strip-components 1
-          # Ensure PATH is set on cache miss
-          echo "$PWD/allure-commandline/bin" >> "$GITHUB_PATH"
-
-      - name: Add Allure CLI to PATH (cache-hit safe)
-        shell: bash
-        run: |
-          # Ensure PATH is set even when cache is a hit
-          echo "$PWD/allure-commandline/bin" >> "$GITHUB_PATH"
-
-      - name: Check Allure CLI
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          which allure || { echo "Allure not on PATH"; exit 1; }
-          allure --version
-
-      # Normalize line endings if repo is edited on Windows
-      - name: Normalize line endings (strip CRLF)
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          find . -type f \( -name "*.yml" -o -name "*.yaml" -o -name "*.sh" \) -exec sed -i 's/\r$//' {} +
-
-      # ------------ FIX: Proper history injection for Trend ------------
-      - name: Generate Allure Reports (with Trend history)
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-
-          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
-          SITE_DIR="site"
-          HISTORY_DIR="_history"
-
-          # Clean publication directory
-          rm -rf "$SITE_DIR"
-          mkdir -p "$SITE_DIR/latest"
-
-          # Restore prior numbered builds into site/
-          find "$HISTORY_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*/[0-9]+$" -exec cp -r {} "$SITE_DIR/" \; || true
-
-          # Compute previous build number (< current)
-          PREV_BUILD=$(
-            find "$SITE_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*/[0-9]+$" \
-            | xargs -n 1 basename | sort -nr | awk -v curr="$BUILD_NUMBER" '$1 < curr {print; exit}'
-          )
-
-          echo "Current build: ${BUILD_NUMBER}"
-          echo "Previous build: ${PREV_BUILD:-<none>}"
-
+          mkdir -p site/latest
           for OS in ubuntu-latest windows-latest; do
-            VERSIONED_REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
-            RESULTS_DIR="allure-results/${OS}"
-            mkdir -p "${RESULTS_DIR}"
-
-            # ---- Inject history BEFORE generating (so Trend works) ----
-            if [[ -n "${PREV_BUILD:-}" && -d "${SITE_DIR}/${PREV_BUILD}/${OS}/history" ]]; then
-              echo "Using history from site/${PREV_BUILD}/${OS}/history"
-              mkdir -p "${RESULTS_DIR}/history"
-              cp -r "${SITE_DIR}/${PREV_BUILD}/${OS}/history/"* "${RESULTS_DIR}/history/" || true
-            elif [[ -d "${HISTORY_DIR}/latest/${OS}/history" ]]; then
-              echo "Fallback history from _history/latest/${OS}/history"
-              mkdir -p "${RESULTS_DIR}/history"
-              cp -r "${HISTORY_DIR}/latest/${OS}/history/"* "${RESULTS_DIR}/history/" || true
-            else
-              echo "No prior history found for ${OS}."
+            if [ -d "site/${OS}-report" ]; then
+              mv "site/${OS}-report" "site/latest/${OS}"
             fi
-
-            # Generate report (Allure on PATH)
-            allure generate "${RESULTS_DIR}" --output "${VERSIONED_REPORT_DIR}" --clean
-
-            # Prepare publish targets
-            mkdir -p "${SITE_DIR}/latest/${OS}"
-            mkdir -p "${SITE_DIR}/${BUILD_NUMBER}/${OS}"
-
-            # Publish full report to versioned and latest
-            cp -r "${VERSIONED_REPORT_DIR}/"* "${SITE_DIR}/${BUILD_NUMBER}/${OS}/"
-            cp -r "${VERSIONED_REPORT_DIR}/"* "${SITE_DIR}/latest/${OS}/"
-
-            # Timestamp files for index rendering
-            date -u +"%Y-%m-%d %H:%M:%S UTC" > "${SITE_DIR}/${BUILD_NUMBER}/${OS}/build-info.txt"
-            cp "${SITE_DIR}/${BUILD_NUMBER}/${OS}/build-info.txt" "${SITE_DIR}/latest/${OS}/build-info.txt"
           done
 
-      - name: Rebuild index.html
+      - name: Save Historical Build
+        run: |
+          BUILD_ID=$(date +%Y%m%d%H%M%S)
+          mkdir -p "site/${BUILD_ID}"
+          cp -r site/latest/* "site/${BUILD_ID}/"
+          echo "Saved historical build $BUILD_ID"
+
+      - name: Rebuild Index
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -309,7 +82,7 @@ jobs:
           # Start fresh file
           : > "$SITE_DIR/index.html"
 
-          # Header (print line-by-line to avoid YAML surprises)
+          # Header
           printf '%s\n' '<!doctype html>' '<html lang="en">' '<head>' \
             '  <meta charset="utf-8">' \
             '  <title>Allure Reports - Robotics BDD</title>' \
@@ -325,7 +98,7 @@ jobs:
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              printf '<li>latest/%s/index.htmlLatest Report (%s)</a> - Last run: %s</li>\n' "$OS" "$OS" "$TS" >> "$SITE_DIR/index.html"
+              printf '  <li><a href="latest/%s/index.html">Latest Report (%s)</a> - Last run: %s</li>\n' "$OS" "$OS" "$TS" >> "$SITE_DIR/index.html"
             fi
           done
 
@@ -344,7 +117,7 @@ jobs:
               for OS in ubuntu-latest windows-latest; do
                 if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
                   TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                  printf '  <li>%s/%s/index.htmlBuild #%s (%s)</a> - %s</li>\n' "$BUILD" "$OS" "$BUILD" "$OS" "$TS" >> "$SITE_DIR/index.html"
+                  printf '  <li><a href="%s/%s/index.html">Build #%s (%s)</a> - %s</li>\n' "$BUILD" "$OS" "$BUILD" "$OS" "$TS" >> "$SITE_DIR/index.html"
                 fi
               done
             done
@@ -353,55 +126,31 @@ jobs:
           # Close document
           printf '%s\n' '  </ul>' '</body>' '</html>' >> "$SITE_DIR/index.html"
 
-          # 🔍 Self-check: show the generated link lines in the logs
+          # Self-check
           echo "---- Generated index.html (link lines) ----"
-          grep -n '<li>  site/.nojekyll
+          grep -n '<li>' "$SITE_DIR/index.html" || echo "No <li> tags found"
 
-      # Robust verification that tolerates `/` or `/index.html`
-      - name: Verify index links
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          f="site/index.html"
-          test -s "$f"  # index.html must exist
-
-          show_debug() {
-            echo "---- site tree ----"
-            (cd site && ls -la; echo; find . -maxdepth 2 -type d | sort)
-            echo "---- index.html (first 200 lines) ----"
-            sed -n '1,200p' "$f"
-          }
-
-          # Helper: assert that either / or /index.html link exists
-          must_have_link() {
-            local label="$1" href_base="$2"
-            local pat="href=\"${href_base}(/index\\.html)?\""
-            if ! grep -qE "$pat" "$f"; then
-              echo "::error::Missing link for ${label}: expected pattern ${pat}"
-              show_debug
-              exit 1
-            fi
-          }
-
-          # Check "latest" links only if the dirs exist
-          [ -d site/latest/ubuntu-latest ]  && must_have_link "latest ubuntu"  "latest/ubuntu-latest"
-          [ -d site/latest/windows-latest ] && must_have_link "latest windows" "latest/windows-latest"
-
-          # Verify at least one historical build link for each OS present
-          last_build=$(find site -maxdepth 1 -type d -regextype posix-egrep -regex '.*/[0-9]+$' -printf '%f\n' | sort -nr | head -1 || true)
-          if [ -n "$last_build" ]; then
-            [ -d "site/$last_build/ubuntu-latest" ]  && must_have_link "build $last_build ubuntu"  "$last_build/ubuntu-latest"
-            [ -d "site/$last_build/windows-latest" ] && must_have_link "build $last_build windows" "$last_build/windows-latest"
-          fi
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Upload Combined Site
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: site
-          publish_branch: gh-pages
-          force_orphan: true
-          commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
+          path: site
+
+  deploy:
+    needs: merge-reports
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
 
       - name: Add workflow badges to summary
         shell: bash

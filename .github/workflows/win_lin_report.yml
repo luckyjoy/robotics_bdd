@@ -10,6 +10,11 @@ on:
   schedule:
     - cron: '0 7 * * *'
 
+# This new concurrency block prevents duplicate runs for the same pull request or branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   actions: read
@@ -23,6 +28,10 @@ jobs:
   run-tests:
     runs-on: ${{ matrix.os }}
     strategy:
+      # fail-fast: false ensures that all jobs in the matrix will run to completion,
+      # even if one of them fails. This allows the Windows run to proceed and upload
+      # its results artifact after the Ubuntu run fails.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
 
@@ -97,7 +106,6 @@ jobs:
           path: allure-results
           retention-days: 7
 
-      # This new step ensures the entire job is marked as failed if the tests fail.
       - name: Mark job as failed if tests failed
         if: steps.run_pytest.outcome == 'failure'
         run: exit 1
@@ -161,7 +169,6 @@ jobs:
           SITE_DIR="site"
           HISTORY_DIR="_history"
 
-          # Copy previous build history into the site directory before generating new content
           if [ -d "$HISTORY_DIR" ]; then
               cp -r "$HISTORY_DIR"/* "$SITE_DIR/" 2>/dev/null || echo "No previous builds found in history to copy."
           fi
@@ -170,7 +177,7 @@ jobs:
           
           for OS in ubuntu-latest windows-latest; do
             RESULTS_DIR="allure-results/$OS"
-            HISTORY_SOURCE_DIR="$SITE_DIR/latest/$OS/history" # Use history from the site dir
+            HISTORY_SOURCE_DIR="$SITE_DIR/latest/$OS/history" 
             REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
 
             if [ -d "$HISTORY_SOURCE_DIR" ]; then
@@ -228,7 +235,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: site
           publish_branch: gh-pages
-          # The "force_orphan" option was removed to prevent deleting the branch history.
           commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
 
       - name: Add workflow badges to summary

@@ -32,74 +32,25 @@
                 Quick access to the latest automation, simulation, and coverage reports.
             </p>
             
-            <!-- DYNAMIC INFO BLOCK - USES PLACEHOLDERS -->
+            <!-- DYNAMIC INFO BLOCK - MUST CONTAIN PLACEHOLDERS -->
             <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-                <p class="font-bold">Latest Deployed Build: #<span id="build-number-display">{{BUILD_NUMBER}}</span></p>
-                <p>Last Updated: <span id="timestamp-display">{{RUN_TIMESTAMP}}</span></p>
+                <p class="font-bold">Latest Deployed Build: #{{BUILD_NUMBER}}</p>
+                <p>Last Updated: {{RUN_TIMESTAMP}}</p>
             </div>
         </header>
 
-        <!-- Dynamic Link Generation Script -->
-        <script>
-            // Placeholders used by the build script (replace with actual values)
-            const BUILD_NUMBER_PLACEHOLDER = '{{BUILD_NUMBER}}';
-            const RUN_TIMESTAMP_PLACEHOLDER = '{{RUN_TIMESTAMP}}';
-            const REPORT_BASE_PATH = 'reports/latest/';
-
-            /**
-             * Returns the full URL path for a report.
-             * @param {string} reportFileName - The file name of the report (e.g., 'Validation_Plan.html').
-             * @returns {string} The full relative URL.
-             */
-            function getReportUrl(reportFileName) {
-                return REPORT_BASE_PATH + reportFileName;
-            }
-
-            document.addEventListener('DOMContentLoaded', () => {
-                const buildDisplay = document.getElementById('build-number-display');
-                const timestampDisplay = document.getElementById('timestamp-display');
-                
-                // Fallback for local testing if placeholders aren't replaced
-                if (buildDisplay.textContent === BUILD_NUMBER_PLACEHOLDER) {
-                    buildDisplay.textContent = 'N/A (Build script pending)';
-                }
-                if (timestampDisplay.textContent === RUN_TIMESTAMP_PLACEHOLDER) {
-                    timestampDisplay.textContent = 'N/A (Build script pending)';
-                }
-
-                // Map of link IDs to their respective report file names
-                const linkMap = [
-                    // FIX: Allure report is the index.html file directly in reports/latest/
-                    { id: 'allure-link', fileName: 'index.html' }, 
-                    { id: 'automation-rate-link', fileName: 'automation_rate_report.html' },
-                    { id: 'validation-plan-link', fileName: 'Validation_Plan.html' },
-                    { id: 'prd-summary-link', fileName: 'prd_summary.html' },
-                    { id: 'coverage-link', fileName: 'test_coverage_report.html' }
-                ];
-
-                // Dynamically set the href for each link
-                linkMap.forEach(item => {
-                    const element = document.getElementById(item.id);
-                    if (element) {
-                        element.href = getReportUrl(item.fileName);
-                    }
-                });
-            });
-        </script>
-
-        <!-- Report Links Container -->
+        <!-- Reports Grid -->
         <div class="space-y-4">
 
             <!-- Report 1: Allure Test Report (Simulation Results) -->
-            <!-- Link ID 'allure-link' is set by JS to reports/latest/index.html -->
-            <a href="#" id="allure-link" target="_blank" class="block group">
-                <div class="relative flex items-center justify-between p-6 bg-red-50 border border-red-200 rounded-xl transition duration-150 ease-in-out card-lift">
+            <a href="reports/latest/allure-report/index.html" target="_blank" class="block group">
+                <div class="relative flex items-center justify-between p-6 bg-white border border-gray-200 rounded-xl transition duration-150 ease-in-out card-lift">
                     <div class="flex items-start">
                         <!-- Icon (e.g., Checkmark) -->
-                        <svg class="w-8 h-8 text-red-600 mr-4 group-hover:text-red-700 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <svg class="w-8 h-8 text-green-600 mr-4 group-hover:text-green-700 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         <div>
-                            <h3 class="text-xl font-extrabold text-gray-800 group-hover:text-red-700">
-                                Allure Test Report (Latest Build)
+                            <h3 class="text-xl font-extrabold text-gray-800 group-hover:text-green-700">
+                                Allure Test Report
                             </h3>
                             <p class="text-sm text-gray-500 mt-1">
                                 Comprehensive test run results including trends, graphs, and environment details.
@@ -107,12 +58,12 @@
                         </div>
                     </div>
                     <!-- Arrow Icon -->
-                    <svg class="w-5 h-5 text-red-600 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                    <svg class="w-5 h-5 text-green-600 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                 </div>
             </a>
 
             <!-- Report 2: Automation Rate Report -->
-            <a href="#" id="automation-rate-link" target="_blank" class="block group">
+            <a href="reports/latest/automation_rate_report.html" target="_blank" class="block group">
                 <div class="relative flex items-center justify-between p-6 bg-white border border-gray-200 rounded-xl transition duration-150 ease-in-out card-lift">
                     <div class="flex items-start">
                         <!-- Icon (e.g., Chart) -->
@@ -132,7 +83,7 @@
             </a>
 
             <!-- Report 3: Validation Plan -->
-            <a href="#" id="validation-plan-link" target="_blank" class="block group">
+            <a href="reports/latest/Validation_Plan.html" target="_blank" class="block group">
                 <div class="relative flex items-center justify-between p-6 bg-white border border-gray-200 rounded-xl transition duration-150 ease-in-out card-lift">
                     <div class="flex items-start">
                         <!-- Icon (e.g., Document) -->
@@ -152,7 +103,7 @@
             </a>
 
             <!-- Report 4: PRD Summary Report -->
-            <a href="#" id="prd-summary-link" target="_blank" class="block group">
+            <a href="reports/latest/prd_summary.html" target="_blank" class="block group">
                 <div class="relative flex items-center justify-between p-6 bg-white border border-gray-200 rounded-xl transition duration-150 ease-in-out card-lift">
                     <div class="flex items-start">
                         <!-- Icon (e.g., Star) -->
@@ -172,7 +123,7 @@
             </a>
 
             <!-- Report 5: Test Coverage Report -->
-            <a href="#" id="coverage-link" target="_blank" class="block group">
+            <a href="reports/latest/test_coverage_report.html" target="_blank" class="block group">
                 <div class="relative flex items-center justify-between p-6 bg-white border border-gray-200 rounded-xl transition duration-150 ease-in-out card-lift">
                     <div class="flex items-start">
                         <!-- Icon (e.g., Code) -->

@@ -32,17 +32,38 @@
                 Quick access to the latest automation, simulation, and coverage reports.
             </p>
             
-            <!-- DYNAMIC INFO BLOCK - MUST CONTAIN PLACEHOLDERS -->
+            <!-- DYNAMIC INFO BLOCK - NOW USES PLACEHOLDERS -->
             <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-                <p class="font-bold">Latest Deployed Build: #5</p>
-                <p>Last Updated: 2025-10-11 20:51:49 </p>
+                <p class="font-bold">Latest Deployed Build: #<span id="build-number-display">5</span></p>
+                <p>Last Updated: <span id="timestamp-display">2025-10-11 20:57:01 </span></p>
             </div>
         </header>
+
+        <!-- Dynamic Link Generation Script -->
+        <script>
+            // Placeholders used by the build script (replace with actual values: e.g., '123' and '2025-10-12 10:30:00')
+            const BUILD_NUMBER_PLACEHOLDER = '5';
+            const RUN_TIMESTAMP_PLACEHOLDER = '2025-10-11 20:57:01 ';
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const buildDisplay = document.getElementById('build-number-display');
+                const timestampDisplay = document.getElementById('timestamp-display');
+                
+                // Fallback for local testing if placeholders aren't replaced
+                if (buildDisplay.textContent === BUILD_NUMBER_PLACEHOLDER) {
+                    buildDisplay.textContent = 'N/A (Update pipeline needed)';
+                }
+                if (timestampDisplay.textContent === RUN_TIMESTAMP_PLACEHOLDER) {
+                    timestampDisplay.textContent = 'N/A (Update pipeline needed)';
+                }
+            });
+        </script>
 
         <!-- Reports Grid -->
         <div class="space-y-4">
 
             <!-- Report 1: Allure Test Report (Simulation Results) -->
+            <!-- IMPORTANT: Assumes 'allure-report' folder exists inside 'reports/latest/' -->
             <a href="reports/latest/allure-report/index.html" target="_blank" class="block group">
                 <div class="relative flex items-center justify-between p-6 bg-white border border-gray-200 rounded-xl transition duration-150 ease-in-out card-lift">
                     <div class="flex items-start">

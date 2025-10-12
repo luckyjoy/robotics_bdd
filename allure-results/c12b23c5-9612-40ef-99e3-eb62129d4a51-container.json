@@ -1,1 +1,0 @@
-{"uuid": "dcfc208d-2cf0-48cb-acc4-ef66eaf9adc3", "befores": [{"name": "pytestbdd_stepdef_when_the robot moves diagonally by [{dx:g}, {dy:g}, {dz:g}]", "status": "passed", "start": 1760249882331, "stop": 1760249882332}], "start": 1760249882331, "stop": 1760249882339}

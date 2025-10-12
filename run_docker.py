@@ -50,6 +50,41 @@ def execute_command(command, error_message):
         print(f"==========================================================")
         sys.exit(1)
 
+def verify_dashboard_update(project_root, expected_build):
+    """Verifies that index.html in the project root was successfully updated."""
+    index_path = os.path.join(project_root, "index.html")
+    print(f"\n--- Verifying dashboard update at: {index_path} ---")
+    
+    if not os.path.exists(index_path):
+        print("  CRITICAL ERROR: index.html not found in the project root after deployment attempt.")
+        sys.exit(1)
+        
+    try:
+        # Read the file to check its contents
+        with open(index_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except (IOError, PermissionError) as e:
+        print(f"  CRITICAL ERROR: Failed to read index.html due to file access issue: {e}")
+        print("  ACTION REQUIRED: index.html may be locked by another program or you lack read/write permissions. Check file status.")
+        sys.exit(1)
+    except Exception as e:
+        # Catch any other unexpected error during file read
+        print(f"  CRITICAL ERROR: An unexpected error occurred while reading index.html for verification: {e}")
+        sys.exit(1)
+
+    # Check for the placeholder and the correct number
+    if f"Comprehensive Allure Test Report (Build #{expected_build})" in content:
+        print(f"  SUCCESS: index.html successfully updated to reference Build #{expected_build}.")
+    elif "{{BUILD_NUMBER}}" in content:
+        print(f"  CRITICAL FAILURE: index.html still contains the placeholder '{{BUILD_NUMBER}}'.")
+        print("  The deployment_workflow.py script failed to write to index.html.")
+        print("  ACTION REQUIRED: Check if index.html is locked by another program (like a text editor) or if you have write permissions.")
+        sys.exit(1)
+    else:
+        # This is a warning state: the file was changed, but not in the expected way.
+        print("  WARNING: index.html was modified, but the expected build number reference was not found.")
+        print("  Please manually inspect index.html to ensure the update was successful.")
+
 def main():
     """Main workflow runner."""
     if len(sys.argv) < 2:
@@ -216,8 +251,11 @@ def main():
         build_number, 
         PROJECT_ROOT
     ]
-    # Execute the deployment command
+    # Execute the deployment command, which calls the deployment_workflow.py script
     execute_command(deployment_command, "Report Deployment Workflow")
+    
+    # NEW STEP 6b: Verification of index.html update
+    verify_dashboard_update(PROJECT_ROOT, build_number) 
     
     # 7. Create Netlify Rewrite/Redirect File for Allure Deep Links
     print("\n--- Creating Netlify Rewrite Rule ---")

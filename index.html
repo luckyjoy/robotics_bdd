@@ -28,8 +28,8 @@
             
             <!-- NEW DYNAMIC INFO BLOCK -->
             <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-                <p class="mb-1"><strong>Latest Deployed Build:</strong> <span id="build-number" class="font-bold text-lg text-blue-800">2</span></p>
-                <p><strong>Reports Generated On:</strong> <span id="run-timestamp" class="font-medium">2025-10-11 15:59:20 Pacific Daylight Time</span></p>
+                <p class="mb-1"><strong>Latest Deployed Build:</strong> <span id="build-number" class="font-bold text-lg text-blue-800">3</span></p>
+                <p><strong>Reports Generated On:</strong> <span id="run-timestamp" class="font-medium">2025-10-11 17:55:12 Pacific Daylight Time</span></p>
             </div>
             <!-- END DYNAMIC INFO BLOCK -->
 
@@ -38,24 +38,24 @@
         <!-- Dynamic Link Generation -->
         <script>
             // Define the latest build number, which is replaced by the Python script
-            const LATEST_BUILD_NUMBER = '2'; 
+            const LATEST_BUILD_NUMBER = '3'; 
 
             /**
-             * Updates the link URLs based on the current build number.
-             * @param {string} reportName - The name of the report file (e.g., 'allure/index.html').
-             * @returns {string} The full, dynamic URL.
+             * Generates a stable URL pointing to the 'latest' report folder.
+             * The deployment script ensures 'reports/latest' always holds the newest artifacts.
+             * @param {string} reportPath - The relative path to the report file/folder.
+             * @returns {string} The stable, dynamic URL pointing to the latest report.
              */
-            function getReportUrl(reportName) {
-                // If the script fails to replace the placeholder, default to a generic path
-                const build = LATEST_BUILD_NUMBER.startsWith('{{') ? 'latest' : LATEST_BUILD_NUMBER;
-                return `reports/${build}/${reportName}`;
+            function getReportUrl(reportPath) {
+                // We use the fixed 'latest' path for all links.
+                return `reports/latest/${reportPath}`;
             }
 
             document.addEventListener('DOMContentLoaded', () => {
                 const linkMap = [
-                    // Report links that go into the build folder
-                    { id: 'allure-link', report: 'allure/index.html' },
-                    { id: 'validation-plan-link', report: 'Validation_Plan.html' }, // ADDED VALIDATION PLAN
+                    // Allure report now points directly to the index.html inside the latest folder
+                    { id: 'allure-link', report: 'allure-report/index.html' }, 
+                    { id: 'validation-plan-link', report: 'Validation_Plan.html' },
                     { id: 'automation-rate-link', report: 'automation_rate_report.html' },
                     { id: 'prd-summary-link', report: 'prd_summary.html' },
                     { id: 'coverage-link', report: 'test_coverage_report.html' }
@@ -72,6 +72,12 @@
                 if (LATEST_BUILD_NUMBER.startsWith('{{')) {
                     document.getElementById('build-number').textContent = 'N/A (Run script first)';
                     document.getElementById('run-timestamp').textContent = 'N/A (Run script first)';
+                    
+                    // Also update the Allure card's displayed build number placeholder
+                    const allureHeaderSpan = document.querySelector('#allure-build-number');
+                    if (allureHeaderSpan) {
+                         allureHeaderSpan.textContent = 'N/A';
+                    }
                 }
             });
         </script>
@@ -79,23 +85,26 @@
         <!-- Report Links Container -->
         <div class="space-y-4">
 
-            <!-- Allure Report Card -->
-            <a href="#" id="allure-link" class="group block p-6 bg-gray-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative" target="_blank">
+            <!-- Allure Report Card (Direct Link) -->
+            <!-- This link now points to the served static file, relying on the external web host (e.g., Netlify) 
+                 to provide the necessary server environment for Allure's XHR data loading. -->
+            <a href="#" id="allure-link" class="group block p-6 bg-red-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative border border-red-200" target="_blank">
                 <div class="flex items-start">
                     <!-- Icon (e.g., Bar Chart) -->
-                    <svg class="w-8 h-8 text-red-500 mr-4 group-hover:text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-0h-4M18 10V6m-2 4h4m-2 2v4m-4-0V8m8 8V8m-4 8V8m8 0V4"></path></svg>
+                    <svg class="w-8 h-8 text-red-700 mr-4 group-hover:text-red-800 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-0h-4M18 10V6m-2 4h4m-2 2v4m-4-0V8m8 8V8m-4 8V8m8 0V4"></path></svg>
                     <div>
                         <h3 class="text-xl font-semibold text-gray-800 group-hover:text-red-700">
-                            Comprehensive Allure Test Report (Build #<span class="text-red-500">2</span>)
+                            Comprehensive Allure Test Report (Build #<span id="allure-build-number" class="font-bold">3</span>)
                         </h3>
                         <p class="text-sm text-gray-500 mt-1">
-                            Detailed run status, test steps, failures, and execution history.
+                            Click to view the fully interactive, served report with history, graphs, and steps.
                         </p>
                     </div>
                 </div>
                 <!-- Arrow Icon -->
                 <svg class="w-5 h-5 text-red-500 ml-4 group-hover:translate-x-1 transition duration-150 absolute right-6 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </a>
+
 
             <!-- Validation Plan Card -->
             <a href="#" id="validation-plan-link" class="group block p-6 bg-gray-50 hover:bg-white rounded-lg transition duration-200 ease-in-out transform hover:shadow-lg hover:-translate-y-1 relative" target="_blank">

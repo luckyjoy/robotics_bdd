@@ -2,11 +2,9 @@ name: Robotics BDD Simulation CI/CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
   schedule:
     - cron: '0 7 * * *'  # 07:00 UTC daily
 
@@ -19,14 +17,19 @@ permissions:
   pages: write
   id-token: write
 
+# Avoid overlapping runs that might fight over gh-pages
+concurrency:
+  group: robotics-bdd-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   run-tests:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python: ['3.10']
+        os: [ ubuntu-latest, windows-latest ]
+        python: [ '3.10' ]
 
     steps:
       - name: Checkout repository
@@ -171,12 +174,19 @@ jobs:
 
       - name: Checkout gh-pages history
         uses: actions/checkout@v4
+        continue-on-error: true
         with:
           repository: ${{ github.repository }}
           ref: gh-pages
           path: _history
           token: ${{ secrets.GITHUB_TOKEN }}
           clean: false
+
+      - name: Ensure history dir exists if gh-pages is empty
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p _history
 
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -191,13 +201,14 @@ jobs:
           path: allure-results/windows-latest
 
       - name: Cache Allure CLI
+        id: cache-allure
         uses: actions/cache@v3
         with:
           path: allure-commandline
           key: allure-cli-${{ runner.os }}-2.25.0
 
       - name: Setup Allure CLI
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.cache-allure.outputs['cache-hit'] != 'true'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -205,9 +216,9 @@ jobs:
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
           mkdir -p allure-commandline
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
-          echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
+          echo "$PWD/allure-commandline/bin" >> "$GITHUB_PATH"
 
-      # Optional: normalize line endings if repo is edited on Windows
+      # Normalize line endings if repo is edited on Windows
       - name: Normalize line endings (strip CRLF)
         shell: bash
         run: |
@@ -279,48 +290,112 @@ jobs:
         run: |
           set -Eeuo pipefail
           SITE_DIR="site"
-          {
-            echo "<html><head><title>Allure Reports - Robotics BDD</title><style>body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.4}a{color:#0a66c2;text-decoration:none}a:hover{text-decoration:underline}</style></head><body>"
-            echo "<h1>Robotics BDD Test Reports</h1><hr><h2>Latest Reports</h2><ul>"
-          } > "$SITE_DIR/index.html"
 
+          # Start page skeleton with a here-doc to avoid quoting issues
+          cat > "$SITE_DIR/index.html" <<'HTML'
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Allure Reports - Robotics BDD</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.45;margin:24px}
+    a{color:#0a66c2;text-decoration:none} a:hover{text-decoration:underline}
+    ul{margin:0;padding:0;list-style:disc inside}
+    hr{margin:16px 0}
+    .muted{color:#6b7280}
+  </style>
+</head>
+<body>
+  <h1>Robotics BDD Test Reports</h1>
+  <hr>
+  <h2>Latest Reports</h2>
+  <ul>
+HTML
+
+          # Latest links
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              echo "<li>latest/$OS/index.htmlLatest Report ($OS)</a> - Last run: ${TS}</li>" >> "$SITE_DIR/index.html"
+              printf '<li>latest/%s/index.htmlLatest Report (%s)</a> - Last run: %s</li>\n' "$OS" "$OS" "$TS" >> "$SITE_DIR/index.html"
             fi
           done
 
-          echo "</ul><hr><h2>All Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
+          # Historical builds header
+          {
+            echo "  </ul>"
+            echo "  <hr>"
+            echo "  <h2>All Historical Builds</h2>"
+            echo "  <ul>"
+          } >> "$SITE_DIR/index.html"
 
-          HISTORICAL_BUILDS=$(
-            find "$SITE_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*/[0-9]+$" \
-            | xargs -n 1 basename | sort -nr
+          # Gather numbered builds and sort
+          mapfile -t HIST_BUILDS < <(
+            find "$SITE_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*/[0-9]+$" -printf "%f\n" | sort -nr
           )
-          if [ -z "$HISTORICAL_BUILDS" ]; then
-            echo "<p>No historical builds found.</p>" >> "$SITE_DIR/index.html"
+
+          if [ "${#HIST_BUILDS[@]}" -eq 0 ]; then
+            echo '  <p class="muted">No historical builds found.</p>' >> "$SITE_DIR/index.html"
           else
-            for BUILD in $HISTORICAL_BUILDS; do
+            for BUILD in "${HIST_BUILDS[@]}"; do
               for OS in ubuntu-latest windows-latest; do
                 if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
                   TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                  echo "<li>${BUILD}/${OS}/index.htmlBuild #${BUILD} (${OS})</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+                  printf '  <li>%s/%s/index.htmlBuild #%s (%s)</a> - %s</li>\n' "$BUILD" "$OS" "$BUILD" "$OS" "$TS" >> "$SITE_DIR/index.html"
                 fi
               done
             done
           fi
-          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
+          # Close document
+          cat >> "$SITE_DIR/index.html" <<'HTML'
+  </ul>
+</body>
+</html>
+HTML
+
+          # 🔍 Self-check: show the generated <li> lines in the logs
+          echo "---- Generated index.html (link lines) ----"
+          grep -n '<li>  site/.nojekyll
+
+      # Robust verification that tolerates `/` or `/index.html`
       - name: Verify index links
         shell: bash
         run: |
           set -Eeuo pipefail
           f="site/index.html"
-          test -s "$f"
-          # Should contain anchors for latest and at least one build
-          grep -q 'href="latest/ubuntu-latest/index.html"' "$f"
-          grep -qE 'href="[0-9]+/ubuntu-latest/index.html"' "$f"
-          
+          test -s "$f"  # index.html must exist
+
+          show_debug() {
+            echo "---- site tree ----"
+            (cd site && ls -la; echo; find . -maxdepth 2 -type d | sort)
+            echo "---- index.html (first 200 lines) ----"
+            sed -n '1,200p' "$f"
+          }
+
+          # Helper: assert that either / or /index.html link exists
+          must_have_link() {
+            local label="$1" href_base="$2"
+            local pat="href=\"${href_base}(/index\\.html)?\""
+            if ! grep -qE "$pat" "$f"; then
+              echo "::error::Missing link for ${label}: expected pattern ${pat}"
+              show_debug
+              exit 1
+            fi
+          }
+
+          # Check "latest" links only if the dirs exist
+          [ -d site/latest/ubuntu-latest ]  && must_have_link "latest ubuntu"  "latest/ubuntu-latest"
+          [ -d site/latest/windows-latest ] && must_have_link "latest windows" "latest/windows-latest"
+
+          # Verify at least one historical build link for each OS present
+          last_build=$(find site -maxdepth 1 -type d -regextype posix-egrep -regex '.*/[0-9]+$' -printf '%f\n' | sort -nr | head -1 || true)
+          if [ -n "$last_build" ]; then
+            [ -d "site/$last_build/ubuntu-latest" ]  && must_have_link "build $last_build ubuntu"  "$last_build/ubuntu-latest"
+            [ -d "site/$last_build/windows-latest" ] && must_have_link "build $last_build windows" "$last_build/windows-latest"
+          fi
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
@@ -331,10 +406,14 @@ jobs:
           commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
 
       - name: Add workflow badges to summary
+        shell: bash
         run: |
-          REPO_NAME=${GITHUB_REPOSITORY##*/}
-          OWNER=${GITHUB_REPOSITORY_OWNER}
-          echo "### Robotics BDD Simulation CI/CD Report Links" >> $GITHUB_STEP_SUMMARY
-          echo "- [Ubuntu Latest Report](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "- [Windows Latest Report](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "- [Report History](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY
+          set -Eeuo pipefail
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          OWNER="${GITHUB_REPOSITORY_OWNER}"
+          cat >> "$GITHUB_STEP_SUMMARY" <<MARKDOWN
+### Robotics BDD Simulation CI/CD Report Links
+- Ubuntu Latest Report
+- Windows Latest Report
+- Report History
+MARKDOWN

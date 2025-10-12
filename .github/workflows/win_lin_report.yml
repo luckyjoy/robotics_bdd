@@ -7,6 +7,7 @@ on:
     branches: [ main ]
   schedule:
     - cron: '0 7 * * *'  # 07:00 UTC daily
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -313,13 +314,7 @@ jobs:
             '  <meta charset="utf-8">' \
             '  <title>Allure Reports - Robotics BDD</title>' \
             '  <meta name="viewport" content="width=device-width, initial-scale=1">' \
-            '  <style>' \
-            '    body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.45;margin:24px}' \
-            '    a{color:#0a66c2;text-decoration:none} a:hover{text-decoration:underline}' \
-            '    ul{margin:0;padding:0;list-style:disc inside}' \
-            '    hr{margin:16px 0}' \
-            '    .muted{color:#6b7280}' \
-            '  </style>' \
+            '  <style>body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.45;margin:24px} a{color:#0a66c2;text-decoration:none} a:hover{text-decoration:underline} ul{margin:0;padding:0;list-style:disc inside} hr{margin:16px 0} .muted{color:#6b7280}</style>' \
             '</head>' '<body>' \
             '  <h1>Robotics BDD Test Reports</h1>' \
             '  <hr>' \
@@ -358,7 +353,7 @@ jobs:
           # Close document
           printf '%s\n' '  </ul>' '</body>' '</html>' >> "$SITE_DIR/index.html"
 
-          # 🔍 Self-check: show the generated <li> lines in the logs
+          # 🔍 Self-check: show the generated link lines in the logs
           echo "---- Generated index.html (link lines) ----"
           grep -n '<li>  site/.nojekyll
 

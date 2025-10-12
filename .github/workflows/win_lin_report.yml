@@ -291,28 +291,26 @@ jobs:
           set -Eeuo pipefail
           SITE_DIR="site"
 
-          # Start page skeleton with a here-doc to avoid quoting issues
-          cat > "$SITE_DIR/index.html" <<'HTML'
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Allure Reports - Robotics BDD</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.45;margin:24px}
-    a{color:#0a66c2;text-decoration:none} a:hover{text-decoration:underline}
-    ul{margin:0;padding:0;list-style:disc inside}
-    hr{margin:16px 0}
-    .muted{color:#6b7280}
-  </style>
-</head>
-<body>
-  <h1>Robotics BDD Test Reports</h1>
-  <hr>
-  <h2>Latest Reports</h2>
-  <ul>
-HTML
+          # Start fresh file
+          : > "$SITE_DIR/index.html"
+
+          # Header (no here-doc; print line-by-line to avoid YAML surprises)
+          printf '%s\n' '<!doctype html>' '<html lang="en">' '<head>' \
+            '  <meta charset="utf-8">' \
+            '  <title>Allure Reports - Robotics BDD</title>' \
+            '  <meta name="viewport" content="width=device-width, initial-scale=1">' \
+            '  <style>' \
+            '    body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.45;margin:24px}' \
+            '    a{color:#0a66c2;text-decoration:none} a:hover{text-decoration:underline}' \
+            '    ul{margin:0;padding:0;list-style:disc inside}' \
+            '    hr{margin:16px 0}' \
+            '    .muted{color:#6b7280}' \
+            '  </style>' \
+            '</head>' '<body>' \
+            '  <h1>Robotics BDD Test Reports</h1>' \
+            '  <hr>' \
+            '  <h2>Latest Reports</h2>' \
+            '  <ul>' >> "$SITE_DIR/index.html"
 
           # Latest links
           for OS in ubuntu-latest windows-latest; do
@@ -323,12 +321,7 @@ HTML
           done
 
           # Historical builds header
-          {
-            echo "  </ul>"
-            echo "  <hr>"
-            echo "  <h2>All Historical Builds</h2>"
-            echo "  <ul>"
-          } >> "$SITE_DIR/index.html"
+          printf '%s\n' '  </ul>' '  <hr>' '  <h2>All Historical Builds</h2>' '  <ul>' >> "$SITE_DIR/index.html"
 
           # Gather numbered builds and sort
           mapfile -t HIST_BUILDS < <(
@@ -336,7 +329,7 @@ HTML
           )
 
           if [ "${#HIST_BUILDS[@]}" -eq 0 ]; then
-            echo '  <p class="muted">No historical builds found.</p>' >> "$SITE_DIR/index.html"
+            printf '%s\n' '  <p class="muted">No historical builds found.</p>' >> "$SITE_DIR/index.html"
           else
             for BUILD in "${HIST_BUILDS[@]}"; do
               for OS in ubuntu-latest windows-latest; do
@@ -349,11 +342,7 @@ HTML
           fi
 
           # Close document
-          cat >> "$SITE_DIR/index.html" <<'HTML'
-  </ul>
-</body>
-</html>
-HTML
+          printf '%s\n' '  </ul>' '</body>' '</html>' >> "$SITE_DIR/index.html"
 
           # 🔍 Self-check: show the generated <li> lines in the logs
           echo "---- Generated index.html (link lines) ----"
@@ -363,7 +352,8 @@ HTML
       - name: Create .nojekyll (prevent Jekyll processing)
         shell: bash
         run: |
-          set          test -s "$f"  # index.html must exist
+         ml"
+          test -s "$f"  # index.html must exist
 
           show_debug() {
             echo "---- site tree ----"
@@ -409,9 +399,7 @@ HTML
           set -Eeuo pipefail
           REPO_NAME="${GITHUB_REPOSITORY##*/}"
           OWNER="${GITHUB_REPOSITORY_OWNER}"
-          cat >> "$GITHUB_STEP_SUMMARY" <<MARKDOWN
-### Robotics BDD Simulation CI/CD Report Links
-- Ubuntu Latest Report
-- Windows Latest Report
-- Report History
-MARKDOWN
+          echo "### Robotics BDD Simulation CI/CD Report Links" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Ubuntu Latest Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Windows Latest Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Report History" >> "$GITHUB_STEP_SUMMARY"

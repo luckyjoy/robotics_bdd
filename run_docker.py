@@ -17,6 +17,8 @@ REPORTS_DIR = os.path.join(PROJECT_ROOT, "reports")
 # Define the location where the last generated report history lives (needed for Trend)
 ALLURE_REPORT_DIR = os.path.join(REPORTS_DIR, "allure-report") 
 SUPPORTS_DIR = os.path.join(PROJECT_ROOT, "supports")
+# The new output path for the main dashboard is the project root's index.html
+DASHBOARD_OUTPUT_PATH = os.path.join(PROJECT_ROOT, "index.html")
 
 def execute_command(command, error_message):
     """Executes a shell command and checks for errors."""
@@ -53,7 +55,8 @@ def execute_command(command, error_message):
 
 def verify_dashboard_update(project_root, expected_build):
     """Verifies that index.html in the project root was successfully updated."""
-    index_path = os.path.join(project_root, "index.html")
+    # This path is now the project root's index.html (the final output)
+    index_path = os.path.join(project_root, "index.html") 
     print(f"\n--- Verifying dashboard update at: {index_path} ---")
     
     if not os.path.exists(index_path):
@@ -100,15 +103,19 @@ def main():
     print("==========================================================")
 
     # 1. Cleanup Previous Artifacts
-    print("\nCleaning up old raw results: allure-results, reports/allure-report, __pycache__, .pytest_cache, _site")
+    print("\nCleaning up old raw results: allure-results, reports/allure-report, __pycache__, .pytest_cache, _site, index.html")
     # Use robust cleanup, ignoring errors for non-existent directories
     try:
         shutil.rmtree(ALLURE_RESULTS_DIR, ignore_errors=True)
         shutil.rmtree(ALLURE_REPORT_DIR, ignore_errors=True) # reports/allure-report
         shutil.rmtree(os.path.join(PROJECT_ROOT, "__pycache__"), ignore_errors=True)
         shutil.rmtree(os.path.join(PROJECT_ROOT, ".pytest_cache"), ignore_errors=True)
-        shutil.rmtree(os.path.join(PROJECT_ROOT, "_site"), ignore_errors=True) # <-- EXPLICITLY REMOVES _site
+        shutil.rmtree(os.path.join(PROJECT_ROOT, "_site"), ignore_errors=True) 
         
+        # Remove the generated output dashboard (index.html at project root)
+        if os.path.exists(DASHBOARD_OUTPUT_PATH):
+            os.remove(DASHBOARD_OUTPUT_PATH)
+            
         # Ensure result and report directories exist before proceeding
         os.makedirs(ALLURE_RESULTS_DIR, exist_ok=True)
         os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -268,6 +275,7 @@ def main():
     execute_command(deployment_command, "Report Deployment Workflow")
     
     # NEW STEP 6b: Verification of index.html update
+    # verify_dashboard_update uses PROJECT_ROOT/index.html which is now the output path
     verify_dashboard_update(PROJECT_ROOT, build_number) 
     
     # 7. Create Netlify Rewrite/Redirect File for Allure Deep Links

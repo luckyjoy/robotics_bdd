@@ -1,12 +1,12 @@
-# FILENAME: run_docker.py
-# DEPENDENCY: deployment_workflow.py (Located in the 'supports' folder and called in Step 6)
-
 import os
 import sys
 import shutil
 import subprocess
 import time
 import platform # Import the platform module for OS detection
+
+# FILENAME: run_docker.py
+# DEPENDENCY: deployment_workflow.py (Located in the 'supports' folder and called in Step 6)
 
 # --- Configuration ---
 # Assuming this script is run from the project root.
@@ -100,13 +100,14 @@ def main():
     print("==========================================================")
 
     # 1. Cleanup Previous Artifacts
-    print("\nCleaning up old raw results: allure-results, reports/allure-report, __pycache__, .pytest_cache")
+    print("\nCleaning up old raw results: allure-results, reports/allure-report, __pycache__, .pytest_cache, _site")
     # Use robust cleanup, ignoring errors for non-existent directories
     try:
         shutil.rmtree(ALLURE_RESULTS_DIR, ignore_errors=True)
-        shutil.rmtree(ALLURE_REPORT_DIR, ignore_errors=True) # Use the global constant
+        shutil.rmtree(ALLURE_REPORT_DIR, ignore_errors=True) # reports/allure-report
         shutil.rmtree(os.path.join(PROJECT_ROOT, "__pycache__"), ignore_errors=True)
         shutil.rmtree(os.path.join(PROJECT_ROOT, ".pytest_cache"), ignore_errors=True)
+        shutil.rmtree(os.path.join(PROJECT_ROOT, "_site"), ignore_errors=True) # <-- EXPLICITLY REMOVES _site
         
         # Ensure result and report directories exist before proceeding
         os.makedirs(ALLURE_RESULTS_DIR, exist_ok=True)

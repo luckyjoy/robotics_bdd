@@ -1,6 +1,7 @@
 @echo off
 echo git add .
 
+git add index.html
 git add .
 
 rem echo Git pushed a dummy file for CI Demo

@@ -1,13 +1,15 @@
 {
-  "name": "Robotics BDD Framework Runner",
-  "type": "CI_Pipeline",
-  "url": "${env.JENKINS_URL}",
-  "buildOrder": "${env.BUILD_ID}",
-  "buildName": "Robotics BDD #${env.BUILD_ID}",
-  "buildUrl": "${env.BUILD_URL}",
-  "reportUrl": "${env.BUILD_URL}artifact/${ALLURE_REPORT_DIR}/index.html",
+  "name": "Local/Script Runner",
+  "type": "Robotics BDD Workflow",
+  "url": "https://robotic-bdd.netlify.app/reports/latest/",
+  "buildName": "Robotics BDD Build #{{BUILD_NUMBER}}",
+  "buildUrl": "N/A (Local Execution)",
+  "reportName": "Robotics BDD Allure Report",
+  "reportUrl": "/reports/latest/",
+  "buildOrder": "{{BUILD_NUMBER}}",
+  "date": "{{CURRENT_TIME}}",
   "data": {
-    "Validation Engineer": "TBD",
+    "Validation Engineer": "TBD (Local)",
     "Product Model": "BDD-Sim-PyBullet",
     "Test Framework": "Gherkin (Behave)"
   }

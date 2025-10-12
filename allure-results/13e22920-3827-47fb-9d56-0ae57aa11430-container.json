@@ -1,0 +1,1 @@
+{"uuid": "1c35af3b-8447-40d5-99a4-7845a1199925", "befores": [{"name": "pytestbdd_stepdef_when_the robot moves {pattern} by {dist1:g} and {dist2:g} twice", "status": "passed", "start": 1760247525368, "stop": 1760247525368}], "start": 1760247525368, "stop": 1760247525376}

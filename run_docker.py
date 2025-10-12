@@ -228,11 +228,12 @@ def main():
     # It must be committed to the project root for Netlify to recognize it.
     try:
         with open(redirect_path, 'w') as f:
-            # Rule: /reports/:build/allure/* -> /reports/:build/allure/index.html 200
-            # This captures any path under any build's /allure folder and rewrites it
-            # to serve the main index.html file, solving the SPA routing issue.
+            # Rule 1: Handles direct access to the folder path, ensuring it serves index.html
+            f.write("/reports/:build/allure /reports/:build/allure/index.html 200\n") 
+            # Rule 2: Handles deep links inside the Single-Page Application (SPA)
             f.write("/reports/:build/allure/* /reports/:build/allure/index.html 200\n") 
         print(f"  Created/Updated Netlify rewrite rule in '{os.path.basename(redirect_path)}'.")
+        print("  Added two rules: one for the root link and one for SPA deep links.")
     except Exception as e:
         print(f"  CRITICAL ERROR creating _redirects file: {e}")
         sys.exit(1)

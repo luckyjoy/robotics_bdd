@@ -1,1 +1,2 @@
+/reports/:build/allure /reports/:build/allure/index.html 200
 /reports/:build/allure/* /reports/:build/allure/index.html 200

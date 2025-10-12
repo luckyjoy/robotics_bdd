@@ -1,0 +1,19 @@
+{
+  "name": "Robotics BDD Framework Runner (Netlify)",
+  "type": "CI_Pipeline",
+  "url": "https://<your-netlify-site>.netlify.app/",
+  "buildOrder": "5",
+  "buildName": "Robotics BDD Build #5",
+  "buildUrl": "https://<your-netlify-site>.netlify.app/reports/5/index.html",
+  "reportUrl": "https://<your-netlify-site>.netlify.app/reports/latest/index.html",
+  "data": {
+    "Validation Engineer": "Automation System",
+    "Product Model": "BDD-Sim-PyBullet",
+    "Test Framework": "Gherkin (Behave)",
+    "Git Branch": "main",
+    "Git Commit": "3e4d68c",
+    "OS": "Windows",
+    "Python": "3.13.7",
+    "Docker Image": "robotics-bdd-local:latest"
+  }
+}

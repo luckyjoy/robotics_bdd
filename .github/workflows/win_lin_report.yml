@@ -207,7 +207,7 @@ jobs:
           path: allure-commandline
           key: allure-cli-${{ runner.os }}-2.25.0
 
-      - name: Setup Allure CLI
+      - name: Setup Allure CLI (download if cache miss)
         if: ${{ steps.cache-allure.outputs.cache-hit != 'true' }}
         shell: bash
         run: |
@@ -216,7 +216,21 @@ jobs:
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
           mkdir -p allure-commandline
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
+          # Ensure PATH is set on cache miss
           echo "$PWD/allure-commandline/bin" >> "$GITHUB_PATH"
+
+      - name: Add Allure CLI to PATH (cache-hit safe)
+        shell: bash
+        run: |
+          # Ensure PATH is set even when cache is a hit
+          echo "$PWD/allure-commandline/bin" >> "$GITHUB_PATH"
+
+      - name: Check Allure CLI
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          which allure || { echo "Allure not on PATH"; exit 1; }
+          allure --version
 
       # Normalize line endings if repo is edited on Windows
       - name: Normalize line endings (strip CRLF)
@@ -269,7 +283,7 @@ jobs:
               echo "No prior history found for ${OS}."
             fi
 
-            # Generate report
+            # Generate report (Allure on PATH)
             allure generate "${RESULTS_DIR}" --output "${VERSIONED_REPORT_DIR}" --clean
 
             # Prepare publish targets
@@ -294,7 +308,7 @@ jobs:
           # Start fresh file
           : > "$SITE_DIR/index.html"
 
-          # Header (no here-doc; print line-by-line to avoid YAML surprises)
+          # Header (print line-by-line to avoid YAML surprises)
           printf '%s\n' '<!doctype html>' '<html lang="en">' '<head>' \
             '  <meta charset="utf-8">' \
             '  <title>Allure Reports - Robotics BDD</title>' \
@@ -346,13 +360,14 @@ jobs:
 
           # 🔍 Self-check: show the generated <li> lines in the logs
           echo "---- Generated index.html (link lines) ----"
-          grep -n '<li><a href=' "$SITE_DIR/index.html" || true
-          echo "------------------------------------------"
+          grep -n '<li>  site/.nojekyll
 
-      - name: Create .nojekyll (prevent Jekyll processing)
+      # Robust verification that tolerates `/` or `/index.html`
+      - name: Verify index links
         shell: bash
         run: |
-         ml"
+          set -Eeuo pipefail
+          f="site/index.html"
           test -s "$f"  # index.html must exist
 
           show_debug() {

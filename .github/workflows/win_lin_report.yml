@@ -89,7 +89,7 @@ jobs:
         shell: bash
         run: |
           echo "Running pytest navigation tests..."
-          pytest -m navigation --alluredir=allure-results | tee pytest.log
+          pytest -m sensors --alluredir=allure-results | tee pytest.log
 
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4

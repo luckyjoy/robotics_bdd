@@ -1,0 +1,14 @@
+{
+  "name": "Robotics BDD Framework Runner",
+  "type": "CI_Pipeline",
+  "url": "${env.JENKINS_URL}",
+  "buildOrder": "${env.BUILD_ID}",
+  "buildName": "Robotics BDD #${env.BUILD_ID}",
+  "buildUrl": "${env.BUILD_URL}",
+  "reportUrl": "${env.BUILD_URL}artifact/${ALLURE_REPORT_DIR}/index.html",
+  "data": {
+    "Validation Engineer": "TBD",
+    "Product Model": "BDD-Sim-PyBullet",
+    "Test Framework": "Gherkin (Behave)"
+  }
+}

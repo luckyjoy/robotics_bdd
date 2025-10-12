@@ -96,14 +96,6 @@ allure.api.addTranslation('pl', {
     }
 });
 
-allure.api.addTranslation('am', {
-    tab: {
-        packages: {
-            name: 'Փաթեթներ'
-        }
-    }
-});
-
 allure.api.addTranslation('az', {
     tab: {
         packages: {
@@ -124,22 +116,6 @@ allure.api.addTranslation('isv', {
     tab: {
         packages: {
             name: 'Pakety'
-        }
-    }
-});
-
-allure.api.addTranslation('ka', {
-    tab: {
-        packages: {
-            name: 'პაკეტები'
-        }
-    }
-});
-
-allure.api.addTranslation('it', {
-    tab: {
-        packages: {
-            name: 'Pacchetti'
         }
     }
 });

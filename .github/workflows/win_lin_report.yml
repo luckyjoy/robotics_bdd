@@ -51,24 +51,38 @@ jobs:
           echo "Cleaning allure-results folder..."
           if [ -d "allure-results" ]; then rm -rf allure-results; fi
 
-      - name: Copy platform-specific support files
+      - name: Prepare Allure environment
         shell: bash
         run: |
-          echo "Copying supports files for $RUNNER_OS..."
+          echo "Creating Allure directories and environment files for $RUNNER_OS..."
           mkdir -p allure-results
           
           # Copy shared files
-          cp supports/categories.json allure-results/categories.json 2>/dev/null || echo "No categories.json found"
-          cp supports/executor.json allure-results/executor.json 2>/dev/null || echo "No executor.json found"
+          cp supports/categories.json allure-results/categories.json 2>/dev/null || echo "No categories.json found."
           
           # OS-specific environment properties
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             echo "Using Ubuntu environment.properties..."
-            cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "No Ubuntu environment found"
+            cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "No Ubuntu environment found."
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             echo "Using Windows environment.properties..."
-            cp supports/windows.properties allure-results/environment.properties 2>/dev/null || echo "No Windows environment found"
+            cp supports/windows.properties allure-results/environment.properties 2>/dev/null || echo "No Windows environment found."
           fi
+          
+          # Generate executor.json dynamically
+          echo "Generating executor.json..."
+          cat <<EOF > allure-results/executor.json
+          {
+            "name": "GitHub Actions",
+            "type": "github",
+            "url": "${{ github.server_url }}",
+            "buildOrder": ${{ github.run_number }},
+            "buildName": "Run #${{ github.run_number }}",
+            "buildUrl": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "reportName": "Robotics BDD Simulation CI/CD",
+            "reportUrl": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
 
       - name: Run tests
         shell: bash
@@ -98,8 +112,8 @@ jobs:
       - name: Checkout gh-pages history
         shell: bash
         run: |
-          echo "Attempting to clone gh-pages branch..."
-          git clone --depth 1 --branch gh-pages "https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" _history || true
+          echo "Attempting to clone gh-pages branch to access report history..."
+          git clone --depth 1 --branch gh-pages "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" _history || true
 
       - name: Download Linux Allure Results
         uses: actions/download-artifact@v4
@@ -132,17 +146,26 @@ jobs:
 
           rm -rf "$SITE_DIR"
           mkdir -p "$SITE_DIR/latest"
-
-          # Copy history
-          echo "Copying previous builds..."
-          find "$HISTORY_DIR" -maxdepth 1 -type d -regextype posix-egrep -regex ".*\/[0-9]+$" -exec cp -r {} "$SITE_DIR/" \; 2>/dev/null || echo "No history found."
-
-          # Generate for both OS
+          
+          # Generate reports for both OSs, incorporating history for the trend graph
           for OS in ubuntu-latest windows-latest; do
+            RESULTS_DIR="allure-results/$OS"
+            HISTORY_SOURCE_DIR="$HISTORY_DIR/latest/$OS/history"
             REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
-            mkdir -p "$REPORT_DIR"
-            allure generate "allure-results/$OS" -o "$REPORT_DIR" --clean
 
+            # Copy history from the previous build to the current results directory
+            # This is the key step to enable the trend graph in the Allure report
+            if [ -d "$HISTORY_SOURCE_DIR" ]; then
+              echo "Copying history from $HISTORY_SOURCE_DIR to $RESULTS_DIR"
+              cp -r "$HISTORY_SOURCE_DIR" "$RESULTS_DIR/"
+            else
+              echo "No previous history found for $OS."
+            fi
+            
+            # Generate the new report
+            allure generate "$RESULTS_DIR" -o "$REPORT_DIR" --clean
+
+            # Organize the generated reports for deployment
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
 

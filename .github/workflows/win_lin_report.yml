@@ -311,6 +311,16 @@ jobs:
           fi
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
+      - name: Verify index links
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          f="site/index.html"
+          test -s "$f"
+          # Should contain anchors for latest and at least one build
+          grep -q 'href="latest/ubuntu-latest/index.html"' "$f"
+          grep -qE 'href="[0-9]+/ubuntu-latest/index.html"' "$f"
+          
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:

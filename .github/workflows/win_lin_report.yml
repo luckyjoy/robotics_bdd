@@ -208,7 +208,7 @@ jobs:
           key: allure-cli-${{ runner.os }}-2.25.0
 
       - name: Setup Allure CLI
-        if: steps.cache-allure.outputs['cache-hit'] != 'true'
+        if: ${{ steps.cache-allure.outputs.cache-hit != 'true' }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -357,15 +357,13 @@ HTML
 
           # 🔍 Self-check: show the generated <li> lines in the logs
           echo "---- Generated index.html (link lines) ----"
-          grep -n '<li>  site/.nojekyll
+          grep -n '<li><a href=' "$SITE_DIR/index.html" || true
+          echo "------------------------------------------"
 
-      # Robust verification that tolerates `/` or `/index.html`
-      - name: Verify index links
+      - name: Create .nojekyll (prevent Jekyll processing)
         shell: bash
         run: |
-          set -Eeuo pipefail
-          f="site/index.html"
-          test -s "$f"  # index.html must exist
+          set          test -s "$f"  # index.html must exist
 
           show_debug() {
             echo "---- site tree ----"

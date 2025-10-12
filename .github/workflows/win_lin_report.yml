@@ -23,10 +23,13 @@ jobs:
           python-version: '3.10'
 
       - name: Install Allure CLI
+        shell: bash
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
+            echo "Installing Allure via Chocolatey..."
             choco install allure-commandline -y
           else
+            echo "Installing Allure via npm..."
             sudo apt-get update
             sudo apt-get install -y default-jre
             npm install -g allure-commandline --save-dev
@@ -35,13 +38,15 @@ jobs:
       - name: Run tests (placeholder)
         run: |
           mkdir -p allure-results
-          echo "Dummy results for ${{ runner.os }}" > allure-results/sample.txt
+          echo "Dummy results for $env:RUNNER_OS" > allure-results/sample.txt
+        shell: pwsh
 
       - name: Generate Allure Report
         run: |
           mkdir -p site/${{ matrix.os }}
           allure generate allure-results -o site/${{ matrix.os }} --clean
           date '+%Y-%m-%d %H:%M:%S' > site/${{ matrix.os }}/build-info.txt
+        shell: bash
 
       - name: Upload report artifact
         uses: actions/upload-artifact@v4

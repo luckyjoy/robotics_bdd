@@ -321,14 +321,10 @@ jobs:
           commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
 
       - name: Add workflow badges to summary
-        shell: bash
         run: |
-          set -Eeuo pipefail
-          REPO_NAME="${GITHUB_REPOSITORY##*/}"
-          OWNER="${GITHUB_REPOSITORY_OWNER}"
-          cat >> "$GITHUB_STEP_SUMMARY" <<MARKDOWN
-### Robotics BDD Simulation CI/CD Report Links
-- Ubuntu Latest Report
-- Windows Latest Report
-- Report History
-MARKDOWN
+          REPO_NAME=${GITHUB_REPOSITORY##*/}
+          OWNER=${GITHUB_REPOSITORY_OWNER}
+          echo "### Robotics BDD Simulation CI/CD Report Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Ubuntu Latest Report](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Windows Latest Report](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Report History](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY

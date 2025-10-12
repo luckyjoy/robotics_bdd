@@ -219,6 +219,24 @@ def main():
     # Execute the deployment command
     execute_command(deployment_command, "Report Deployment Workflow")
     
+    # 7. Create Netlify Rewrite/Redirect File for Allure Deep Links
+    print("\n--- Creating Netlify Rewrite Rule ---")
+    redirect_path = os.path.join(PROJECT_ROOT, "_redirects")
+    
+    # This rewrite rule ensures Netlify serves the index.html for all deep links 
+    # within any build's Allure report folder (e.g., /reports/2/allure/#/suites).
+    # It must be committed to the project root for Netlify to recognize it.
+    try:
+        with open(redirect_path, 'w') as f:
+            # Rule: /reports/:build/allure/* -> /reports/:build/allure/index.html 200
+            # This captures any path under any build's /allure folder and rewrites it
+            # to serve the main index.html file, solving the SPA routing issue.
+            f.write("/reports/:build/allure/* /reports/:build/allure/index.html 200\n") 
+        print(f"  Created/Updated Netlify rewrite rule in '{os.path.basename(redirect_path)}'.")
+    except Exception as e:
+        print(f"  CRITICAL ERROR creating _redirects file: {e}")
+        sys.exit(1)
+
     print("\n--- Workflow Complete ---")
 
 if __name__ == '__main__':

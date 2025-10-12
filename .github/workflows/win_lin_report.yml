@@ -27,6 +27,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         python: ['3.10']
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,14 +37,17 @@ jobs:
       # -------------------------- LINUX --------------------------
       - name: Build Docker Image (Linux only)
         if: matrix.os == 'ubuntu-latest'
-        run: docker build -t robotics-runner-${{ matrix.os }}:${{ github.run_id }} .
         shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker build -t robotics-runner-${{ matrix.os }}:${{ github.run_id }} .
 
       - name: Run tests inside Docker container (Linux)
         if: matrix.os == 'ubuntu-latest'
         continue-on-error: true
         shell: bash
         run: |
+          set -Eeuo pipefail
           rm -rf allure-results
           mkdir allure-results
           docker run \
@@ -56,6 +60,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
+          set -Eeuo pipefail
           docker rm -f bdd-tests-${{ matrix.os }} || true
           docker rmi robotics-runner-${{ matrix.os }}:${{ github.run_id }} || true
 
@@ -99,6 +104,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
+          set -Eeuo pipefail
           mkdir -p allure-results
           cp supports/categories.json allure-results/ 2>/dev/null || true
           cat > allure-results/executor.json <<'JSON'
@@ -194,17 +200,25 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
+          set -Eeuo pipefail
           ALLURE_VERSION=2.25.0
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
           mkdir -p allure-commandline
           tar -xzf allure.tgz -C allure-commandline --strip-components 1
           echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
 
+      # Optional: normalize line endings if repo is edited on Windows
+      - name: Normalize line endings (strip CRLF)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          find . -type f \( -name "*.yml" -o -name "*.yaml" -o -name "*.sh" \) -exec sed -i 's/\r$//' {} +
+
       # ------------ FIX: Proper history injection for Trend ------------
       - name: Generate Allure Reports (with Trend history)
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
 
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
@@ -263,6 +277,7 @@ jobs:
       - name: Rebuild index.html
         shell: bash
         run: |
+          set -Eeuo pipefail
           SITE_DIR="site"
           {
             echo "<html><head><title>Allure Reports - Robotics BDD</title><style>body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.4}a{color:#0a66c2;text-decoration:none}a:hover{text-decoration:underline}</style></head><body>"
@@ -308,10 +323,12 @@ jobs:
       - name: Add workflow badges to summary
         shell: bash
         run: |
-          REPO_NAME=${GITHUB_REPOSITORY##*/}
-          OWNER=${GITHUB_REPOSITORY_OWNER}
-          {
-            echo "### Robotics BDD Simulation CI/CD Report Links"
-            echo "- Ubuntu Latest Report"
-            echo "- Windows Latest Report"
-            echo "- Report History"
+          set -Eeuo pipefail
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          OWNER="${GITHUB_REPOSITORY_OWNER}"
+          cat >> "$GITHUB_STEP_SUMMARY" <<MARKDOWN
+### Robotics BDD Simulation CI/CD Report Links
+- Ubuntu Latest Report
+- Windows Latest Report
+- Report History
+MARKDOWN

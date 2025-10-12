@@ -3,13 +3,12 @@ import sys
 import shutil
 import subprocess
 import time
-import platform  # Import the platform module for OS detection
+import platform
 import json
+import psutil  # make sure psutil is installed: pip install psutil
 
 # FILENAME: run_docker.py
-# DEPENDENCY: deployment_workflow.py (Located in the 'supports' folder and called in Step 6)
-# NOTE: This script orchestrates the full test lifecycle, including cleanup, Docker execution,
-# report generation, deployment (via deployment_workflow), and final git commit/push.
+# NOTE: Orchestrates the full Robotics BDD workflow (cleanup → Docker → Allure → deployment → git → Netlify)
 
 # --- Configuration ---
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -46,6 +45,58 @@ def execute_command(command, error_message):
         sys.exit(1)
 
 
+def check_docker_running():
+    """Ensures Docker daemon is running before proceeding. Auto-starts on Windows if needed."""
+    print("\n--- Checking Docker Daemon Status ---")
+
+    def is_docker_responsive():
+        try:
+            subprocess.run(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            return True
+        except Exception:
+            return False
+
+    # ✅ If Docker is already running
+    if is_docker_responsive():
+        print("✅ Docker is running and responsive.")
+        return
+
+    # ❌ Docker not running — handle by OS
+    system_os = platform.system()
+    if system_os == "Windows":
+        print("⚠️  Docker daemon not detected. Attempting to start Docker Desktop...")
+
+        docker_exe = r"C:\Program Files\Docker\Docker\Docker Desktop.exe"
+        if not os.path.exists(docker_exe):
+            print(f"❌ Docker Desktop not found at: {docker_exe}")
+            print("Please start Docker Desktop manually, then re-run this script.")
+            sys.exit(1)
+
+        already_running = any("Docker Desktop.exe" in (p.name() or "") for p in psutil.process_iter())
+        if not already_running:
+            try:
+                subprocess.Popen([docker_exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print("🚀 Starting Docker Desktop...")
+            except Exception as e:
+                print(f"❌ Failed to launch Docker Desktop: {e}")
+                sys.exit(1)
+
+        for i in range(30):
+            if is_docker_responsive():
+                print("✅ Docker daemon is now active.")
+                return
+            print(f"  ⏳ Waiting for Docker to start... ({i+1}/30)")
+            time.sleep(4)
+
+        print("❌ Docker did not start within expected time (≈2 min). Please start it manually.")
+        sys.exit(1)
+
+    else:
+        print("❌ Docker daemon not detected. Please start the Docker service manually.")
+        print("Try: sudo systemctl start docker")
+        sys.exit(1)
+
+
 def git_commit_and_push(build_number):
     """Commits the generated reports and pushes to the repository."""
     print("\n--- Step 8: Committing and Pushing Reports ---")
@@ -79,6 +130,9 @@ def main():
     print(f"Running Robotics BDD Test Workflow for Build #{build_number}")
     print("==========================================================")
 
+    # --- Step 0: Check Docker Daemon ---
+    check_docker_running()
+
     # --- Step 1: Prepare Workspace and History ---
     print("\n--- Step 1: Prepare Workspace and History ---")
     LAST_HISTORY_SOURCE = os.path.join(REPORTS_DIR, "latest", "history")
@@ -108,16 +162,12 @@ def main():
     print("\n--- Step 2: Docker Image Check ---")
     execute_command(["docker", "images", IMAGE_NAME], "Docker Image Check")
 
+    # Determine OS property file
     system_os = platform.system()
-    if system_os == 'Windows':
-        env_property_file = "windows.properties"
-    elif system_os == 'Linux':
-        env_property_file = "ubuntu.properties"
-    else:
-        env_property_file = "windows.properties"
+    env_property_file = "windows.properties" if system_os == 'Windows' else "ubuntu.properties"
     print(f"Detected OS: {system_os}. Using {env_property_file} for Allure metadata.")
 
-    # --- Step 3: Prepare Allure Metadata ---
+    # --- Step 3: Preparing Allure Metadata ---
     print("\n--- Step 3: Preparing Allure Metadata ---")
 
     metadata_files = [
@@ -134,7 +184,6 @@ def main():
         except FileNotFoundError:
             print(f"  Warning: Allure metadata file not found: {src_name}. Skipping.")
 
-    # --- 3b. Dynamically create executor.json (so Allure always recognizes it) ---
     print("  Generating dynamic executor.json for Netlify...")
 
     try:
@@ -144,11 +193,11 @@ def main():
         executor_data = {
             "name": "Robotics BDD Framework Runner (Netlify)",
             "type": "CI_Pipeline",
-            "url": "https://<your-netlify-site>.netlify.app/",
+            "url": "https://robotic-bdd.netlify.app/",
             "buildOrder": build_number,
             "buildName": f"Robotics BDD Build #{build_number}",
-            "buildUrl": f"https://<your-netlify-site>.netlify.app/reports/{build_number}/index.html",
-            "reportUrl": f"https://<your-netlify-site>.netlify.app/reports/latest/index.html",
+            "buildUrl": f"https://robotic-bdd.netlify.app/reports/{build_number}/index.html",
+            "reportUrl": f"https://robotic-bdd.netlify.app/reports/latest/index.html",
             "data": {
                 "Validation Engineer": os.getenv("GIT_AUTHOR_NAME", "Automation System"),
                 "Product Model": "BDD-Sim-PyBullet",
@@ -165,7 +214,6 @@ def main():
         with open(dest_executor_path, "w", encoding="utf-8") as f:
             json.dump(executor_data, f, indent=2)
         print(f"  ✅ Created executor.json at {dest_executor_path}")
-
     except Exception as e:
         print(f"  ⚠️  Failed to generate executor.json: {e}")
 
@@ -231,7 +279,6 @@ def main():
 if __name__ == '__main__':
     PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
     os.chdir(PROJECT_ROOT)
-
     try:
         main()
     except Exception as e:

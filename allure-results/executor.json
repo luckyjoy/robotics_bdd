@@ -1,6 +1,6 @@
 {
   "name": "Local/Script Runner",
-  "type": "Robotics BDD Workflow",
+  "type": "Loca Roboticsl BDD Workflow",
   "url": "https://robotic-bdd.netlify.app/reports/latest/",
   "buildName": "Robotics BDD Build #{{BUILD_NUMBER}}",
   "buildUrl": "N/A (Local Execution)",

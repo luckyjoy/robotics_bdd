@@ -10,7 +10,6 @@ on:
   schedule:
     - cron: '0 7 * * *'
 
-# This new concurrency block prevents duplicate runs for the same pull request or branch.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -28,9 +27,6 @@ jobs:
   run-tests:
     runs-on: ${{ matrix.os }}
     strategy:
-      # fail-fast: false ensures that all jobs in the matrix will run to completion,
-      # even if one of them fails. This allows the Windows run to proceed and upload
-      # its results artifact after the Ubuntu run fails.
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -169,14 +165,20 @@ jobs:
           SITE_DIR="site"
           HISTORY_DIR="_history"
 
+          # 1. Clean up old 'site' dir and move '_history' (old gh-pages content) into 'site'
+          # This robustly preserves all old build folders (e.g., #140, #141).
+          rm -rf "$SITE_DIR"
           if [ -d "$HISTORY_DIR" ]; then
-              cp -r "$HISTORY_DIR"/* "$SITE_DIR/" 2>/dev/null || echo "No previous builds found in history to copy."
+              mv "$HISTORY_DIR" "$SITE_DIR"
           fi
           
+          # Ensure 'site' exists and contains the 'latest' folder structure
           mkdir -p "$SITE_DIR/latest"
-          
+
           for OS in ubuntu-latest windows-latest; do
             RESULTS_DIR="allure-results/$OS"
+            
+            # Use history from the now-reinstated site dir for trend graph
             HISTORY_SOURCE_DIR="$SITE_DIR/latest/$OS/history" 
             REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
 
@@ -187,8 +189,11 @@ jobs:
               echo "No previous history found for $OS."
             fi
             
+            # Generate new report
             allure generate "$RESULTS_DIR" -o "$REPORT_DIR" --clean
 
+            # 2. Copy the new report into both the current build folder (#142) and 'latest',
+            # overwriting the old 'latest' (which was #141).
             mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
             cp -r "$REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
 
@@ -246,3 +251,27 @@ jobs:
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY
+
+---
+
+## Explanation of Fixes 💡
+
+### 1. Fixed History Deletion (Build 140)
+
+The previous method of copying the contents of the checked-out history folder (`_history`) into the new report directory (`site`) was prone to error and loss of files.
+
+* **Change**: In the `Generate Allure Reports` step, I replaced the initial `cp -r` command with a cleaner **move operation (`mv`)**:
+    ```bash
+    rm -rf "$SITE_DIR"
+    if [ -d "$HISTORY_DIR" ]; then
+        mv "$HISTORY_DIR" "$SITE_DIR"
+    fi
+    ```
+* **Effect**: This now *renames* the entire contents of the previously deployed `gh-pages` branch (`_history`) to the target deployment folder (`site`). This ensures that **all** previous build folders (including 140 and 141) are preserved intact before the new report (142) is added.
+
+### 2. Fixed Latest Build Mismatch (142 vs 141)
+
+* **Problem**: The Allure History page was showing the previous build (141) as the latest.
+* **Solution**: By fixing the history management (Point 1), the `site` directory now contains all old builds (140, 141) and the newly generated build (142). The `Rebuild index.html` step then correctly executes and reads all folders in the `site` directory. Since build 142 is now successfully added to the `site` directory, it will be the highest number found, ensuring the links are correctly updated:
+    * The `Latest Report` links point to `$SITE_DIR/latest/OS`, which is overwritten with Build 142's content.
+    * The `Historical Builds` list is regenerated and correctly includes the new `Build #142` at the top of the list.

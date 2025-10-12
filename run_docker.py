@@ -14,6 +14,8 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 IMAGE_NAME = "robotics-bdd-local:latest"
 ALLURE_RESULTS_DIR = os.path.join(PROJECT_ROOT, "allure-results")
 REPORTS_DIR = os.path.join(PROJECT_ROOT, "reports")
+# Define the location where the last generated report history lives (needed for Trend)
+ALLURE_REPORT_DIR = os.path.join(REPORTS_DIR, "allure-report") 
 SUPPORTS_DIR = os.path.join(PROJECT_ROOT, "supports")
 
 def execute_command(command, error_message):
@@ -27,7 +29,6 @@ def execute_command(command, error_message):
         print(result.stdout)
         if result.stderr:
             # Check if stderr contains actual error messages or just warnings/info
-            # For Docker/Pytest, non-zero exit code handles critical failure, but print stderr anyway
             print("--- STDERR ---")
             print(result.stderr)
         return result
@@ -103,13 +104,15 @@ def main():
     # Use robust cleanup, ignoring errors for non-existent directories
     try:
         shutil.rmtree(ALLURE_RESULTS_DIR, ignore_errors=True)
-        shutil.rmtree(os.path.join(REPORTS_DIR, "allure-report"), ignore_errors=True)
+        shutil.rmtree(ALLURE_REPORT_DIR, ignore_errors=True) # Use the global constant
         shutil.rmtree(os.path.join(PROJECT_ROOT, "__pycache__"), ignore_errors=True)
         shutil.rmtree(os.path.join(PROJECT_ROOT, ".pytest_cache"), ignore_errors=True)
         
         # Ensure result and report directories exist before proceeding
         os.makedirs(ALLURE_RESULTS_DIR, exist_ok=True)
         os.makedirs(REPORTS_DIR, exist_ok=True)
+        # Ensure the ALLURE_REPORT_DIR exists, even though it's about to be deleted in step 5
+        os.makedirs(ALLURE_REPORT_DIR, exist_ok=True) 
         print("Cleanup complete.")
     except OSError as e:
         print(f"\n==========================================================")
@@ -129,7 +132,7 @@ def main():
     except SystemExit:
         # execute_command already printed the error and exited, but we re-raise in case of unexpected flow
         print("Docker image inspection failed. Please ensure the image is built.")
-        raise 
+        raise
     
     # --- Determine OS-specific environment file ---
     system_os = platform.system()
@@ -145,8 +148,10 @@ def main():
         print(f"\nWarning: Unknown OS '{system_os}'. Defaulting to {env_property_file} for Allure metadata.")
     # ---------------------------------------------------------
 
-    # 3. Copy Allure Metadata (Replacing .bat file logic)
-    print("\nCopying Allure metadata...")
+    # 3. Prepare Allure Artifacts (Metadata and History for Trend)
+    print("\n--- Preparing Allure Results with Metadata and History ---")
+
+    # A. Copy Metadata (Executor, Categories, Environment)
     
     # Error handling: Check if supports directory exists
     if not os.path.isdir(SUPPORTS_DIR):
@@ -158,17 +163,10 @@ def main():
     # Define files to copy
     metadata_files = [
         (env_property_file, "environment.properties"), # OS-specific environment file
-        ("categories.json", "categories.json"),           # Custom categories
-        ("executor.json", "executor.json"),               # Executor data (if used)
+        ("categories.json", "categories.json"),        # Custom categories (Fixes Categories tab)
+        ("executor.json", "executor.json"),            # Executor data (Fixes Executors tab)
     ]
     
-    # Explicit check for the existence of the primary environment file
-    env_file_src_path = os.path.join(SUPPORTS_DIR, env_property_file)
-    if not os.path.exists(env_file_src_path):
-        print(f"  CRITICAL WARNING: The required environment file '{env_property_file}' does not exist in the 'supports' folder.")
-        print(f"  Allure report may lack system metadata.")
-        # We continue execution as other files might still be copied.
-
     for src_name, dest_name in metadata_files:
         src_path = os.path.join(SUPPORTS_DIR, src_name)
         dest_path = os.path.join(ALLURE_RESULTS_DIR, dest_name)
@@ -178,9 +176,25 @@ def main():
                 shutil.copy2(src_path, dest_path)
                 print(f"  Copied: {src_name} to {os.path.basename(dest_path)}")
             else:
+                # Only show a warning for missing files, as they are not critical to test run
                 print(f"  Warning: Allure metadata file not found: {src_name}. Skipping copy.")
         except Exception as e:
             print(f"  Error copying {src_name}: {e}")
+
+    # B. Copy History (CRITICAL FOR TREND TAB)
+    history_source = os.path.join(ALLURE_REPORT_DIR, 'history')
+    history_dest = os.path.join(ALLURE_RESULTS_DIR, 'history')
+    
+    if os.path.isdir(history_source):
+        print(f"\n  Found previous report history. Copying from '{os.path.basename(ALLURE_REPORT_DIR)}' to raw results...")
+        try:
+            # dirs_exist_ok=True is necessary if the destination directory already exists
+            shutil.copytree(history_source, history_dest, dirs_exist_ok=True)
+            print("  History copied successfully for Trend feature.")
+        except Exception as e:
+            print(f"  ERROR copying history folder: {e}. Trend data will be unavailable for this run.")
+    else:
+        print("  Previous report history not found. Trend view will start from this run.")
 
     # 4. Execute Docker Test Run
     print("\n--- Running Docker Tests ---")
@@ -211,13 +225,11 @@ def main():
 
     # 5. Allure Report Generation
     print("\n--- Executing: Allure Report Generation (via Docker) ---")
-    allure_report_output = os.path.join(REPORTS_DIR, "allure-report") # Temporary folder
-    os.makedirs(allure_report_output, exist_ok=True)
     
     docker_allure_command = [
         "docker", "run", "--rm",
         "-v", f"{ALLURE_RESULTS_DIR}:/app/allure-results",
-        "-v", f"{allure_report_output}:/app/allure-report",
+        "-v", f"{ALLURE_REPORT_DIR}:/app/allure-report", # Use global constant
         IMAGE_NAME,
         "allure", "generate", "allure-results", "-o", "allure-report", "--clean"
     ]
@@ -236,10 +248,10 @@ def main():
         sys.exit(1)
 
     # Error handling: Check if Allure report index file was successfully generated
-    allure_index_check = os.path.join(allure_report_output, "index.html")
+    allure_index_check = os.path.join(ALLURE_REPORT_DIR, "index.html")
     if not os.path.exists(allure_index_check):
         print(f"\n==========================================================")
-        print(f"CRITICAL ERROR: Allure report index.html not found at '{allure_report_output}'.")
+        print(f"CRITICAL ERROR: Allure report index.html not found at '{ALLURE_REPORT_DIR}'.")
         print(f"The report generation step (5) likely failed or produced an empty report.")
         print(f"Skipping deployment.")
         print(f"==========================================================")

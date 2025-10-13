@@ -68,18 +68,13 @@ jobs:
       ALLURE_VERSION: 2.29.0
       SITE_DIR: site
     steps:
-      # FIX 1: SIMPLIFIED CACHE PATH (final path) and NEW KEY to force history reset
-      - name: Restore Allure History Cache (Final Path)
-        uses: actions/cache/restore@v4
-        with:
-          path: site
-          key: allure-site-final-${{ github.ref_name }} 
-          enableCrossOsArchive: true
+      # FIX 1: REMOVE CACHING ENTIRELY. We will only deploy the latest reports.
+      # This resolves the history issue by avoiding the failed restoration/saving.
 
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 
+          fetch-depth: 1 # No history needed anymore
 
       - name: Download Allure CLI
         run: |
@@ -87,72 +82,51 @@ jobs:
           tar -xzf allure-${ALLURE_VERSION}.tgz
           sudo mv allure-${ALLURE_VERSION}/bin/allure /usr/local/bin/allure
 
-      - name: Clear Latest Site Directory
-        run: |
-          if [ -d "$SITE_DIR/latest" ]; then
-            rm -rf "$SITE_DIR/latest/*"
-          fi
-
       - name: Generate Allure Reports (Ubuntu + Windows)
         run: |
-          mkdir -p $SITE_DIR/latest
-          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
-          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
-
-          for OS in ubuntu-latest windows-latest; do
-            if [ -d "allure-results/$OS" ]; then
-              allure generate "allure-results/$OS" -o "$SITE_DIR/latest/$OS" --clean
-              mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
-              cp -r "$SITE_DIR/latest/$OS"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
-              date +"%Y-%m-%d %H:%M:%S %Z" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
-              cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
-            fi
-          done
-
+          # Only create the 'latest' reports
+          mkdir -p $SITE_DIR/latest/ubuntu-latest
+          mkdir -p $SITE_DIR/latest/windows-latest
+          
+          # Only generate current reports
+          if [ -d "allure-results/ubuntu-latest" ]; then
+            allure generate "allure-results/ubuntu-latest" -o "$SITE_DIR/latest/ubuntu-latest" --clean
+          fi
+          if [ -d "allure-results/windows-latest" ]; then
+            allure generate "allure-results/windows-latest" -o "$SITE_DIR/latest/windows-latest" --clean
+          fi
+          
       - name: Update Executor and Trend Data
         run: |
           for OS in ubuntu-latest windows-latest; do
-            if [ -d "$SITE_DIR/latest/$OS" ]; then
-              echo '{"buildOrder":'"$GITHUB_RUN_NUMBER"', "reportName":"'"$OS Report"'"}' > "$SITE_DIR/latest/$OS/widgets/executor.json"
-              cp -r "$SITE_DIR/latest/$OS/widgets" "$SITE_DIR/widgets" || true
+            REPORT_DIR="$SITE_DIR/latest/$OS"
+            if [ -d "$REPORT_DIR" ]; then
+              echo '{"buildOrder":'"$GITHUB_RUN_NUMBER"', "reportName":"'"$OS Report"'"}' > "$REPORT_DIR/widgets/executor.json"
             fi
           done
 
-      - name: Rebuild index.html (History Page)
+      - name: Create Landing Page Index
         shell: bash
         run: |
           SITE_DIR="site"
-          
-          echo "<html><head><title>Allure Reports History</title>
+          echo "<html><head><title>Latest Allure Reports</title>
           <style>
           body{font-family:sans-serif;margin:20px;}
           ul{list-style:none;padding:0;}
           li{margin:6px 0;}
           a{text-decoration:none;color:#0366d6;}
           a:hover{text-decoration:underline;}
-          </style></head><body><h1>Allure Reports History</h1><hr><ul>" > "$SITE_DIR/index.html"
+          </style></head><body><h1>Latest Allure Reports (Build #${GITHUB_RUN_NUMBER})</h1><hr><ul>" > "$SITE_DIR/index.html"
 
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
-              TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: $TS</li>" >> "$SITE_DIR/index.html"
+              echo "<li><strong><a href='latest/$OS/index.html'>Latest Report ($OS)</a></strong></li>" >> "$SITE_DIR/index.html"
             fi
           done
 
-          echo "</ul><hr><h2>Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
-          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" -printf "%f\n" 2>/dev/null | sort -nr || true)
-          for BUILD in $BUILDS; do
-            for OS in ubuntu-latest windows-latest; do
-              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
-              fi
-            done
-          done
+          echo "</ul><hr><p>History generation is currently disabled due to continuous caching errors.</p></body></html>" >> "$SITE_DIR/index.html"
 
-          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
-
-      # FIX 2: Use PERL for robust path correction (The most reliable fix for internal 404s)
+      # FIX 2: Use PERL for robust path correction on the LATEST report index.html (resolves 404s)
       - name: Fix Allure Report Absolute Paths (Perl Fix)
         run: |
           for OS in ubuntu-latest windows-latest; do
@@ -162,27 +136,12 @@ jobs:
               perl -pi -e 's|src="/|src="./|g' "$REPORT_DIR/index.html"
               perl -pi -e 's|href="/|href="./|g' "$REPORT_DIR/index.html"
             fi
-            
-            BUILD_DIR="site/$BUILD_NUMBER/$OS"
-            if [ -f "$BUILD_DIR/index.html" ]; then
-              perl -pi -e 's|src="/|src="./|g' "$BUILD_DIR/index.html"
-              perl -pi -e 's|href="/|href="./|g' "$BUILD_DIR/index.html"
-            fi
           done
 
-      # FIX 3: Set .nojekyll and baseurl in the correct, simplified path
-      - name: Set Base URL for Allure Reports
+      # FIX 3: Set .nojekyll in the correct path
+      - name: Set .nojekyll
         run: |
-          # Create a .nojekyll file
           touch site/.nojekyll
-          # Set the base URL (e.g., /robotics_bdd/)
-          echo /${{ github.event.repository.name }}/ > site/baseurl
-
-      - name: Save Allure History Cache (Final Path)
-        uses: actions/cache/save@v4
-        with:
-          path: site
-          key: allure-site-final-${{ github.ref_name }}
 
       # FIX 4: SIMPLIFIED ARTIFACT UPLOAD PATH (This must be 'site')
       - name: Upload Pages artifact
@@ -194,7 +153,6 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-      # FIX 5: Summary link logic (remains correct based on the deployed structure)
       - name: Add Workflow Summary (Badges)
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
@@ -205,6 +163,7 @@ jobs:
           # Explicitly append /index.html
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          # FIX: The Report History link now points to the single landing index
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests passed" >> $GITHUB_STEP_SUMMARY

@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   run-tests:
-# ... (run-tests job remains unchanged) ...
+    # ... (run-tests job remains unchanged) ...
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -67,15 +67,13 @@ jobs:
     env:
       ALLURE_VERSION: 2.29.0
       SITE_DIR: site
-      # NEW ENV: Set the repository name as the required base path
-      REPO_PATH: ${{ github.event.repository.name }}
     steps:
-      # FIX: Cache key set to v4 to ensure a full history reset
-      - name: Restore Allure History Cache (v4 Reset)
+      # FIX 1: SIMPLIFIED CACHE PATH (final path) and NEW KEY to force history reset
+      - name: Restore Allure History Cache (Final Path)
         uses: actions/cache/restore@v4
         with:
           path: site
-          key: allure-site-v4-${{ github.ref_name }}
+          key: allure-site-final-${{ github.ref_name }} 
           enableCrossOsArchive: true
 
       - name: Checkout Repository
@@ -103,7 +101,6 @@ jobs:
 
           for OS in ubuntu-latest windows-latest; do
             if [ -d "allure-results/$OS" ]; then
-              # Allure generation remains the same
               allure generate "allure-results/$OS" -o "$SITE_DIR/latest/$OS" --clean
               mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
               cp -r "$SITE_DIR/latest/$OS"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
@@ -125,7 +122,6 @@ jobs:
         shell: bash
         run: |
           SITE_DIR="site"
-          # Logic remains the same. The history should be restored from the cache above.
           
           echo "<html><head><title>Allure Reports History</title>
           <style>
@@ -156,12 +152,13 @@ jobs:
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
-      # FIX 4: Use PERL for robust path correction (This ensures internal links work)
-      - name: Fix Allure Report Absolute Paths (Robust Perl Fix)
+      # FIX 2: Use PERL for robust path correction (The most reliable fix for internal 404s)
+      - name: Fix Allure Report Absolute Paths (Perl Fix)
         run: |
           for OS in ubuntu-latest windows-latest; do
             REPORT_DIR="site/latest/$OS"
             if [ -f "$REPORT_DIR/index.html" ]; then
+              # Replace absolute paths (src="/ and href="/) with relative paths (src="./ and href="./)
               perl -pi -e 's|src="/|src="./|g' "$REPORT_DIR/index.html"
               perl -pi -e 's|href="/|href="./|g' "$REPORT_DIR/index.html"
             fi
@@ -172,31 +169,32 @@ jobs:
               perl -pi -e 's|href="/|href="./|g' "$BUILD_DIR/index.html"
             fi
           done
-          
-      # FIX 5 (CRITICAL): Prepare the artifact path by moving the entire site under the REPO_PATH folder
-      - name: Restructure Artifact for Subpath Deployment
+
+      # FIX 3: Set .nojekyll and baseurl in the correct, simplified path
+      - name: Set Base URL for Allure Reports
         run: |
-          # The artifact must be uploaded with the REPO_PATH as the root folder
-          mkdir -p final_artifact
-          mv site final_artifact/${{ env.REPO_PATH }}
-          
-      - name: Save Allure History Cache (v4 Reset)
+          # Create a .nojekyll file
+          touch site/.nojekyll
+          # Set the base URL (e.g., /robotics_bdd/)
+          echo /${{ github.event.repository.name }}/ > site/baseurl
+
+      - name: Save Allure History Cache (Final Path)
         uses: actions/cache/save@v4
         with:
-          path: final_artifact/${{ env.REPO_PATH }}/site
-          key: allure-site-v4-${{ github.ref_name }}
+          path: site
+          key: allure-site-final-${{ github.ref_name }}
 
+      # FIX 4: SIMPLIFIED ARTIFACT UPLOAD PATH (This must be 'site')
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # UPLOAD THE NEW ARTIFACT STRUCTURE
-          path: final_artifact
+          path: site
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
 
-      # FIX 6: Construct badge links using BASE_URL and explicitly point to index.html
+      # FIX 5: Summary link logic (remains correct based on the deployed structure)
       - name: Add Workflow Summary (Badges)
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
@@ -204,7 +202,7 @@ jobs:
 
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          # Links remain the same as the deployed environment handles the subpath now
+          # Explicitly append /index.html
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY

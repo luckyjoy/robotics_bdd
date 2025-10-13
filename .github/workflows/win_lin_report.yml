@@ -74,7 +74,8 @@ jobs:
           else
             echo "✅ Allure results found for ${{ matrix.os }}"
             echo "has_results=true" >> $GITHUB_OUTPUT
-
+          fi
+          
       - name: Upload Allure Results
         if: always()
         uses: actions/upload-artifact@v4

@@ -104,10 +104,10 @@ jobs:
               -v $PWD/allure-results:/app/allure-results \
               -v $PWD:/app \
               robotics-bdd-sim \
-              bash -c "pytest -m sensors --alluredir=allure-results || echo 'Tests failed, continuing for report generation.'"
+              bash -c "pytest -m "navigation or sensors or walking" --alluredir=allure-results || echo 'Tests failed, continuing for report generation.'"
           else
             echo "Running pytest natively on Windows..."
-            pytest -m sensors --alluredir=allure-results || echo 'Tests failed, continuing for report generation.'
+            pytest -m "navigation or sensors or walking" --alluredir=allure-results || echo 'Tests failed, continuing for report generation.'
           fi
 
       - name: Verify Allure Results existence
@@ -276,6 +276,6 @@ jobs:
           OWNER=${GITHUB_REPOSITORY_OWNER}
 
           echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY

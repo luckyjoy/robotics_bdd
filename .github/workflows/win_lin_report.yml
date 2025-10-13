@@ -5,11 +5,11 @@ on:
     branches:
       - main
 
-# 1. UPDATE: Set explicit permissions for the modern GitHub Pages workflow
+# Set explicit permissions required for GitHub Pages deployment via Actions (OIDC)
 permissions:
-  contents: read     # Read is enough for checkout and basic job access
-  pages: write       # Required for the deploy-pages action to publish
-  id-token: write    # Required for the deploy-pages action (OpenID Connect)
+  contents: read     
+  pages: write       
+  id-token: write    
 
 jobs:
   run-tests:
@@ -58,7 +58,7 @@ jobs:
     name: Deploy Allure Report
     runs-on: ubuntu-latest
     needs: run-tests
-    # 2. ADD: Configure the deployment environment for tracking in GitHub UI
+    # Configure the deployment environment for GitHub Pages tracking
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -66,10 +66,19 @@ jobs:
       ALLURE_VERSION: 2.29.0
       SITE_DIR: site
     steps:
+      # FIX 1: Restore cache of the 'site' directory to retrieve history from prior runs
+      - name: Restore Allure History Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: site
+          key: allure-site-${{ github.ref_name }}
+          enableCrossOsArchive: true
+
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # fetch-depth: 0 is important for the build-info.txt logic
+          fetch-depth: 0 
 
       - name: Download Allure CLI
         run: |
@@ -102,12 +111,11 @@ jobs:
             fi
           done
 
-      - name: Rebuild index.html
+      - name: Rebuild index.html (History Page)
         shell: bash
         run: |
           SITE_DIR="site"
-          # REPO/OWNER variables for URL construction are removed.
-
+          
           echo "<html><head><title>Allure Reports History</title>
           <style>
           body{font-family:sans-serif;margin:20px;}
@@ -125,6 +133,7 @@ jobs:
           done
 
           echo "</ul><hr><h2>Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
+          # This finds historical folders restored from the cache
           BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" -printf "%f\n" 2>/dev/null | sort -nr || true)
           for BUILD in $BUILDS; do
             for OS in ubuntu-latest windows-latest; do
@@ -137,31 +146,35 @@ jobs:
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
-      # 3. REPLACE: Use actions/upload-pages-artifact instead of peaceiris/actions-gh-pages
+      # FIX 2: Save the updated 'site' directory (with current and historical builds) to the cache
+      - name: Save Allure History Cache
+        uses: actions/cache/save@v4
+        with:
+          path: site
+          key: allure-site-${{ github.ref_name }}
+
+      # Use official GitHub Pages actions
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site # The directory containing the static Allure report
+          path: site
 
-      # 4. ADD: Use actions/deploy-pages to trigger the GitHub Pages deployment
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        # Note: No 'with:' is needed here as it automatically uses the uploaded artifact
 
-      # 5. UPDATE: Use the page_url output variable for the summary links
+      # FIX 3: Construct badge links using BASE_URL and explicitly point to index.html
       - name: Add Workflow Summary (Badges)
         run: |
-          # Capture the full URL
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
-          # Strip the trailing slash, if present (this is the key fix for 404s)
-          BASE_URL="${PAGE_URL%/}"
+          # Strip the trailing slash from the output URL for consistent path construction
+          BASE_URL="${PAGE_URL%/}" 
 
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          # Construct links using BASE_URL + /path/
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          # FIX: Explicitly append /index.html to prevent 404 errors
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests passed" >> $GITHUB_STEP_SUMMARY

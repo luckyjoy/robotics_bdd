@@ -28,6 +28,7 @@ def sim():
 # -------------------------
 # Register Custom Markers
 # -------------------------
+'''
 def pytest_configure(config):
     markers = [
         "navigation: Tests related to robot navigation",
@@ -101,3 +102,4 @@ def pytest_html_results_summary(prefix, summary, postfix):
 def pytest_metadata(metadata):
     metadata['Author'] = "Bang Thien Nguyen"
     metadata['Project'] = "Robot Simulation BDD"
+'''

@@ -104,10 +104,10 @@ jobs:
               -v $PWD/allure-results:/app/allure-results \
               -v $PWD:/app \
               robotics-bdd-sim \
-              bash -c "pytest -m navigation --alluredir=allure-results || echo 'Tests failed, continuing for report generation.'"
+              bash -c "pytest -m sensors --alluredir=allure-results || echo 'Tests failed, continuing for report generation.'"
           else
             echo "Running pytest natively on Windows..."
-            pytest -m navigation --alluredir=allure-results || echo 'Tests failed, continuing for report generation.'
+            pytest -m sensors --alluredir=allure-results || echo 'Tests failed, continuing for report generation.'
           fi
 
       - name: Verify Allure Results existence

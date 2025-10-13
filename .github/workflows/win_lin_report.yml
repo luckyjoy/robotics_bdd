@@ -151,6 +151,7 @@ jobs:
             echo "results_exist=true" >> $GITHUB_OUTPUT
           else
             echo "results_exist=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Stop if no results
         if: steps.check-results.outputs.results_exist == 'false'
@@ -191,7 +192,7 @@ jobs:
           mkdir -p site/history
           cp -r merged-results/history site/history || true
 
-      # Copy to structured /latest directories
+      # Copy to latest directories
       - name: Copy to latest directories
         shell: bash
         run: |

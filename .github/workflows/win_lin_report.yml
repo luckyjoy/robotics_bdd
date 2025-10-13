@@ -4,7 +4,19 @@ on:
   push:
     branches:
       - main
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  pull-requests: read
+  statuses: read
+  pages: none
+  id-token: none
+  
 jobs:
   run-tests:
     name: Run tests on ${{ matrix.os }}

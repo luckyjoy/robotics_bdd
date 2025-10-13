@@ -5,11 +5,10 @@ on:
     branches:
       - main
 
-# Set explicit permissions required for GitHub Pages deployment via Actions
 permissions:
-  contents: read     
-  pages: write       
-  id-token: write    
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
   run-tests:
@@ -18,8 +17,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-    outputs:
-      status: ${{ steps.set_status.outputs.result_status }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -30,31 +27,25 @@ jobs:
           python-version: 3.11
 
       - name: Install Dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Run Tests with Allure
         id: run-tests
+        shell: bash   # ensure consistent behavior on Windows runner
         run: |
-          mkdir -p allure-results/${{ matrix.os }}
-          pytest tests/ --alluredir=allure-results/${{ matrix.os }} || true
+          mkdir -p "allure-results/${{ matrix.os }}"
+          pytest tests/ --alluredir="allure-results/${{ matrix.os }}" || true
 
-      - name: Determine Status
-        id: set_status
-        shell: bash
-        run: |
-          if [ -d "allure-results/${{ matrix.os }}" ]; then
-            if grep -q '"failed": [1-9]' allure-results/${{ matrix.os }}/widgets/summary.json 2>/dev/null; then
-              echo "result_status=failed" >> $GITHUB_OUTPUT
-            else
-              echo "result_status=passed" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "result_status=failed" >> $GITHUB_OUTPUT
-          fi
-
-# --------------------------------------------------------------------------------
+      - name: Upload Allure results
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.os }}
+          path: allure-results/${{ matrix.os }}/
+          if-no-files-found: warn
+          retention-days: 14
 
   deploy-allure:
     name: Deploy Allure Report
@@ -67,56 +58,69 @@ jobs:
       ALLURE_VERSION: 2.29.0
       SITE_DIR: site
     steps:
-      # FIX 1: Change Cache Key to ensure a cache reset (use v2)
-      - name: Restore Allure History Cache (v2)
+      - name: Restore Allure History Cache
         uses: actions/cache/restore@v4
         with:
           path: site
-          key: allure-site-v2-${{ github.ref_name }}
+          key: allure-site-${{ github.ref_name }}
           enableCrossOsArchive: true
 
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 
+          fetch-depth: 0
 
       - name: Download Allure CLI
+        shell: bash
         run: |
-          wget https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz
-          tar -xzf allure-${ALLURE_VERSION}.tgz
-          sudo mv allure-${ALLURE_VERSION}/bin/allure /usr/local/bin/allure
+          wget "https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz"
+          tar -xzf "allure-${ALLURE_VERSION}.tgz"
+          sudo mv "allure-${ALLURE_VERSION}/bin/allure" /usr/local/bin/allure
 
-      # FIX 2: Clear site/latest/* before regeneration
-      - name: Clear Latest Site Directory
+      # >>> Critical change: download into OS-specific subfolders
+      - name: Download Allure results (ubuntu)
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results-ubuntu-latest
+          path: allure-results/ubuntu-latest
+
+      - name: Download Allure results (windows)
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results-windows-latest
+          path: allure-results/windows-latest
+
+      - name: Debug: show downloaded results
+        shell: bash
         run: |
-          # Clear the previous latest report before generating a new one
-          if [ -d "$SITE_DIR/latest" ]; then
-            rm -rf "$SITE_DIR/latest/*"
-          fi
+          echo "Downloaded artefacts under ./allure-results:"
+          find allure-results -maxdepth 2 -type d -print | sed 's/^/ - /'
 
       - name: Generate Allure Reports (Ubuntu + Windows)
+        shell: bash
         run: |
-          mkdir -p $SITE_DIR/latest
-          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
-          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+          mkdir -p "${SITE_DIR}/latest"
+          BUILD_NUMBER="${GITHUB_RUN_NUMBER}"
+          echo "BUILD_NUMBER=${BUILD_NUMBER}" >> $GITHUB_ENV
 
           for OS in ubuntu-latest windows-latest; do
-            if [ -d "allure-results/$OS" ]; then
-              # FIX: Use simple --clean as --clean-all may be too aggressive/redundant with the manual clear
-              allure generate "allure-results/$OS" -o "$SITE_DIR/latest/$OS" --clean
-              mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
-              cp -r "$SITE_DIR/latest/$OS"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
-              date +"%Y-%m-%d %H:%M:%S %Z" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
-              cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
+            if [ -d "allure-results/${OS}" ] && [ "$(ls -A "allure-results/${OS}" 2>/dev/null)" ]; then
+              # valid flag is --clean (not --clean-all)
+              allure generate "allure-results/${OS}" -o "${SITE_DIR}/latest/${OS}" --clean
+              mkdir -p "${SITE_DIR}/${BUILD_NUMBER}/${OS}"
+              cp -r "${SITE_DIR}/latest/${OS}/"* "${SITE_DIR}/${BUILD_NUMBER}/${OS}/"
+              date +"%Y-%m-%d %H:%M:%S %Z" > "${SITE_DIR}/${BUILD_NUMBER}/${OS}/build-info.txt"
+              cp "${SITE_DIR}/${BUILD_NUMBER}/${OS}/build-info.txt" "${SITE_DIR}/latest/${OS}/build-info.txt"
             fi
           done
 
       - name: Update Executor and Trend Data
+        shell: bash
         run: |
           for OS in ubuntu-latest windows-latest; do
-            if [ -d "$SITE_DIR/latest/$OS" ]; then
-              echo '{"buildOrder":'"$GITHUB_RUN_NUMBER"', "reportName":"'"$OS Report"'"}' > "$SITE_DIR/latest/$OS/widgets/executor.json"
-              cp -r "$SITE_DIR/latest/$OS/widgets" "$SITE_DIR/widgets" || true
+            if [ -d "${SITE_DIR}/latest/${OS}" ]; then
+              echo '{"buildOrder":'"${GITHUB_RUN_NUMBER}"', "reportName":"'"${OS} Report"'"}' > "${SITE_DIR}/latest/${OS}/widgets/executor.json" || true
+              cp -r "${SITE_DIR}/latest/${OS}/widgets" "${SITE_DIR}/widgets" || true
             fi
           done
 
@@ -124,71 +128,51 @@ jobs:
         shell: bash
         run: |
           SITE_DIR="site"
-          
-          echo "<html><head><title>Allure Reports History</title>
-          <style>
-          body{font-family:sans-serif;margin:20px;}
-          ul{list-style:none;padding:0;}
-          li{margin:6px 0;}
-          a{text-decoration:none;color:#0366d6;}
-          a:hover{text-decoration:underline;}
-          </style></head><body><h1>Allure Reports History</h1><hr><ul>" > "$SITE_DIR/index.html"
-
-          for OS in ubuntu-latest windows-latest; do
-            if [ -d "$SITE_DIR/latest/$OS" ]; then
-              TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: $TS</li>" >> "$SITE_DIR/index.html"
-            fi
-          done
-
-          echo "</ul><hr><h2>Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
-          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" -printf "%f\n" 2>/dev/null | sort -nr || true)
-          for BUILD in $BUILDS; do
+          {
+            echo "<html><head><title>Allure Reports History</title>"
+            echo "<style>body{font-family:sans-serif;margin:20px;}ul{list-style:none;padding:0;}li{margin:6px 0;}a{text-decoration:none;color:#0366d6;}a:hover{text-decoration:underline;}</style></head><body><h1>Allure Reports History</h1><hr><ul>"
             for OS in ubuntu-latest windows-latest; do
-              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              if [ -d "$SITE_DIR/latest/$OS" ]; then
+                TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                echo "<li><strong>latest/$OS/Latest Report ($OS)</a></strong> - Last run: $TS</li>"
               fi
             done
-          done
+            echo "</ul><hr><h2>Historical Builds</h2><ul>"
+            BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" -printf "%f\n" 2>/dev/null | sort -nr || true)
+            for BUILD in $BUILDS; do
+              for OS in ubuntu-latest windows-latest; do
+                if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
+                  TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                  echo "<li>${BUILD}/${OS}/Build #${BUILD} (${OS})</a> - ${TS}</li>"
+                fi
+              done
+            done
+            echo "</ul></body></html>"
+          } > "$SITE_DIR/index.html"
 
-          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
-
-      # FIX 3: Manually correct paths in Allure's index.html
-      - name: Fix Allure Report Absolute Paths
+      - name: Ensure relative asset paths
+        if: always()
+        shell: bash
         run: |
-          REPO_NAME=${{ github.event.repository.name }}
           for OS in ubuntu-latest windows-latest; do
             REPORT_DIR="site/latest/$OS"
             if [ -f "$REPORT_DIR/index.html" ]; then
-              # Replace absolute paths (e.g., /styles) with relative paths (e.g., ./styles)
-              sed -i 's|src="/|src="./|g' "$REPORT_DIR/index.html"
-              sed -i 's|href="/|href="./|g' "$REPORT_DIR/index.html"
-              # Add base tag for subpath handling
-              sed -i "s|<head>|<head><base href=\"/$REPO_NAME/$REPORT_DIR/\">|g" "$REPORT_DIR/index.html" || true
-            fi
-            
-            BUILD_DIR="site/$BUILD_NUMBER/$OS"
-            if [ -f "$BUILD_DIR/index.html" ]; then
-              sed -i 's|src="/|src="./|g' "$BUILD_DIR/index.html"
-              sed -i 's|href="/|href="./|g' "$BUILD_DIR/index.html"
+              # rewrite absolute to relative
+              sed -i 's|src="/|src="./|g'  "$REPORT_DIR/index.html" || true
+              sed -i 's|href="/|href="./|g' "$REPORT_DIR/index.html" || true
             fi
           done
-          
-      # FIX 4: Set .nojekyll and baseurl for GitHub Pages base path configuration
-      - name: Set Base URL for Allure Reports
-        run: |
-          # Create a .nojekyll file
-          touch site/.nojekyll
-          # Set the base URL (e.g., /robotics_bdd/)
-          echo /${{ github.event.repository.name }}/ > site/baseurl
 
-      # FIX 1: Save the updated 'site' directory to the cache using the new key
-      - name: Save Allure History Cache (v2)
+      - name: Set Base URL for GitHub Pages
+        shell: bash
+        run: |
+          touch site/.nojekyll
+
+      - name: Save Allure History Cache
         uses: actions/cache/save@v4
         with:
           path: site
-          key: allure-site-v2-${{ github.ref_name }}
+          key: allure-site-${{ github.ref_name }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
@@ -200,15 +184,16 @@ jobs:
         uses: actions/deploy-pages@v4
 
       - name: Add Workflow Summary (Badges)
+        shell: bash
         run: |
-          PAGE_URL=${{ steps.deployment.outputs.page_url }}
-          BASE_URL="${PAGE_URL%/}" 
-
-          echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          # Explicitly append /index.html to prevent 404 errors on deep subdirectories
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests passed" >> $GITHUB_STEP_SUMMARY
+          PAGE_URL="${{ steps.deployment.outputs.page_url }}"
+          BASE_URL="${PAGE_URL%/}"
+          {
+            echo "### 🤖 Robotics BDD Simulation CI/CD"
+            echo
+            echo "!Ubuntu Latest Report"
+            echo "!Windows Latest Report"
+            echo "!Report History"
+            echo
+            echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests passed"
+          } >> "$GITHUB_STEP_SUMMARY"

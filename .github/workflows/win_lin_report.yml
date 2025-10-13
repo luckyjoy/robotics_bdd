@@ -116,8 +116,8 @@ jobs:
           done
 
           echo "</ul><hr><h2>Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
-          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" | xargs -n 1 basename | sort -nr)
-
+          #BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" | xargs -n 1 basename | sort -nr)
+          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" -printf "%f\n" 2>/dev/null | sort -nr || true)
           for BUILD in $BUILDS; do
             for OS in ubuntu-latest windows-latest; do
               if [ -d "$SITE_DIR/$BUILD/$OS" ]; then

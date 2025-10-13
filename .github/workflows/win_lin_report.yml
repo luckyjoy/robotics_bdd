@@ -178,14 +178,15 @@ jobs:
         uses: actions/deploy-pages@v4
 
       - name: Add Workflow Summary (Badges)
-        shell: bash
         run: |
-          PAGE_URL="${{ steps.deployment.outputs.page_url }}"
-          BASE_URL="${PAGE_URL%/}"
-          {
-            echo "### 🤖 Robotics BDD Simulation CI/CD"
-            echo
-            echo "!Ubuntu Latest Report"
-            echo "[![Windows Latest Report](https://img.shields.io/badge/ory](${BASE_URL}/cho
-            echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests passed"
-          } >> "$GITHUB_STEP_SUMMARY"
+          PAGE_URL=${{ steps.deployment.outputs.page_url }}
+          BASE_URL="${PAGE_URL%/}" 
+
+          echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          # Explicitly append /index.html to prevent 404 errors on deep subdirectories
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests passed" >> $GITHUB_STEP_SUMMARY

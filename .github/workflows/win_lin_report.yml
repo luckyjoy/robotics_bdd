@@ -117,6 +117,18 @@ jobs:
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
           BASE_URL="${PAGE_URL%/}"
+          
+          # Detect status
+          if grep -q "FAILED" allure-results/ubuntu-latest/*; then
+            STATUS_ICON="⚠️"
+            STATUS_COLOR="yellow"
+            STATUS_TEXT="Unstable (some tests failed)"
+          else
+            STATUS_ICON="✅"
+            STATUS_COLOR="brightgreen"
+            STATUS_TEXT="All tests passed"
+          fi        
+          
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY

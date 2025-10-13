@@ -155,15 +155,15 @@ jobs:
 
       - name: Add Workflow Summary (Badges)
         run: |
-          PAGE_URL=${{ steps.deployment.outputs.page_url }}
-          BASE_URL="${PAGE_URL%/}" 
-
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          # Explicitly append /index.html
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          # FIX: The Report History link now points to the single landing index
-          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
+
+          # These badges link to downloadable artifacts instead of GitHub Pages
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifact-ubuntu)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifact-windows)" >> $GITHUB_STEP_SUMMARY
+
+          # The Report History badge now points to the overall run
+          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](https://github.com/${{ github.repository }}/actions)" >> $GITHUB_STEP_SUMMARY
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests passed" >> $GITHUB_STEP_SUMMARY

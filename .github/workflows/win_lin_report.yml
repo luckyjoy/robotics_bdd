@@ -1,4 +1,4 @@
-vname: 🤖 Robotics BDD Simulation CI/CD
+name: 🤖 Robotics BDD Simulation CI/CD
 
 on:
   push:

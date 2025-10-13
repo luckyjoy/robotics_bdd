@@ -2,8 +2,8 @@ name: 🤖 Robotics BDD Simulation CI/CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
 
 permissions:
   contents: read
@@ -32,40 +32,48 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install allure-pytest pytest-bdd
+          pip install pytest pytest-bdd allure-pytest
 
       - name: Prepare Allure results directory
         run: mkdir -p allure-results/${{ matrix.os }}
 
-      - name: Run Tests (Linux: Docker, Windows: Pytest)
+      # -------------------------------
+      # Linux: Dockerized tests
+      # -------------------------------
+      - name: Run Tests (Linux)
+        if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
-          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            echo "🐳 Running tests inside Docker..."
-            docker run --rm \
-              -v ${{ github.workspace }}:/app \
-              -w /app \
-              python:3.11-slim bash -c "
-                pip install -r requirements.txt pytest pytest-bdd allure-pytest &&
-                pytest -v --alluredir=allure-results/ubuntu-latest || true
-              "
-          else
-            echo "🪟 Running pytest on Windows host..."
-            pytest -v --alluredir=allure-results/windows-latest
-            if ($LASTEXITCODE -ne 0) { Write-Host 'Tests failed but continuing...' }
-          fi
+          echo "🐳 Running tests in Docker..."
+          docker build -t robotics-bdd .
+          docker run --rm \
+            -v $(pwd)/allure-results/${{ matrix.os }}:/app/allure-results \
+            robotics-bdd \
+            bash -c "pytest -v --alluredir=/app/allure-results || true"
 
+      # -------------------------------
+      # Windows: Normal pytest
+      # -------------------------------
+      - name: Run Tests (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          pytest -v --alluredir=allure-results/windows-latest
+          if ($LASTEXITCODE -ne 0) { Write-Host "⚠️ Tests failed but continuing..." }
+
+      # -------------------------------
+      # Check results existence
+      # -------------------------------
       - name: Verify Allure Results
         id: results_check
         shell: bash
         run: |
           if [ -z "$(find allure-results/${{ matrix.os }} -type f -name '*.json' 2>/dev/null)" ]; then
-            echo "❌ No Allure results for ${{ matrix.os }}"
+            echo "❌ No Allure results found for ${{ matrix.os }}"
             echo "has_results=false" >> $GITHUB_OUTPUT
           else
             echo "✅ Allure results found for ${{ matrix.os }}"
             echo "has_results=true" >> $GITHUB_OUTPUT
-          fi
 
       - name: Upload Allure Results
         if: always()
@@ -73,12 +81,15 @@ jobs:
         with:
           name: allure-results-${{ matrix.os }}
           path: allure-results/${{ matrix.os }}
+          retention-days: 3
 
   deploy-allure:
+    name: Deploy Allure Report
     needs: run-tests
     runs-on: ubuntu-latest
     environment:
       name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     env:
       ALLURE_VERSION: 2.29.0
       SITE_DIR: site
@@ -86,51 +97,55 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Allure CLI
-        run: |
-          wget https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz
-          tar -xzf allure-${ALLURE_VERSION}.tgz
-          sudo mv allure-${ALLURE_VERSION}/bin/allure /usr/local/bin/allure
-
-      - name: Download Allure Artifacts
+      - name: Download Allure artifacts
         uses: actions/download-artifact@v4
         with:
           path: allure-results
 
-      - name: Check if any results exist
-        id: check-results
+      - name: Set up Allure CLI
+        run: |
+          curl -o allure.zip -Ls https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.zip
+          sudo apt-get install unzip -y
+          unzip allure.zip -d /opt/allure
+          sudo ln -s /opt/allure/allure-${ALLURE_VERSION}/bin/allure /usr/local/bin/allure
+
+      - name: Check if results exist
+        id: check_results
+        shell: bash
         run: |
           if [ -z "$(find allure-results -type f -name '*.json' 2>/dev/null)" ]; then
-            echo "❌ No test results found — skipping Allure deployment."
             echo "proceed=false" >> $GITHUB_OUTPUT
           else
-            echo "✅ Test results detected — proceeding with report generation."
             echo "proceed=true" >> $GITHUB_OUTPUT
 
       - name: Stop if no results
-        if: steps.check-results.outputs.proceed == 'false'
-        run: exit 0
+        if: steps.check_results.outputs.proceed == 'false'
+        run: |
+          echo "⚠️ No test results found — skipping Allure deployment."
+          exit 0
 
+      # -------------------------------
+      # Generate Allure reports
+      # -------------------------------
       - name: Generate Allure Reports
         run: |
           mkdir -p $SITE_DIR/latest
           for OS in ubuntu-latest windows-latest; do
-            SRC_DIR="allure-results/$OS"
-            DEST_DIR="$SITE_DIR/latest/$OS"
-            if [ -d "$SRC_DIR" ] && [ "$(ls -A $SRC_DIR)" ]; then
-              allure generate "$SRC_DIR" -o "$DEST_DIR" --clean
-              mkdir -p "$DEST_DIR/widgets"
-              cp supports/executor.json "$DEST_DIR/widgets/" 2>/dev/null || true
-              cp supports/categories.json "$DEST_DIR/widgets/" 2>/dev/null || true
-              echo '{"buildOrder":'"$GITHUB_RUN_NUMBER"', "reportName":"'"$OS Report"'"}' > "$DEST_DIR/widgets/executor.json"
-            else
-              echo "⚠️ No results found for $OS"
+            SRC="allure-results/$OS"
+            DEST="$SITE_DIR/latest/$OS"
+            if [ -d "$SRC" ] && [ "$(ls -A $SRC 2>/dev/null)" ]; then
+              mkdir -p "$DEST"
+              allure generate "$SRC" -o "$DEST" --clean
+              # Copy metadata for trend/executor
+              mkdir -p "$DEST/widgets" "$DEST/history"
+              cp supports/executor.json "$DEST/widgets/executor.json" 2>/dev/null || true
+              cp supports/categories.json "$DEST/widgets/categories.json" 2>/dev/null || true
             fi
           done
 
-      # --------------------------------------------------------
-      # FIX PATHS
-      # --------------------------------------------------------
+      # -------------------------------
+      # Fix Allure paths
+      # -------------------------------
       - name: Fix Allure Paths
         run: |
           for OS in ubuntu-latest windows-latest; do
@@ -141,9 +156,9 @@ jobs:
             fi
           done
 
-      # --------------------------------------------------------
-      # CREATE LANDING PAGE
-      # --------------------------------------------------------
+      # -------------------------------
+      # Create landing page
+      # -------------------------------
       - name: Create Landing Page
         run: |
           mkdir -p $SITE_DIR
@@ -157,28 +172,23 @@ jobs:
               echo "<li>No report found for $OS</li>" >> $SITE_DIR/index.html
             fi
           done
-          echo "</ul><hr><p>Allure Trends & Executor data are available under each report's widgets/history tabs.</p></body></html>" >> $SITE_DIR/index.html
+          echo "</ul><hr><p>Allure Trends & Executor data available in widgets/history tabs.</p></body></html>" >> $SITE_DIR/index.html
 
       - name: Disable Jekyll
         run: touch $SITE_DIR/.nojekyll
 
-      - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          path: $SITE_DIR
 
       - name: Add Workflow Summary (Badges)
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
           BASE_URL="${PAGE_URL%/}"
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests completed" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${{ github.run_number }} | Status: ✅ All tests completed" >> $GITHUB_STEP_SUMMARY

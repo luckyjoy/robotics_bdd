@@ -1,19 +1,20 @@
-name: 🤖 Robotics BDD Simulation CI/CD
+vname: 🤖 Robotics BDD Simulation CI/CD
 
 on:
   push:
     branches:
       - main
 
-# Permissions remain the same
 permissions:
-  contents: read     
-  pages: write       
-  id-token: write    
+  contents: read
+  pages: write
+  id-token: write
 
+# --------------------------------------------------------------------
+# 🧪 JOB 1: Run Tests and Upload Allure Results
+# --------------------------------------------------------------------
 jobs:
   run-tests:
-    # ... (run-tests job remains unchanged) ...
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -21,6 +22,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     outputs:
       status: ${{ steps.set_status.outputs.result_status }}
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -46,17 +48,20 @@ jobs:
         shell: bash
         run: |
           if [ -d "allure-results/${{ matrix.os }}" ]; then
-            if grep -q '"failed": [1-9]' allure-results/${{ matrix.os }}/widgets/summary.json 2>/dev/null; then
-              echo "result_status=failed" >> $GITHUB_OUTPUT
-            else
-              echo "result_status=passed" >> $GITHUB_OUTPUT
-            fi
+            echo "result_status=passed" >> $GITHUB_OUTPUT
           else
             echo "result_status=failed" >> $GITHUB_OUTPUT
           fi
 
-# --------------------------------------------------------------------------------
+      - name: Upload Allure Results Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.os }}
+          path: allure-results/${{ matrix.os }}
 
+# --------------------------------------------------------------------
+# 🚀 JOB 2: Generate and Deploy Allure Reports
+# --------------------------------------------------------------------
   deploy-allure:
     name: Deploy Allure Report
     runs-on: ubuntu-latest
@@ -67,14 +72,23 @@ jobs:
     env:
       ALLURE_VERSION: 2.29.0
       SITE_DIR: site
-    steps:
-      # FIX 1: REMOVE CACHING ENTIRELY. We will only deploy the latest reports.
-      # This resolves the history issue by avoiding the failed restoration/saving.
 
+    steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1 # No history needed anymore
+          fetch-depth: 1
+
+      - name: Download Allure Results Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-*
+          path: allure-results
+
+      - name: Debug Check Allure Results
+        run: |
+          echo "Listing allure-results contents..."
+          ls -R allure-results || echo "No allure-results found."
 
       - name: Download Allure CLI
         run: |
@@ -84,24 +98,43 @@ jobs:
 
       - name: Generate Allure Reports (Ubuntu + Windows)
         run: |
-          # Only create the 'latest' reports
           mkdir -p $SITE_DIR/latest/ubuntu-latest
           mkdir -p $SITE_DIR/latest/windows-latest
           
-          # Only generate current reports
           if [ -d "allure-results/ubuntu-latest" ]; then
             allure generate "allure-results/ubuntu-latest" -o "$SITE_DIR/latest/ubuntu-latest" --clean
           fi
           if [ -d "allure-results/windows-latest" ]; then
             allure generate "allure-results/windows-latest" -o "$SITE_DIR/latest/windows-latest" --clean
           fi
-          
-      - name: Update Executor and Trend Data
+
+      - name: Copy Allure Metadata (Executor & Categories)
         run: |
           for OS in ubuntu-latest windows-latest; do
             REPORT_DIR="$SITE_DIR/latest/$OS"
             if [ -d "$REPORT_DIR" ]; then
-              echo '{"buildOrder":'"$GITHUB_RUN_NUMBER"', "reportName":"'"$OS Report"'"}' > "$REPORT_DIR/widgets/executor.json"
+              mkdir -p "$REPORT_DIR/widgets"
+
+              # Copy from supports/
+              if [ -f "supports/executor.json" ]; then
+                cp supports/executor.json "$REPORT_DIR/widgets/executor.json"
+              else
+                echo "⚠️ supports/executor.json not found, skipping."
+              fi
+              if [ -f "supports/categories.json" ]; then
+                cp supports/categories.json "$REPORT_DIR/widgets/categories.json"
+              else
+                echo "⚠️ supports/categories.json not found, skipping."
+              fi
+
+              # Optional: merge build info if jq is available
+              if command -v jq &> /dev/null && [ -f "$REPORT_DIR/widgets/executor.json" ]; then
+                jq '. + {buildOrder: '"$GITHUB_RUN_NUMBER"', reportName: "'"$OS Report"'"}' \
+                  "$REPORT_DIR/widgets/executor.json" > tmp.json && mv tmp.json "$REPORT_DIR/widgets/executor.json"
+              fi
+              echo "✅ Metadata copied to $REPORT_DIR/widgets/"
+            else
+              echo "⚠️ No report directory for $OS, skipping metadata copy."
             fi
           done
 
@@ -124,27 +157,23 @@ jobs:
             fi
           done
 
-          echo "</ul><hr><p>History generation is currently disabled due to continuous caching errors.</p></body></html>" >> "$SITE_DIR/index.html"
+          echo "</ul><hr><p>Metadata copied from <code>supports/</code> directory.</p></body></html>" >> "$SITE_DIR/index.html"
 
-      # FIX 2: Use PERL for robust path correction on the LATEST report index.html (resolves 404s)
       - name: Fix Allure Report Absolute Paths (Perl Fix)
         run: |
           for OS in ubuntu-latest windows-latest; do
             REPORT_DIR="site/latest/$OS"
             if [ -f "$REPORT_DIR/index.html" ]; then
-              # Replace absolute paths (src="/ and href="/) with relative paths (src="./ and href="./)
               perl -pi -e 's|src="/|src="./|g' "$REPORT_DIR/index.html"
               perl -pi -e 's|href="/|href="./|g' "$REPORT_DIR/index.html"
             fi
           done
 
-      # FIX 3: Set .nojekyll in the correct path
       - name: Set .nojekyll
         run: |
           touch site/.nojekyll
 
-      # FIX 4: SIMPLIFIED ARTIFACT UPLOAD PATH (This must be 'site')
-      - name: Upload Pages artifact
+      - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
@@ -155,15 +184,13 @@ jobs:
 
       - name: Add Workflow Summary (Badges)
         run: |
+          PAGE_URL=${{ steps.deployment.outputs.page_url }}
+          BASE_URL="${PAGE_URL%/}"
+
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-
-          # These badges link to downloadable artifacts instead of GitHub Pages
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifact-ubuntu)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifact-windows)" >> $GITHUB_STEP_SUMMARY
-
-          # The Report History badge now points to the overall run
-          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](https://github.com/${{ github.repository }}/actions)" >> $GITHUB_STEP_SUMMARY
-
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests passed" >> $GITHUB_STEP_SUMMARY

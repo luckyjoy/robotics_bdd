@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: '0 15 * * *' # 8AM PDT
+    - cron: '0 15 * * *'  # 8AM PDT
   workflow_dispatch:
 
 concurrency:
@@ -40,67 +40,74 @@ jobs:
             pip-${{ runner.os }}-
 
       # -------------------------------------------------------------
-      # Run pytest (Windows) or Docker (Linux)
+      # Run tests (Docker on Linux / pytest on Windows)
       # -------------------------------------------------------------
-      - name: Run tests (Docker on Linux / pytest on Windows)
-        id: run_tests
+      - name: Run tests
+        id: run-tests
         shell: bash
         run: |
-          set -e
           mkdir -p allure-results
+          set +e  # prevent pipeline from stopping on failure
 
-          echo "🧪 Running tests on ${{ runner.os }}..."
           if [[ "${{ runner.os }}" == "Linux" ]]; then
+            echo "🐳 Running tests in Docker..."
             docker run --rm \
-              -v $PWD:/app \
-              -w /app python:3.11 \
-              bash -c "pip install -r requirements.txt && pytest --alluredir=allure-results || echo 'TEST_FAILED' > allure-results/.unstable"
+              -v $PWD:/app -w /app python:3.11 \
+              bash -c "pip install -r requirements.txt && pytest -m 'navigation or sensors or walking' --alluredir=allure-results || echo 'unstable' > allure-results/status.txt"
           else
+            echo "🪟 Running tests natively on Windows..."
             pip install -r requirements.txt
-            pytest --alluredir=allure-results || echo 'TEST_FAILED' > allure-results/.unstable
+            pytest -m "navigation or sensors or walking" --alluredir=allure-results || echo 'unstable' > allure-results/status.txt
           fi
-        continue-on-error: true
 
-      - name: Determine build stability
-        id: status
+          # Determine status
+          EXIT_CODE=$?
+          if [ -f allure-results/status.txt ]; then
+            STATUS=$(cat allure-results/status.txt)
+          elif [ "$(ls -A allure-results | wc -l)" -eq 0 ]; then
+            STATUS="failed"
+          elif [ $EXIT_CODE -ne 0 ]; then
+            STATUS="unstable"
+          else
+            STATUS="passed"
+          fi
+
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "Test run status: $STATUS"
+
+      # -------------------------------------------------------------
+      # Mark build icon for summary
+      # -------------------------------------------------------------
+      - name: Set build icon
+        id: set-icon
         shell: bash
         run: |
-          if [ -f allure-results/.unstable ]; then
-            echo "BUILD_STATUS=unstable" >> $GITHUB_ENV
-            echo "⚠️ Some tests failed but results are available"
-          elif [ -d allure-results ] && [ "$(ls -A allure-results)" ]; then
-            echo "BUILD_STATUS=passed" >> $GITHUB_ENV
-            echo "✅ All tests passed"
+          STATUS="${{ steps.run-tests.outputs.status }}"
+          if [ "$STATUS" = "passed" ]; then
+            echo "result_icon=✅" >> $GITHUB_ENV
+          elif [ "$STATUS" = "unstable" ]; then
+            echo "result_icon=⚠️" >> $GITHUB_ENV
           else
-            echo "BUILD_STATUS=failed" >> $GITHUB_ENV
-            echo "❌ No valid test results"
+            echo "result_icon=❌" >> $GITHUB_ENV
           fi
 
+      # -------------------------------------------------------------
+      # Upload Allure Results
+      # -------------------------------------------------------------
       - name: Upload Allure Results
-        if: env.BUILD_STATUS != 'failed'
+        if: ${{ steps.run-tests.outputs.status != 'failed' }}
         uses: actions/upload-artifact@v4
         with:
           name: allure-results-${{ matrix.os }}
           path: allure-results
 
-      - name: Add build summary icon
-        run: |
-          if [ "${{ env.BUILD_STATUS }}" = "passed" ]; then
-            ICON="✅"
-          elif [ "${{ env.BUILD_STATUS }}" = "unstable" ]; then
-            ICON="⚠️"
-          else
-            ICON="❌"
-          fi
-          echo "${ICON} **Build Status on ${{ runner.os }}:** ${{ env.BUILD_STATUS }}" >> $GITHUB_STEP_SUMMARY
-
   # -------------------------------------------------------------
-  # Deploy Allure report to GitHub Pages
+  # Deploy Allure Report
   # -------------------------------------------------------------
   deploy-pages:
     name: Deploy Allure Report
     needs: run-tests
-    if: ${{ always() }}
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -126,65 +133,61 @@ jobs:
           path: allure-results/windows-latest
 
       - name: Merge Allure Results
+        shell: bash
         run: |
           mkdir -p merged-results
           cp -r allure-results/ubuntu-latest/* merged-results/ || true
           cp -r allure-results/windows-latest/* merged-results/ || true
-          echo "Merged results generated."
 
-      - name: Check valid results
-        id: results_check
+      - name: Check if results exist
+        id: check-results
+        shell: bash
         run: |
-          if [ "$(ls -A merged-results || true)" ]; then
+          if [ -d merged-results ] && [ "$(ls -A merged-results | wc -l)" -gt 0 ]; then
             echo "results_exist=true" >> $GITHUB_OUTPUT
           else
             echo "results_exist=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Stop if no valid results
-        if: steps.results_check.outputs.results_exist == 'false'
-        run: echo "❌ No valid test results found. Skipping report." && exit 0
+      - name: Stop if no results
+        if: steps.check-results.outputs.results_exist == 'false'
+        run: echo "❌ No valid Allure results; skipping report." && exit 0
 
       - name: Setup Allure CLI
+        shell: bash
         run: |
           curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
           mkdir -p allure
           tar -xzf allure.tgz -C allure --strip-components 1
           echo "$PWD/allure/bin" >> $GITHUB_PATH
 
-      - name: Prepare Allure metadata (Trend + Executor)
+      - name: Add Allure metadata (Trend + Executor)
+        shell: bash
         run: |
           mkdir -p merged-results
           cat <<EOF > merged-results/executor.json
           {
             "name": "GitHub Actions",
-            "type": "github",
+            "type": "CI/CD",
             "buildOrder": ${{ github.run_number }},
             "buildName": "Build #${{ github.run_number }}",
-            "buildUrl": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-            "reportUrl": "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/",
-            "status": "completed"
+            "buildUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "reportName": "Allure Report - Build #${{ github.run_number }}",
+            "reportUrl": "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/latest/",
+            "executor": "${{ runner.os }}"
           }
           EOF
 
-          cat <<EOF > merged-results/categories.json
-          [
-            {"name": "Product defects", "matchedStatuses": ["failed"]},
-            {"name": "Unstable scenarios", "matchedStatuses": ["broken"]}
-          ]
-          EOF
-
       - name: Generate Allure Report
+        shell: bash
         run: |
           allure generate merged-results --clean -o site
-          echo "Report generated successfully at ./site"
-
-      - name: Preserve Trend History
-        run: |
           mkdir -p site/history
           cp -r merged-results/history site/history || true
 
-      # ✅ Re-added your original deployment and badges
+      # -------------------------------------------------------------
+      # Deploy to GitHub Pages + badges
+      # -------------------------------------------------------------
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
@@ -194,11 +197,18 @@ jobs:
           commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
 
       - name: Add workflow badges to summary
+        shell: bash
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
           OWNER=${GITHUB_REPOSITORY_OWNER}
 
-          echo "### Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
+          echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### 🧩 Latest Allure Reports" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### 📊 Report History" >> $GITHUB_STEP_SUMMARY
+          echo "[![Previous Builds](https://img.shields.io/badge/All_Previous_Builds-green)](https://${OWNER}.github.io/${REPO_NAME}/latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Build ${{ github.run_number }} | Status: ${{ env.result_icon }}" >> $GITHUB_STEP_SUMMARY

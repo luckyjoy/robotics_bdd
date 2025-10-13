@@ -95,7 +95,7 @@ def pytest_html_results_table_row(report, cells):
 
 def pytest_html_results_summary(prefix, summary, postfix):
     prefix.extend([f"Author: Bang Thien Nguyen"])
-'''
+
 
 # -------------------------
 # Optional metadata
@@ -103,3 +103,4 @@ def pytest_html_results_summary(prefix, summary, postfix):
 def pytest_metadata(metadata):
     metadata['Author'] = "Bang Thien Nguyen"
     metadata['Project'] = "Robot Simulation BDD"
+'''

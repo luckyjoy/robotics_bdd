@@ -10,9 +10,6 @@ permissions:
   pages: write
   id-token: write
 
-# ============================================================
-# 1️⃣ RUN TESTS JOB
-# ============================================================
 jobs:
   run-tests:
     name: Run tests on ${{ matrix.os }}
@@ -23,7 +20,7 @@ jobs:
     outputs:
       has_results: ${{ steps.results_check.outputs.has_results }}
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -31,42 +28,39 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install allure-pytest
+          pip install allure-pytest pytest-bdd
 
-      # --------------------------------------------------------
-      # 🐧 LINUX: RUN DOCKERIZED TESTS
-      # --------------------------------------------------------
-      - name: Run Tests inside Docker (Ubuntu only)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Prepare Allure results directory
+        run: mkdir -p allure-results/${{ matrix.os }}
+
+      - name: Run Tests (Linux: Docker, Windows: Pytest)
+        shell: bash
         run: |
-          mkdir -p allure-results/${{ matrix.os }}
-          echo "🐳 Running Dockerized tests..."
-          docker build -t robotics-bdd .
-          docker run --rm -v $(pwd)/allure-results/${{ matrix.os }}:/app/allure-results robotics-bdd \
-            pytest -v --alluredir=/app/allure-results || true
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            echo "🐳 Running tests inside Docker..."
+            docker run --rm \
+              -v ${{ github.workspace }}:/app \
+              -w /app \
+              python:3.11-slim bash -c "
+                pip install -r requirements.txt pytest pytest-bdd allure-pytest &&
+                pytest -v --alluredir=allure-results/ubuntu-latest || true
+              "
+          else
+            echo "🪟 Running pytest on Windows host..."
+            pytest -v --alluredir=allure-results/windows-latest
+            if ($LASTEXITCODE -ne 0) { Write-Host 'Tests failed but continuing...' }
+          fi
 
-      # --------------------------------------------------------
-      # 🪟 WINDOWS: RUN NORMAL PYTEST
-      # --------------------------------------------------------
-      - name: Run Tests on Windows (Pytest)
-        if: matrix.os == 'windows-latest'
-        run: |
-          mkdir -p allure-results/${{ matrix.os }}
-          pytest -v --alluredir=allure-results/${{ matrix.os }} || exit 0
-
-      # --------------------------------------------------------
-      # CHECK & UPLOAD RESULTS
-      # --------------------------------------------------------
       - name: Verify Allure Results
         id: results_check
         shell: bash
         run: |
           if [ -z "$(find allure-results/${{ matrix.os }} -type f -name '*.json' 2>/dev/null)" ]; then
-            echo "❌ No Allure results found for ${{ matrix.os }}"
+            echo "❌ No Allure results for ${{ matrix.os }}"
             echo "has_results=false" >> $GITHUB_OUTPUT
           else
             echo "✅ Allure results found for ${{ matrix.os }}"
@@ -80,21 +74,16 @@ jobs:
           name: allure-results-${{ matrix.os }}
           path: allure-results/${{ matrix.os }}
 
-# ============================================================
-# 2️⃣ DEPLOY ALLURE REPORT JOB
-# ============================================================
   deploy-allure:
-    name: Deploy Allure Report
-    runs-on: ubuntu-latest
     needs: run-tests
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     env:
       ALLURE_VERSION: 2.29.0
       SITE_DIR: site
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Download Allure CLI
@@ -103,12 +92,12 @@ jobs:
           tar -xzf allure-${ALLURE_VERSION}.tgz
           sudo mv allure-${ALLURE_VERSION}/bin/allure /usr/local/bin/allure
 
-      - name: Download Test Artifacts
+      - name: Download Allure Artifacts
         uses: actions/download-artifact@v4
         with:
           path: allure-results
 
-      - name: Check if Any Results Exist
+      - name: Check if any results exist
         id: check-results
         run: |
           if [ -z "$(find allure-results -type f -name '*.json' 2>/dev/null)" ]; then
@@ -117,49 +106,25 @@ jobs:
           else
             echo "✅ Test results detected — proceeding with report generation."
             echo "proceed=true" >> $GITHUB_OUTPUT
-          fi
 
-      - name: Stop if No Results
+      - name: Stop if no results
         if: steps.check-results.outputs.proceed == 'false'
-        run: |
-          echo "⚠️ Skipping Allure deployment (no test data)."
-          exit 0
+        run: exit 0
 
-      # --------------------------------------------------------
-      # GENERATE ALLURE REPORTS
-      # --------------------------------------------------------
-      - name: Generate Allure Reports (Ubuntu + Windows)
+      - name: Generate Allure Reports
         run: |
           mkdir -p $SITE_DIR/latest
           for OS in ubuntu-latest windows-latest; do
-            SRC_DIR="allure-results/allure-results-$OS"
+            SRC_DIR="allure-results/$OS"
             DEST_DIR="$SITE_DIR/latest/$OS"
-            if [ -d "$SRC_DIR" ] && [ "$(ls -A $SRC_DIR 2>/dev/null)" ]; then
-              mkdir -p "$DEST_DIR"
+            if [ -d "$SRC_DIR" ] && [ "$(ls -A $SRC_DIR)" ]; then
               allure generate "$SRC_DIR" -o "$DEST_DIR" --clean
+              mkdir -p "$DEST_DIR/widgets"
+              cp supports/executor.json "$DEST_DIR/widgets/" 2>/dev/null || true
+              cp supports/categories.json "$DEST_DIR/widgets/" 2>/dev/null || true
+              echo '{"buildOrder":'"$GITHUB_RUN_NUMBER"', "reportName":"'"$OS Report"'"}' > "$DEST_DIR/widgets/executor.json"
             else
-              echo "⚠️ No results for $OS"
-            fi
-          done
-
-      # --------------------------------------------------------
-      # COPY METADATA (TREND + EXECUTOR)
-      # --------------------------------------------------------
-      - name: Copy Allure Metadata
-        run: |
-          for OS in ubuntu-latest windows-latest; do
-            REPORT_DIR="$SITE_DIR/latest/$OS"
-            if [ -d "$REPORT_DIR" ]; then
-              mkdir -p "$REPORT_DIR/widgets" "$REPORT_DIR/history"
-              if [ -f "supports/executor.json" ]; then
-                cp supports/executor.json "$REPORT_DIR/widgets/executor.json"
-              fi
-              if [ -f "supports/categories.json" ]; then
-                cp supports/categories.json "$REPORT_DIR/widgets/categories.json"
-              fi
-              if [ -d "supports/history" ]; then
-                cp -r supports/history/* "$REPORT_DIR/history/" || true
-              fi
+              echo "⚠️ No results found for $OS"
             fi
           done
 

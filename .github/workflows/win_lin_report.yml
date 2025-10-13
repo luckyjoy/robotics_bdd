@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: '0 15 * * *'  # 8AM PDT
+    - cron: '0 15 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -44,7 +44,7 @@ jobs:
             pip-${{ runner.os }}-
 
       # -------------------------------------------------------------
-      # Run tests (Docker on Linux / pytest on Windows)
+      # Run tests (Docker on Linux / native on Windows)
       # -------------------------------------------------------------
       - name: Run tests
         id: run-tests
@@ -78,7 +78,7 @@ jobs:
           echo "Test run status: $STATUS"
 
       # -------------------------------------------------------------
-      # Set build icon for summary
+      # Set build icon
       # -------------------------------------------------------------
       - name: Set build icon
         id: set-icon
@@ -136,7 +136,7 @@ jobs:
           path: allure-results/windows-latest
         continue-on-error: true
 
-      # Stop if no results
+      # Check if results exist
       - name: Check if results exist
         id: check-results
         shell: bash
@@ -145,7 +145,6 @@ jobs:
             echo "results_exist=true" >> $GITHUB_OUTPUT
           else
             echo "results_exist=false" >> $GITHUB_OUTPUT
-          fi
 
       - name: Stop if no results
         if: steps.check-results.outputs.results_exist == 'false'
@@ -167,22 +166,22 @@ jobs:
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
 
-          mkdir -p "$SITE_DIR/$BUILD_NUMBER/ubuntu-latest" "$SITE_DIR/$BUILD_NUMBER/windows-latest"
           mkdir -p "$SITE_DIR/latest/ubuntu-latest" "$SITE_DIR/latest/windows-latest"
 
           for OS in ubuntu-latest windows-latest; do
             if [ -d "allure-results/$OS" ]; then
-              # Preserve history from previous build
+              # preserve history
               mkdir -p "allure-results/$OS/history"
               if [ -d "$SITE_DIR/latest/$OS/history" ]; then
                 cp -r "$SITE_DIR/latest/$OS/history/"* "allure-results/$OS/history/"
               fi
 
-              # Generate report
-              allure generate "allure-results/$OS" -o "$SITE_DIR/$BUILD_NUMBER/$OS" --clean
-              # Copy to latest
-              rm -rf "$SITE_DIR/latest/$OS"/*
-              cp -r "$SITE_DIR/$BUILD_NUMBER/$OS"/* "$SITE_DIR/latest/$OS/"
+              # generate report directly to latest
+              allure generate "allure-results/$OS" -o "$SITE_DIR/latest/$OS" --clean
+
+              # store historical build
+              mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
+              cp -r "$SITE_DIR/latest/$OS"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
             fi
           done
 

@@ -22,6 +22,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
 
+    outputs:
+      result_icon: ${{ steps.set-icon.outputs.result_icon }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -47,12 +50,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p allure-results
-          set +e  # prevent pipeline from stopping on failure
+          set +e  # prevent stopping on failure
 
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             echo "🐳 Running tests in Docker..."
-            docker run --rm \
-              -v $PWD:/app -w /app python:3.11 \
+            docker run --rm -v $PWD:/app -w /app python:3.11 \
               bash -c "pip install -r requirements.txt && pytest -m 'navigation or sensors or walking' --alluredir=allure-results || echo 'unstable' > allure-results/status.txt"
           else
             echo "🪟 Running tests natively on Windows..."
@@ -60,7 +62,6 @@ jobs:
             pytest -m "navigation or sensors or walking" --alluredir=allure-results || echo 'unstable' > allure-results/status.txt
           fi
 
-          # Determine status
           EXIT_CODE=$?
           if [ -f allure-results/status.txt ]; then
             STATUS=$(cat allure-results/status.txt)
@@ -76,7 +77,7 @@ jobs:
           echo "Test run status: $STATUS"
 
       # -------------------------------------------------------------
-      # Mark build icon for summary
+      # Set build icon for summary
       # -------------------------------------------------------------
       - name: Set build icon
         id: set-icon
@@ -84,12 +85,13 @@ jobs:
         run: |
           STATUS="${{ steps.run-tests.outputs.status }}"
           if [ "$STATUS" = "passed" ]; then
-            echo "result_icon=✅" >> $GITHUB_ENV
+            ICON="✅"
           elif [ "$STATUS" = "unstable" ]; then
-            echo "result_icon=⚠️" >> $GITHUB_ENV
+            ICON="⚠️"
           else
-            echo "result_icon=❌" >> $GITHUB_ENV
+            ICON="❌"
           fi
+          echo "result_icon=$ICON" >> $GITHUB_OUTPUT
 
       # -------------------------------------------------------------
       # Upload Allure Results
@@ -118,6 +120,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Download artifacts from both OS
       - name: Download Ubuntu Allure Results
         continue-on-error: true
         uses: actions/download-artifact@v4
@@ -132,6 +135,7 @@ jobs:
           name: allure-results-windows-latest
           path: allure-results/windows-latest
 
+      # Merge Allure Results and preserve history
       - name: Merge Allure Results
         shell: bash
         run: |
@@ -147,12 +151,12 @@ jobs:
             echo "results_exist=true" >> $GITHUB_OUTPUT
           else
             echo "results_exist=false" >> $GITHUB_OUTPUT
-          fi
 
       - name: Stop if no results
         if: steps.check-results.outputs.results_exist == 'false'
         run: echo "❌ No valid Allure results; skipping report." && exit 0
 
+      # Setup Allure CLI
       - name: Setup Allure CLI
         shell: bash
         run: |
@@ -161,6 +165,7 @@ jobs:
           tar -xzf allure.tgz -C allure --strip-components 1
           echo "$PWD/allure/bin" >> $GITHUB_PATH
 
+      # Add Executor metadata
       - name: Add Allure metadata (Trend + Executor)
         shell: bash
         run: |
@@ -178,6 +183,7 @@ jobs:
           }
           EOF
 
+      # Generate Allure Report
       - name: Generate Allure Report
         shell: bash
         run: |
@@ -185,9 +191,16 @@ jobs:
           mkdir -p site/history
           cp -r merged-results/history site/history || true
 
-      # -------------------------------------------------------------
-      # Deploy to GitHub Pages + badges
-      # -------------------------------------------------------------
+      # Copy to structured /latest directories
+      - name: Copy to latest directories
+        shell: bash
+        run: |
+          mkdir -p site/latest/ubuntu-latest
+          mkdir -p site/latest/windows-latest
+          cp -r allure-results/ubuntu-latest/* site/latest/ubuntu-latest/ || true
+          cp -r allure-results/windows-latest/* site/latest/windows-latest/ || true
+
+      # Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
@@ -196,6 +209,7 @@ jobs:
           publish_branch: gh-pages
           commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
 
+      # Add workflow badges to summary
       - name: Add workflow badges to summary
         shell: bash
         run: |
@@ -211,4 +225,4 @@ jobs:
           echo "#### 📊 Report History" >> $GITHUB_STEP_SUMMARY
           echo "[![Previous Builds](https://img.shields.io/badge/All_Previous_Builds-green)](https://${OWNER}.github.io/${REPO_NAME}/latest/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Build ${{ github.run_number }} | Status: ${{ env.result_icon }}" >> $GITHUB_STEP_SUMMARY
+          echo "Build ${{ github.run_number }} | Status: ${{ needs.run-tests.outputs.result_icon }}" >> $GITHUB_STEP_SUMMARY

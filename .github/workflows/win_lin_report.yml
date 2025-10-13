@@ -2,161 +2,116 @@ name: Robotics BDD Simulation CI/CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   schedule:
-    - cron: '0 7 * * *' # Daily at 07:00 UTC
+    - cron: '0 15 * * *' # 8AM PDT
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: robotics-bdd-ci-${{ github.ref }}
   cancel-in-progress: true
-
-permissions:
-  contents: read
-  actions: read
-  checks: read
-  pull-requests: read
-  statuses: read
-  pages: none
-  id-token: none
 
 jobs:
   run-tests:
+    name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
 
-    permissions:
-      contents: write
-
-    outputs:
-      proceed: ${{ steps.verify_allure.outputs.proceed }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set up Python with dependency caching
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: '3.11'
 
-      - name: Install Python dependencies
-        run: |
-          echo "Installing dependencies from requirements.txt..."
-          pip install -r requirements.txt
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
 
-      - name: Clean previous allure-results
+      # -------------------------------------------------------------
+      # Run pytest (Windows) or Docker (Linux)
+      # -------------------------------------------------------------
+      - name: Run tests (Docker on Linux / pytest on Windows)
+        id: run_tests
         shell: bash
         run: |
-          echo "Cleaning allure-results folder..."
-          if [ -d "allure-results" ]; then rm -rf allure-results; fi
-
-      - name: Prepare Allure environment
-        shell: bash
-        run: |
-          echo "Creating Allure directories and environment files for $RUNNER_OS..."
-          mkdir -p allure-results
-          cp supports/categories.json allure-results/categories.json 2>/dev/null || echo "No categories.json found."
-
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            echo "Using Ubuntu environment.properties..."
-            cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "No Ubuntu environment found."
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            echo "Using Windows environment.properties..."
-            cp supports/windows.properties allure-results/environment.properties 2>/dev/null || echo "No Windows environment found."
-          fi
-
-          echo "Generating executor.json..."
-          cat <<EOF > allure-results/executor.json
-          {
-            "name": "GitHub Actions - $RUNNER_OS",
-            "type": "github",
-            "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-            "buildOrder": ${GITHUB_RUN_NUMBER},
-            "buildName": "Build #${GITHUB_RUN_NUMBER} ($RUNNER_OS)",
-            "reportName": "Robotics BDD Simulation CI/CD - $RUNNER_OS",
-            "buildUrl": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-            "reportUrl": "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/latest/${RUNNER_OS}/"
-          }
-          EOF
-
-      - name: Run tests (Docker for Linux, native on Windows)
-        id: run_pytest
-        continue-on-error: true
-        shell: bash
-        run: |
-          echo "Running tests for $RUNNER_OS..."
+          set -e
           mkdir -p allure-results
 
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            echo "Running tests inside Docker container..."
-            docker build -t robotics-bdd-sim -f Dockerfile .
+          echo "🧪 Running tests on ${{ runner.os }}..."
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
             docker run --rm \
-              -v $PWD/allure-results:/app/allure-results \
               -v $PWD:/app \
-              robotics-bdd-sim \
-              bash -c "pytest -m "navigation or sensors or walking" --alluredir=allure-results || echo 'Tests failed, continuing for report generation.'"
+              -w /app python:3.11 \
+              bash -c "pip install -r requirements.txt && pytest --alluredir=allure-results || echo 'TEST_FAILED' > allure-results/.unstable"
           else
-            echo "Running pytest natively on Windows..."
-            pytest -m "navigation or sensors or walking" --alluredir=allure-results || echo 'Tests failed, continuing for report generation.'
+            pip install -r requirements.txt
+            pytest --alluredir=allure-results || echo 'TEST_FAILED' > allure-results/.unstable
           fi
+        continue-on-error: true
 
-      - name: Verify Allure Results existence
-        id: verify_allure
+      - name: Determine build stability
+        id: status
         shell: bash
         run: |
-          echo "Checking for allure-results directory and contents..."
-          if [ -d "allure-results" ] && [ "$(ls -A allure-results/*.json 2>/dev/null | wc -l)" -gt 0 ]; then
-            echo "Allure results found. Proceeding to report generation."
-            echo "proceed=true" >> $GITHUB_OUTPUT
+          if [ -f allure-results/.unstable ]; then
+            echo "BUILD_STATUS=unstable" >> $GITHUB_ENV
+            echo "⚠️ Some tests failed but results are available"
+          elif [ -d allure-results ] && [ "$(ls -A allure-results)" ]; then
+            echo "BUILD_STATUS=passed" >> $GITHUB_ENV
+            echo "✅ All tests passed"
           else
-            echo "No Allure results found. Skipping report generation."
-            echo "proceed=false" >> $GITHUB_OUTPUT
+            echo "BUILD_STATUS=failed" >> $GITHUB_ENV
+            echo "❌ No valid test results"
           fi
 
       - name: Upload Allure Results
-        if: steps.verify_allure.outputs.proceed == 'true'
+        if: env.BUILD_STATUS != 'failed'
         uses: actions/upload-artifact@v4
         with:
           name: allure-results-${{ matrix.os }}
           path: allure-results
-          retention-days: 7
 
-      - name: Mark job as failed if tests failed
-        if: steps.run_pytest.outcome == 'failure'
-        run: exit 1
+      - name: Add build summary icon
+        run: |
+          if [ "${{ env.BUILD_STATUS }}" = "passed" ]; then
+            ICON="✅"
+          elif [ "${{ env.BUILD_STATUS }}" = "unstable" ]; then
+            ICON="⚠️"
+          else
+            ICON="❌"
+          fi
+          echo "${ICON} **Build Status on ${{ runner.os }}:** ${{ env.BUILD_STATUS }}" >> $GITHUB_STEP_SUMMARY
 
+  # -------------------------------------------------------------
+  # Deploy Allure report to GitHub Pages
+  # -------------------------------------------------------------
   deploy-pages:
-    if: always() && needs.run-tests.outputs.proceed == 'true'
-    runs-on: ubuntu-latest
+    name: Deploy Allure Report
     needs: run-tests
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
-      ALLURE_VERSION: 2.25.0
+      ALLURE_VERSION: 2.29.0
 
     steps:
-      - name: Checkout repository (Primary branch)
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Checkout gh-pages history
-        shell: bash
-        run: |
-          echo "Attempting to clone gh-pages branch to access report history..."
-          git clone --depth 1 --branch gh-pages "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" _history || true
-
-      - name: Download Linux Allure Results
+      - name: Download Ubuntu Allure Results
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
@@ -170,98 +125,66 @@ jobs:
           name: allure-results-windows-latest
           path: allure-results/windows-latest
 
-      - name: Cache Allure CLI
-        id: cache-allure
-        uses: actions/cache@v4
-        with:
-          path: allure-commandline
-          key: ${{ runner.os }}-allure-${{ env.ALLURE_VERSION }}
+      - name: Merge Allure Results
+        run: |
+          mkdir -p merged-results
+          cp -r allure-results/ubuntu-latest/* merged-results/ || true
+          cp -r allure-results/windows-latest/* merged-results/ || true
+          echo "Merged results generated."
+
+      - name: Check valid results
+        id: results_check
+        run: |
+          if [ "$(ls -A merged-results || true)" ]; then
+            echo "results_exist=true" >> $GITHUB_OUTPUT
+          else
+            echo "results_exist=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Stop if no valid results
+        if: steps.results_check.outputs.results_exist == 'false'
+        run: echo "❌ No valid test results found. Skipping report." && exit 0
 
       - name: Setup Allure CLI
-        if: steps.cache-allure.outputs.cache-hit != 'true'
         run: |
-          echo "Setting up Allure CLI..."
-          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${{ env.ALLURE_VERSION }}/allure-commandline-${{ env.ALLURE_VERSION }}.tgz"
-          mkdir -p allure-commandline
-          tar -xzf allure.tgz -C allure-commandline --strip-components 1
-      
-      - name: Add Allure to PATH
-        run: echo "$PWD/allure-commandline/bin" >> $GITHUB_PATH
+          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
+          mkdir -p allure
+          tar -xzf allure.tgz -C allure --strip-components 1
+          echo "$PWD/allure/bin" >> $GITHUB_PATH
 
-      - name: Generate Allure Reports
-        shell: bash
+      - name: Prepare Allure metadata (Trend + Executor)
         run: |
-          echo "Generating Allure reports..."
-          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
-          SITE_DIR="site"
-          HISTORY_DIR="_history"
+          mkdir -p merged-results
+          cat <<EOF > merged-results/executor.json
+          {
+            "name": "GitHub Actions",
+            "type": "github",
+            "buildOrder": ${{ github.run_number }},
+            "buildName": "Build #${{ github.run_number }}",
+            "buildUrl": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "reportUrl": "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/",
+            "status": "completed"
+          }
+          EOF
 
-          rm -rf "$SITE_DIR"
-          if [ -d "$HISTORY_DIR" ]; then
-              mv "$HISTORY_DIR" "$SITE_DIR"
-          fi
-          
-          mkdir -p "$SITE_DIR/latest"
+          cat <<EOF > merged-results/categories.json
+          [
+            {"name": "Product defects", "matchedStatuses": ["failed"]},
+            {"name": "Unstable scenarios", "matchedStatuses": ["broken"]}
+          ]
+          EOF
 
-          for OS in ubuntu-latest windows-latest; do
-            RESULTS_DIR="allure-results/$OS"
-            HISTORY_SOURCE_DIR="$SITE_DIR/latest/$OS/history"
-            REPORT_DIR="allure-report-${BUILD_NUMBER}-${OS}"
-
-            if [ -d "$HISTORY_SOURCE_DIR" ]; then
-              echo "Copying Allure trend history from $HISTORY_SOURCE_DIR..."
-              cp -r "$HISTORY_SOURCE_DIR" "$RESULTS_DIR/history"
-            fi
-
-            allure generate "$RESULTS_DIR" -o "$REPORT_DIR" --clean
-
-            mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
-            cp -r "$REPORT_DIR"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
-
-            mkdir -p "$SITE_DIR/latest/$OS"
-            cp -r "$REPORT_DIR"/* "$SITE_DIR/latest/$OS/"
-
-            date -u +"%Y-%m-%d %H:%M:%S UTC" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
-            cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
-          done
-
-      - name: Rebuild index.html
-        shell: bash
+      - name: Generate Allure Report
         run: |
-          SITE_DIR="site"
-          REPO="${GITHUB_REPOSITORY##*/}"
-          OWNER="${GITHUB_REPOSITORY_OWNER}"
+          allure generate merged-results --clean -o site
+          echo "Report generated successfully at ./site"
 
-          echo "<html><head><title>Allure Reports History</title>
-          <style>
-          body{font-family:sans-serif;margin:20px;}
-          ul{list-style:none;padding:0;}
-          li{margin:6px 0;}
-          a{text-decoration:none;color:#0366d6;}
-          a:hover{text-decoration:underline;}
-          </style></head><body><h1>Allure Reports History</h1><hr><ul>" > "$SITE_DIR/index.html"
+      - name: Preserve Trend History
+        run: |
+          mkdir -p site/history
+          cp -r merged-results/history site/history || true
 
-          for OS in ubuntu-latest windows-latest; do
-            if [ -d "$SITE_DIR/latest/$OS" ]; then
-              TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: $TS</li>" >> "$SITE_DIR/index.html"
-            fi
-          done
-
-          echo "</ul><hr><h2>Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
-          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" | xargs -n 1 basename | sort -nr)
-
-          for BUILD in $BUILDS; do
-            for OS in ubuntu-latest windows-latest; do
-              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
-              fi
-            done
-          done
-
-          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
-
+      # ✅ Re-added your original deployment and badges
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:

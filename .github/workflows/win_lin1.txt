@@ -4,13 +4,7 @@ on:
   push:
     branches:
       - main
-
-# 1. UPDATE: Set explicit permissions for the modern GitHub Pages workflow
-permissions:
-  contents: read     # Read is enough for checkout and basic job access
-  pages: write       # Required for the deploy-pages action to publish
-  id-token: write    # Required for the deploy-pages action (OpenID Connect)
-
+  
 jobs:
   run-tests:
     name: Run tests on ${{ matrix.os }}
@@ -58,10 +52,6 @@ jobs:
     name: Deploy Allure Report
     runs-on: ubuntu-latest
     needs: run-tests
-    # 2. ADD: Configure the deployment environment for tracking in GitHub UI
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     env:
       ALLURE_VERSION: 2.29.0
       SITE_DIR: site
@@ -106,7 +96,8 @@ jobs:
         shell: bash
         run: |
           SITE_DIR="site"
-          # REPO/OWNER variables for URL construction are removed.
+          REPO="${GITHUB_REPOSITORY##*/}"
+          OWNER="${GITHUB_REPOSITORY_OWNER}"
 
           echo "<html><head><title>Allure Reports History</title>
           <style>
@@ -125,6 +116,7 @@ jobs:
           done
 
           echo "</ul><hr><h2>Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
+          #BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" | xargs -n 1 basename | sort -nr)
           BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" -printf "%f\n" 2>/dev/null | sort -nr || true)
           for BUILD in $BUILDS; do
             for OS in ubuntu-latest windows-latest; do
@@ -137,29 +129,24 @@ jobs:
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
-      # 3. REPLACE: Use actions/upload-pages-artifact instead of peaceiris/actions-gh-pages
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site # The directory containing the static Allure report
-
-      # 4. ADD: Use actions/deploy-pages to trigger the GitHub Pages deployment
       - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-        # Note: No 'with:' is needed here as it automatically uses the uploaded artifact
-
-      # 5. UPDATE: Use the page_url output variable for the summary links
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: site
+          publish_branch: gh-pages
+          commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
+          
       - name: Add Workflow Summary (Badges)
         run: |
-          # Use the URL output from the deployment step
-          PAGE_URL=${{ steps.deployment.outputs.page_url }}
+          REPO_NAME=${GITHUB_REPOSITORY##*/}
+          OWNER=${GITHUB_REPOSITORY_OWNER}
 
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          # Update links to use the dynamic PAGE_URL variable
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${PAGE_URL}latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${PAGE_URL}latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${PAGE_URL})" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests passed" >> $GITHUB_STEP_SUMMARY
+

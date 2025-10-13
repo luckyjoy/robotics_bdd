@@ -1,0 +1,33 @@
+[
+  {
+    "name": "Safety Protocol Violation (Hard Stop)",
+    "messageRegex": ".*(ArmError|SafetyViolation|chest height|boundary|RuntimeError: No arm).*",
+    "description": "Failures indicating the robot attempted an unsafe operation (e.g., exceeding reach limits, violating chest height, or crossing boundaries). These point to critical defects in the safety supervisor or kinematics solver.",
+    "matchedStatuses": ["failed", "broken"]
+  },
+  {
+    "name": "Simulation Environment or Stability Issue",
+    "messageRegex": ".*(Timeout|ConnectionError|simulated_robot initialization failed).*",
+    "traceRegex": ".*(PyBullet|Gazebo|mocked gripper).*",
+    "description": "Failures related to the simulation engine, hardware connection errors, or issues with mocked components, often resulting in 'broken' tests.",
+    "matchedStatuses": ["broken"]
+  },
+  {
+    "name": "Core Logic / Navigation Defect",
+    "messageRegex": ".*(AssertionError|not approximately|less than|greater than|final position).*",
+    "description": "Standard BDD assertion failures where the robot's final position, object status, or movement outcome did not match the expected result defined in the 'Then' steps.",
+    "matchedStatuses": ["failed"]
+  },
+  {
+    "name": "Sensor Fusion / Filter Convergence Issue",
+    "messageRegex": ".*(Kalman filter|final estimate should be accurate|abs_tol).*",
+    "description": "Specific failures related to the accuracy and convergence of the Kalman filter or other sensor data processing logic.",
+    "matchedStatuses": ["failed"]
+  },
+  {
+    "name": "Flaky/Intermittent Failure",
+    "messageRegex": ".*(retried successfully|sometimes fails|timing|inconsistent result).*",
+    "description": "Tests that fail due to slight variations in simulation timing or environment instability. Requires investigation into non-deterministic behavior.",
+    "matchedStatuses": ["failed", "broken"]
+  }
+]

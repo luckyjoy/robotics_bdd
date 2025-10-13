@@ -1,1 +1,0 @@
-{"uuid": "86e5a250-3859-4419-8751-791b1b652b6e", "befores": [{"name": "pytestbdd_stepdef_given_an object is placed at \\[\\s*(?P<x>-?\\d*\\.?\\d+),\\s*(?P<y>-?\\d*\\.?\\d+),\\s*(?P<z>-?\\d*\\.?\\d+)\\s*\\]", "status": "passed", "start": 1760372423789, "stop": 1760372423789}], "start": 1760372423789, "stop": 1760372423790}

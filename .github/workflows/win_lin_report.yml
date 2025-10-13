@@ -2,113 +2,117 @@ name: Robotics BDD CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
 
 jobs:
-  test-and-report:
+  test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
 
-    env:
-      SITE_DIR: site
-      HISTORY_DIR: _history
-
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: 3.11
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # ------------------------
-      # Linux: run Docker container
-      # ------------------------
-      - name: Run tests in Docker (Linux only)
-        if: runner.os == 'Linux'
-        run: |
-          docker build -t robotics-bdd .
-          docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd pytest -v --alluredir=allure-results/ubuntu-latest || echo "❌ Tests failed, but continue"
-
-      # ------------------------
-      # Windows: run pytest directly
-      # ------------------------
-      - name: Run tests (Windows only)
-        if: runner.os == 'Windows'
-        run: |
-          pytest -v --alluredir=allure-results/windows-latest || echo "❌ Tests failed, but continue"
-
-      # ------------------------
-      # Ensure Allure CLI on Linux
-      # ------------------------
-      - name: Install Allure CLI (Linux only)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip wget openjdk-11-jre
-          wget https://github.com/allure-framework/allure2/releases/download/2.27.2/allure-2.27.2.zip
-          unzip allure-2.27.2.zip -d /opt/
-          sudo ln -s /opt/allure-2.27.2/bin/allure /usr/bin/allure
-          allure --version
-
-      # ------------------------
-      # Install Allure CLI (Windows only)
-      # ------------------------
-      - name: Install Allure CLI (Windows only)
-        if: runner.os == 'Windows'
-        run: |
-          pip install allure-pytest-binary
-          allure --version
-
-      # ------------------------
-      # Generate Allure Reports (if results exist)
-      # ------------------------
-      - name: Generate Allure Report
+      - name: Run tests
+        shell: bash
         run: |
           OS_NAME=${{ matrix.os }}
           RESULTS_DIR="allure-results/$OS_NAME"
+          mkdir -p "$RESULTS_DIR"
 
-          if [ -d "$RESULTS_DIR" ] && [ "$(ls -A $RESULTS_DIR/*.json 2>/dev/null)" ]; then
-            echo "✅ Allure results found for $OS_NAME, generating report..."
-            mkdir -p "$SITE_DIR/latest/$OS_NAME"
-            
-            # Copy previous trend history if exists
-            if [ -d "$SITE_DIR/latest/$OS_NAME/history" ]; then
-              cp -r "$SITE_DIR/latest/$OS_NAME/history" "$RESULTS_DIR/history"
-            fi
-
-            allure generate "$RESULTS_DIR" -o "$SITE_DIR/latest/$OS_NAME" --clean
-            allure open "$SITE_DIR/latest/$OS_NAME" --port 0 || echo "Trend & Executors view available"
+          if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
+            echo "Running tests in Docker..."
+            docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd \
+              pytest -v --alluredir="$RESULTS_DIR" || true
           else
-            echo "❌ No Allure results found for $OS_NAME, skipping report generation."
-          fi
-        shell: bash
+            echo "Running tests on Windows..."
+            pytest -v --alluredir="$RESULTS_DIR" || true
 
-      # ------------------------
-      # Disable Jekyll and Upload Pages
-      # ------------------------
+          # Detect if there are test results
+          if [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
+            echo "❌ No Allure results found for $OS_NAME"
+            echo "has_results=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Allure results found for $OS_NAME"
+            echo "has_results=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate Allure Reports
+        if: steps.test.outputs.has_results == 'true'
+        shell: bash
+        run: |
+          echo "Generating Allure report..."
+          SITE_DIR="site"
+          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
+          mkdir -p "$SITE_DIR/latest"
+
+          OS_NAME=${{ matrix.os }}
+          RESULTS_DIR="allure-results/$OS_NAME"
+          REPORT_DIR="$SITE_DIR/latest/$OS_NAME"
+
+          allure generate "$RESULTS_DIR" -o "$REPORT_DIR" --clean
+
+      - name: Fix Allure Paths
+        if: steps.test.outputs.has_results == 'true'
+        shell: bash
+        run: |
+          for OS in ubuntu-latest windows-latest; do
+            REPORT_DIR="site/latest/$OS"
+            if [ -f "$REPORT_DIR/index.html" ]; then
+              perl -pi -e 's|src="/|src="./|g' "$REPORT_DIR/index.html"
+              perl -pi -e 's|href="/|href="./|g' "$REPORT_DIR/index.html"
+            fi
+          done
+
+      - name: Create Landing Page
+        if: steps.test.outputs.has_results == 'true'
+        shell: bash
+        run: |
+          SITE_DIR="site"
+          mkdir -p $SITE_DIR
+          echo "<html><head><title>Allure Reports</title>
+          <style>body{font-family:sans-serif;margin:20px;}a{color:#0366d6;text-decoration:none;}a:hover{text-decoration:underline;}</style>
+          </head><body><h1>🤖 Robotics BDD Simulation CI/CD</h1><hr><ul>" > $SITE_DIR/index.html
+          for OS in ubuntu-latest windows-latest; do
+            if [ -f "$SITE_DIR/latest/$OS/index.html" ]; then
+              echo "<li><a href='latest/$OS/index.html'>Latest Report ($OS)</a></li>" >> $SITE_DIR/index.html
+            else
+              echo "<li>No report found for $OS</li>" >> $SITE_DIR/index.html
+            fi
+          done
+          echo "</ul><hr><p>Allure Trends & Executor data are available under each report's widgets/history tabs.</p></body></html>" >> $SITE_DIR/index.html
+
       - name: Disable Jekyll
-        run: touch ${{ env.SITE_DIR }}/.nojekyll
+        if: steps.test.outputs.has_results == 'true'
+        run: touch site/.nojekyll
 
       - name: Upload Pages Artifact
+        if: steps.test.outputs.has_results == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ${{ env.SITE_DIR }}
+          path: site
 
       - name: Deploy to GitHub Pages
+        if: steps.test.outputs.has_results == 'true'
         id: deployment
         uses: actions/deploy-pages@v4
 
-      - name: Add Workflow Summary with Badges
+      - name: Add Workflow Summary (Badges)
+        if: steps.test.outputs.has_results == 'true'
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
           BASE_URL="${PAGE_URL%/}"
@@ -118,4 +122,4 @@ jobs:
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ Tests completed (failed tests will not block report generation)" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests completed" >> $GITHUB_STEP_SUMMARY

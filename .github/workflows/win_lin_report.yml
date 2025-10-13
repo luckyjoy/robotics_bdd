@@ -5,13 +5,11 @@ on:
     branches:
       - main
 
-# Permissions for GitHub Pages deployment via Actions (OIDC)
+# Set explicit permissions required for GitHub Pages deployment via Actions
 permissions:
   contents: read     
   pages: write       
   id-token: write    
-  # NOTE: The cache action requires read/write permissions for its own use, 
-  # which is typically covered by the default GITHUB_TOKEN permissions (read/write contents).
 
 jobs:
   run-tests:
@@ -56,6 +54,8 @@ jobs:
             echo "result_status=failed" >> $GITHUB_OUTPUT
           fi
 
+# --------------------------------------------------------------------------------
+
   deploy-allure:
     name: Deploy Allure Report
     runs-on: ubuntu-latest
@@ -67,12 +67,11 @@ jobs:
       ALLURE_VERSION: 2.29.0
       SITE_DIR: site
     steps:
-      # FIX 2: Restore cache of the 'site' directory to retrieve history
+      # FIX: Restore cache of the 'site' directory to retrieve history
       - name: Restore Allure History Cache
         uses: actions/cache/restore@v4
         with:
           path: site
-          # Cache key ensures persistence across runs on the same branch
           key: allure-site-${{ github.ref_name }}
           enableCrossOsArchive: true
 
@@ -87,6 +86,7 @@ jobs:
           tar -xzf allure-${ALLURE_VERSION}.tgz
           sudo mv allure-${ALLURE_VERSION}/bin/allure /usr/local/bin/allure
 
+      # FIX: Add --clean-all to ensure a clean Allure generation
       - name: Generate Allure Reports (Ubuntu + Windows)
         run: |
           mkdir -p $SITE_DIR/latest
@@ -95,7 +95,8 @@ jobs:
 
           for OS in ubuntu-latest windows-latest; do
             if [ -d "allure-results/$OS" ]; then
-              allure generate "allure-results/$OS" -o "$SITE_DIR/latest/$OS" --clean
+              # Use --clean-all to avoid artifact conflicts
+              allure generate "allure-results/$OS" -o "$SITE_DIR/latest/$OS" --clean-all
               mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
               cp -r "$SITE_DIR/latest/$OS"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
               date +"%Y-%m-%d %H:%M:%S %Z" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
@@ -146,21 +147,37 @@ jobs:
 
           echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
-      # FIX 1: Set the base URL for Allure Reports to handle the repository subpath
+      # FIX: Manually edit Allure's index.html to force relative paths (resolves 404s inside the report)
+      - name: Fix Allure Report Absolute Paths
+        run: |
+          REPO_NAME=${{ github.event.repository.name }}
+          for OS in ubuntu-latest windows-latest; do
+            REPORT_DIR="site/latest/$OS"
+            if [ -f "$REPORT_DIR/index.html" ]; then
+              # Replace absolute paths (e.g., /styles) with relative paths (e.g., ./styles)
+              sed -i 's|src="/|src="./|g' "$REPORT_DIR/index.html"
+              sed -i 's|href="/|href="./|g' "$REPORT_DIR/index.html"
+              # Set the base path metadata inside the report for subpath deployment (optional, but robust)
+              sed -i "s|<head>|<head><base href=\"/$REPO_NAME/$REPORT_DIR/\">|g" "$REPORT_DIR/index.html" || true
+            fi
+          done
+          
+      # FIX: Set .nojekyll and baseurl for GitHub Pages base path configuration
       - name: Set Base URL for Allure Reports
         run: |
-          # Create a .nojekyll file to prevent Jekyll from breaking paths
+          # Create a .nojekyll file to prevent Jekyll processing
           touch site/.nojekyll
           # Set the base URL to the repository name (e.g., /robotics_bdd/)
           echo /${{ github.event.repository.name }}/ > site/baseurl
-
-      # FIX 2: Save the updated 'site' directory to the cache
+          
+      # FIX: Save the updated 'site' directory to the cache for the next run
       - name: Save Allure History Cache
         uses: actions/cache/save@v4
         with:
           path: site
           key: allure-site-${{ github.ref_name }}
 
+      # Official GitHub Pages deployment actions
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -170,7 +187,7 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-      # FIX 3: Construct badge links using BASE_URL and explicitly point to index.html
+      # FIX: Construct badge links using BASE_URL and explicitly point to index.html
       - name: Add Workflow Summary (Badges)
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
@@ -179,7 +196,7 @@ jobs:
 
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          # FIX: Explicitly append /index.html and ensure no double slash in path
+          # Explicitly append /index.html to prevent 404 errors on deep subdirectories
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY

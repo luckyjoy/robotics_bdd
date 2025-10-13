@@ -10,19 +10,16 @@ permissions:
   pages: write
   id-token: write
 
+jobs:
 # --------------------------------------------------------------------
 # 🧪 JOB 1: Run Tests and Upload Allure Results
 # --------------------------------------------------------------------
-jobs:
   run-tests:
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-    outputs:
-      status: ${{ steps.set_status.outputs.result_status }}
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -38,29 +35,18 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Tests with Allure
-        id: run-tests
         run: |
           mkdir -p allure-results/${{ matrix.os }}
           pytest tests/ --alluredir=allure-results/${{ matrix.os }} || true
 
-      - name: Determine Status
-        id: set_status
-        shell: bash
-        run: |
-          if [ -d "allure-results/${{ matrix.os }}" ]; then
-            echo "result_status=passed" >> $GITHUB_OUTPUT
-          else
-            echo "result_status=failed" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Upload Allure Results Artifact
+      - name: Upload Allure Results
         uses: actions/upload-artifact@v4
         with:
           name: allure-results-${{ matrix.os }}
           path: allure-results/${{ matrix.os }}
 
 # --------------------------------------------------------------------
-# 🚀 JOB 2: Generate and Deploy Allure Reports
+# 🚀 JOB 2: Generate + Deploy Allure Reports to GitHub Pages
 # --------------------------------------------------------------------
   deploy-allure:
     name: Deploy Allure Report
@@ -83,12 +69,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: allure-results-*
+          merge-multiple: true
           path: allure-results
 
-      - name: Debug Check Allure Results
+      - name: Show Downloaded Structure
         run: |
-          echo "Listing allure-results contents..."
-          ls -R allure-results || echo "No allure-results found."
+          echo "Downloaded artifact folder structure:"
+          tree allure-results || ls -R allure-results
 
       - name: Download Allure CLI
         run: |
@@ -98,15 +85,27 @@ jobs:
 
       - name: Generate Allure Reports (Ubuntu + Windows)
         run: |
-          mkdir -p $SITE_DIR/latest/ubuntu-latest
-          mkdir -p $SITE_DIR/latest/windows-latest
+          mkdir -p $SITE_DIR/latest
           
-          if [ -d "allure-results/ubuntu-latest" ]; then
-            allure generate "allure-results/ubuntu-latest" -o "$SITE_DIR/latest/ubuntu-latest" --clean
-          fi
-          if [ -d "allure-results/windows-latest" ]; then
-            allure generate "allure-results/windows-latest" -o "$SITE_DIR/latest/windows-latest" --clean
-          fi
+          for OS in ubuntu-latest windows-latest; do
+            SRC="allure-results-${OS}"
+            DEST="$SITE_DIR/latest/$OS"
+            
+            # Handle artifact folder names (in case of nesting)
+            if [ -d "allure-results/$OS" ]; then
+              SRC="allure-results/$OS"
+            elif [ -d "allure-results-${OS}" ]; then
+              SRC="allure-results-${OS}"
+            fi
+
+            if [ -d "$SRC" ]; then
+              mkdir -p "$DEST"
+              echo "✅ Generating Allure report for $OS from $SRC → $DEST"
+              allure generate "$SRC" -o "$DEST" --clean
+            else
+              echo "⚠️ No Allure results for $OS, skipping."
+            fi
+          done
 
       - name: Copy Allure Metadata (Executor & Categories)
         run: |
@@ -114,27 +113,12 @@ jobs:
             REPORT_DIR="$SITE_DIR/latest/$OS"
             if [ -d "$REPORT_DIR" ]; then
               mkdir -p "$REPORT_DIR/widgets"
-
-              # Copy from supports/
               if [ -f "supports/executor.json" ]; then
                 cp supports/executor.json "$REPORT_DIR/widgets/executor.json"
-              else
-                echo "⚠️ supports/executor.json not found, skipping."
               fi
               if [ -f "supports/categories.json" ]; then
                 cp supports/categories.json "$REPORT_DIR/widgets/categories.json"
-              else
-                echo "⚠️ supports/categories.json not found, skipping."
               fi
-
-              # Optional: merge build info if jq is available
-              if command -v jq &> /dev/null && [ -f "$REPORT_DIR/widgets/executor.json" ]; then
-                jq '. + {buildOrder: '"$GITHUB_RUN_NUMBER"', reportName: "'"$OS Report"'"}' \
-                  "$REPORT_DIR/widgets/executor.json" > tmp.json && mv tmp.json "$REPORT_DIR/widgets/executor.json"
-              fi
-              echo "✅ Metadata copied to $REPORT_DIR/widgets/"
-            else
-              echo "⚠️ No report directory for $OS, skipping metadata copy."
             fi
           done
 
@@ -142,36 +126,32 @@ jobs:
         shell: bash
         run: |
           SITE_DIR="site"
-          echo "<html><head><title>Latest Allure Reports</title>
-          <style>
-          body{font-family:sans-serif;margin:20px;}
-          ul{list-style:none;padding:0;}
-          li{margin:6px 0;}
-          a{text-decoration:none;color:#0366d6;}
-          a:hover{text-decoration:underline;}
-          </style></head><body><h1>Latest Allure Reports (Build #${GITHUB_RUN_NUMBER})</h1><hr><ul>" > "$SITE_DIR/index.html"
+          echo "<html><head><title>Allure Reports</title>
+          <style>body{font-family:sans-serif;margin:20px;}li{margin:6px 0;}</style>
+          </head><body><h1>🤖 Robotics BDD Simulation CI/CD (Build #${GITHUB_RUN_NUMBER})</h1><hr><ul>" > "$SITE_DIR/index.html"
 
           for OS in ubuntu-latest windows-latest; do
-            if [ -d "$SITE_DIR/latest/$OS" ]; then
-              echo "<li><strong><a href='latest/$OS/index.html'>Latest Report ($OS)</a></strong></li>" >> "$SITE_DIR/index.html"
+            if [ -f "$SITE_DIR/latest/$OS/index.html" ]; then
+              echo "<li><a href='latest/$OS/index.html'>Latest Report ($OS)</a></li>" >> "$SITE_DIR/index.html"
+            else
+              echo "<li><span style='color:gray'>No report found for $OS</span></li>" >> "$SITE_DIR/index.html"
             fi
           done
 
-          echo "</ul><hr><p>Metadata copied from <code>supports/</code> directory.</p></body></html>" >> "$SITE_DIR/index.html"
+          echo "</ul><hr><p>Metadata copied from <code>supports/</code>.</p></body></html>" >> "$SITE_DIR/index.html"
 
-      - name: Fix Allure Report Absolute Paths (Perl Fix)
+      - name: Fix Allure Report Paths
         run: |
           for OS in ubuntu-latest windows-latest; do
-            REPORT_DIR="site/latest/$OS"
-            if [ -f "$REPORT_DIR/index.html" ]; then
-              perl -pi -e 's|src="/|src="./|g' "$REPORT_DIR/index.html"
-              perl -pi -e 's|href="/|href="./|g' "$REPORT_DIR/index.html"
+            FILE="site/latest/$OS/index.html"
+            if [ -f "$FILE" ]; then
+              perl -pi -e 's|src="/|src="./|g' "$FILE"
+              perl -pi -e 's|href="/|href="./|g' "$FILE"
             fi
           done
 
       - name: Set .nojekyll
-        run: |
-          touch site/.nojekyll
+        run: touch site/.nojekyll
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
@@ -182,15 +162,13 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-      - name: Add Workflow Summary (Badges)
+      - name: Add Workflow Summary
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
-          BASE_URL="${PAGE_URL%/}"
-
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${PAGE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${PAGE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${PAGE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests passed" >> $GITHUB_STEP_SUMMARY

@@ -41,7 +41,8 @@ jobs:
           else
             echo "Running tests on Windows..."
             pytest -v --alluredir="$RESULTS_DIR" || true
-
+          fi
+          
           # Detect if there are test results
           if [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
             echo "❌ No Allure results found for $OS_NAME"

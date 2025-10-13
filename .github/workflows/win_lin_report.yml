@@ -105,7 +105,7 @@ jobs:
           path: allure-results
 
 # -------------------------------------------------------------
-# Deploy Unified Allure Report
+# Deploy Allure Report per OS + history + badges
 # -------------------------------------------------------------
   deploy-pages:
     name: Deploy Allure Report
@@ -136,20 +136,12 @@ jobs:
           path: allure-results/windows-latest
         continue-on-error: true
 
-      # Merge Allure results
-      - name: Merge Allure Results
-        shell: bash
-        run: |
-          mkdir -p merged-results
-          cp -r allure-results/ubuntu-latest/* merged-results/ 2>/dev/null || true
-          cp -r allure-results/windows-latest/* merged-results/ 2>/dev/null || true
-
       # Stop if no results
       - name: Check if results exist
         id: check-results
         shell: bash
         run: |
-          if [ -d merged-results ] && [ "$(ls -A merged-results | wc -l)" -gt 0 ]; then
+          if [ -d allure-results/ubuntu-latest ] || [ -d allure-results/windows-latest ]; then
             echo "results_exist=true" >> $GITHUB_OUTPUT
           else
             echo "results_exist=false" >> $GITHUB_OUTPUT
@@ -168,43 +160,31 @@ jobs:
           tar -xzf allure.tgz -C allure --strip-components 1
           echo "$PWD/allure/bin" >> $GITHUB_PATH
 
-      # Add Executor metadata
-      - name: Add Allure metadata (Trend + Executors)
-        shell: bash
-        run: |
-          mkdir -p merged-results
-          cat <<EOF > merged-results/executor.json
-          {
-            "name": "GitHub Actions",
-            "type": "CI/CD",
-            "buildOrder": ${{ github.run_number }},
-            "buildName": "Build #${{ github.run_number }}",
-            "buildUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-            "reportName": "Robotics BDD Simulation CI/CD",
-            "reportUrl": "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/latest/",
-            "executor": "Ubuntu + Windows"
-          }
-          EOF
-
-      # Preserve history
-      - name: Preserve previous history
-        shell: bash
-        run: |
-          mkdir -p merged-results/history
-          if [ -d site/latest/history ]; then
-            cp -r site/latest/history/* merged-results/history/ 2>/dev/null || true
-          fi
-
-      # Generate unified Allure report
-      - name: Generate Unified Allure Report
+      # Generate per-OS Allure Reports and preserve history
+      - name: Generate Allure Reports per OS
         shell: bash
         run: |
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
-          allure generate merged-results -o "$SITE_DIR/$BUILD_NUMBER" --clean
-          # Copy to latest
-          rm -rf "$SITE_DIR/latest"
-          cp -r "$SITE_DIR/$BUILD_NUMBER" "$SITE_DIR/latest"
+
+          mkdir -p "$SITE_DIR/$BUILD_NUMBER/ubuntu-latest" "$SITE_DIR/$BUILD_NUMBER/windows-latest"
+          mkdir -p "$SITE_DIR/latest/ubuntu-latest" "$SITE_DIR/latest/windows-latest"
+
+          for OS in ubuntu-latest windows-latest; do
+            if [ -d "allure-results/$OS" ]; then
+              # Preserve history from previous build
+              mkdir -p "allure-results/$OS/history"
+              if [ -d "$SITE_DIR/latest/$OS/history" ]; then
+                cp -r "$SITE_DIR/latest/$OS/history/"* "allure-results/$OS/history/"
+              fi
+
+              # Generate report
+              allure generate "allure-results/$OS" -o "$SITE_DIR/$BUILD_NUMBER/$OS" --clean
+              # Copy to latest
+              rm -rf "$SITE_DIR/latest/$OS"/*
+              cp -r "$SITE_DIR/$BUILD_NUMBER/$OS"/* "$SITE_DIR/latest/$OS/"
+            fi
+          done
 
       # Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
@@ -213,9 +193,9 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: site
           publish_branch: gh-pages
-          commit_message: "Deploy Unified Allure Reports - Build ${{ github.run_number }}"
+          commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
 
-      # Add badges and summary
+      # Add workflow badges and summary
       - name: Add workflow badges to summary
         shell: bash
         run: |
@@ -224,10 +204,15 @@ jobs:
 
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "#### 🧩 Latest Allure Report" >> $GITHUB_STEP_SUMMARY
-          echo "[![All Tests](https://${OWNER}.github.io/${REPO_NAME}/latest/)](https://${OWNER}.github.io/${REPO_NAME}/latest/)" >> $GITHUB_STEP_SUMMARY
+
+          echo "#### 🧩 Latest Allure Reports" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+
           echo "#### 📊 Report History" >> $GITHUB_STEP_SUMMARY
-          echo "[![All Builds](https://${OWNER}.github.io/${REPO_NAME}/)](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![All Builds](https://img.shields.io/badge/All-Builds-green)](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Build status icon
           echo "Build ${{ github.run_number }} | Status: ${{ needs.run-tests.outputs.result_icon }}" >> $GITHUB_STEP_SUMMARY

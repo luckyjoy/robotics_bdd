@@ -13,7 +13,7 @@ permissions:
 
 env:
   ALLURE_VERSION: 2.29.0
-  # NOTE: Assuming 'supports/executor.json' exists in your repo root for history/executors
+  # NOTE: Ensure 'supports/executor.json' exists in your repository if you want to use it
   EXECUTOR_FILE: supports/executor.json 
 
 jobs:
@@ -53,6 +53,7 @@ jobs:
         id: run_tests
         shell: bash
         run: |
+          # Use set +e to capture the exit code without failing the step immediately on test failure (exit 1)
           set +e 
           
           OS_NAME=${{ matrix.os }}
@@ -70,9 +71,9 @@ jobs:
             TEST_EXIT_CODE=$?
           fi
           
-          set -e 
+          set -e # Restore default behavior
 
-          # FAIL JOB if NO results (Setup Error)
+          # Fail job only if no results are found (catastrophic setup error)
           if [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
             echo "❌ No Allure results found for $OS_NAME. **Setup/Configuration Failure**."
             exit 1 
@@ -82,7 +83,6 @@ jobs:
           fi
 
       - name: Upload Allure Results Artifact
-        # This always runs if the previous step succeeded (i.e., setup worked)
         uses: actions/upload-artifact@v4
         with:
           name: allure-results-${{ matrix.os }}
@@ -90,6 +90,7 @@ jobs:
 
   deploy_allure:
     name: Deploy Allure Report to Pages
+    # FIX: Ensure this job only runs once after all matrix jobs finish
     needs: test 
     runs-on: ubuntu-latest
     environment:
@@ -130,10 +131,8 @@ jobs:
         run: |
           if [ -z "$(find allure-results -type f -name '*.json' 2>/dev/null)" ]; then
             echo "proceed=false" >> $GITHUB_OUTPUT
-            echo "❌ No test results found from any OS — skipping Allure deployment."
           else
             echo "proceed=true" >> $GITHUB_OUTPUT
-            echo "✅ Test results detected — proceeding with report generation."
           fi
         
       - name: Stop Deployment if No Results Exist
@@ -157,51 +156,48 @@ jobs:
           echo "Generating Allure report..."
           SITE_DIR="site"
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
-          mkdir -p "$SITE_DIR/latest"
           
-          for OS in ubuntu-latest windows-latest; do
-            RESULTS_DIR="allure-results/$OS"
-            REPORT_DIR="$SITE_DIR/latest/$OS"
-            
-            if [ -d "$RESULTS_DIR" ] && [ "$(ls -A $RESULTS_DIR)" ]; then
-              # FIX (1, 2): Generate report for each OS to get separate views
-              allure generate "$RESULTS_DIR" -o "$REPORT_DIR" --clean
-              
-              # FIX (1, 2): Add executor.json for trend/history data
-              mkdir -p "$REPORT_DIR/widgets"
-              echo '{"buildOrder":'"$BUILD_NUMBER"', "reportName":"'"$OS Report"'"}' > "$REPORT_DIR/widgets/executor.json"
-              
-              # FIX (1): If you have a global executor file, copy it:
-              if [ -f "${{ env.EXECUTOR_FILE }}" ]; then
-                cp "${{ env.EXECUTOR_FILE }}" "$REPORT_DIR/widgets/"
-              fi
-            fi
-          done
+          # FIX (1, 2): Generate ALL reports in one run to ensure history/trends are built correctly
+          # Copy history and executor files to the root results folder *before* generating.
+          if [ -d "$SITE_DIR/latest/history" ]; then
+             cp -r "$SITE_DIR/latest/history" "allure-results/history"
+          fi
+          
+          # FIX (1): If executor file exists, copy it to the root results folder
+          if [ -f "${{ env.EXECUTOR_FILE }}" ]; then
+            mkdir -p allure-results/widgets
+            cp "${{ env.EXECUTOR_FILE }}" "allure-results/widgets/"
+          fi
+          
+          # Generate the report once for all combined results
+          ALL_RESULTS_DIR="allure-results"
+          FINAL_REPORT_DIR="$SITE_DIR/latest"
+          allure generate "$ALL_RESULTS_DIR" -o "$FINAL_REPORT_DIR" --clean
+          
+          # FIX (1): Override the executor file created by allure generate with the one containing buildOrder
+          mkdir -p "$FINAL_REPORT_DIR/widgets"
+          echo '{"buildOrder":'"$BUILD_NUMBER"', "reportName":"Combined Report"}' > "$FINAL_REPORT_DIR/widgets/executor.json"
+
 
       - name: Fix Allure Paths
         shell: bash
         run: |
-          for OS in ubuntu-latest windows-latest; do
-            REPORT_DIR="site/latest/$OS"
-            if [ -f "$REPORT_DIR/index.html" ]; then
-              perl -pi -e 's|src="/|src="./|g' "$REPORT_DIR/index.html"
-              perl -pi -e 's|href="/|href="./|g' "$REPORT_DIR/index.html"
-            fi
-          done
+          REPORT_DIR="site/latest"
+          if [ -f "$REPORT_DIR/index.html" ]; then
+            perl -pi -e 's|src="/|src="./|g' "$REPORT_DIR/index.html"
+            perl -pi -e 's|href="/|href="./|g' "$REPORT_DIR/index.html"
+          fi
 
       - name: Create Landing Page and Deploy
         run: |
           SITE_DIR="site"
           mkdir -p $SITE_DIR
+          # FIX (2): The landing page now links to the single, combined report.
           echo "<html><head><title>Allure Reports</title><style>body{font-family:sans-serif;margin:20px;}a{color:#0366d6;text-decoration:none;}a:hover{text-decoration:underline;}</style></head><body><h1>🤖 Robotics BDD Simulation CI/CD</h1><hr><ul>" > $SITE_DIR/index.html
-          for OS in ubuntu-latest windows-latest; do
-            if [ -f "$SITE_DIR/latest/$OS/index.html" ]; then
-              echo "<li><a href='latest/$OS/index.html'>Latest Report ($OS)</a></li>" >> $SITE_DIR/index.html
-            else
-              echo "<li>No report found for $OS</li>" >> $SITE_DIR/index.html
-            fi
-          done
-          echo "</ul><hr><p>Allure Trends & Executor data are available under each report's widgets/history tabs.</p></body></html>" >> $SITE_DIR/index.html
+          if [ -f "$SITE_DIR/latest/index.html" ]; then
+              echo "<li><a href='latest/index.html'>Latest Combined Report (All OS)</a></li>" >> $SITE_DIR/index.html
+          fi
+          echo "</ul><hr><p>Allure Trends & Executor data are available under the report's widgets/history tabs.</p></body></html>" >> $SITE_DIR/index.html
 
           touch $SITE_DIR/.nojekyll
 
@@ -221,21 +217,18 @@ jobs:
           
           TEST_STATUS=${{ steps.test_status_check.outputs.status }}
           
-          # FIX (3): Use the centralized status check for the summary badge
+          # FIX (3): Set the final summary status based on the accurate, centralized check
           if [[ "$TEST_STATUS" == "UNSTABLE" ]]; then
             STATUS_ICON="⚠️"
             STATUS_TEXT="Unstable (some tests failed)"
-            STATUS_COLOR="yellow"
           else
             STATUS_ICON="✅"
             STATUS_TEXT="All tests passed"
-            STATUS_COLOR="brightgreen"
           fi        
           
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
+          # Link badge to the single combined report
+          echo "[![Combined Report](https://img.shields.io/badge/Report-Combined_Build-blue)](${BASE_URL}/latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build #${GITHUB_RUN_NUMBER} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY

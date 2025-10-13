@@ -1,142 +1,136 @@
-name: Robotics BDD Simulation CI/CD
+name: Robotics BDD CI/CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
 
 jobs:
-  test:
+  test-and-report:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
 
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
+    env:
+      SITE_DIR: site
 
     steps:
-      - uses: actions/checkout@v3
+      # ------------------------------
+      # Checkout code
+      # ------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
+      # ------------------------------
+      # Set up Python
+      # ------------------------------
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
 
+      # ------------------------------
+      # Install dependencies
+      # ------------------------------
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install allure-pytest
 
-      # -----------------------------
+      # ------------------------------
       # Run tests
-      # -----------------------------
-      - name: Run tests
-        id: run_tests
-        continue-on-error: true
+      # ------------------------------
+      - name: Run Tests
+        shell: bash
         run: |
-          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            echo "🛳 Running in Docker on Linux..."
-            docker run --rm -v $PWD:/workspace -w /workspace python:3.11 bash -c "
-              pip install -r requirements.txt
-              pytest -v --alluredir=allure-results/ubuntu-latest || true
-            "
+          OS_NAME=${{ matrix.os }}
+          RESULTS_DIR="allure-results/$OS_NAME"
+          mkdir -p "$RESULTS_DIR"
+
+          if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
+            # Run inside Docker if Linux
+            docker run --rm \
+              -v "$PWD":/app -w /app \
+              python:3.11-slim \
+              bash -c "pip install -r requirements.txt && pytest --alluredir=$RESULTS_DIR || true"
           else
-            echo "💻 Running tests on Windows..."
-            pytest -v --alluredir=allure-results/windows-latest || true
+            # Windows: run normally
+            pytest --alluredir=$RESULTS_DIR || true
           fi
 
-      # -----------------------------
-      # Check if Allure results exist
-      # -----------------------------
-      - name: Check Allure Results
-        id: check_allure
-        run: |
-          RESULTS_DIR="allure-results/${{ matrix.os }}"
-          if [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
-            echo "❌ No Allure results found for ${{ matrix.os }}"
+          # Check if results exist
+          if [ -z "$(find "$RESULTS_DIR" -type f -name '*.json' 2>/dev/null)" ]; then
+            echo "❌ No test results for $OS_NAME"
             echo "has_results=false" >> $GITHUB_OUTPUT
           else
-            echo "✅ Allure results found for ${{ matrix.os }}"
+            echo "✅ Test results found for $OS_NAME"
             echo "has_results=true" >> $GITHUB_OUTPUT
           fi
 
-      # -----------------------------
-      # Generate Allure Report
-      # -----------------------------
-      - name: Generate Allure Report
-        if: steps.check_allure.outputs.has_results == 'true'
+      # ------------------------------
+      # Generate Allure Reports
+      # ------------------------------
+      - name: Generate Allure Reports
+        shell: bash
         run: |
-          SITE_DIR="site"
-          REPORT_DIR="$SITE_DIR/latest/${{ matrix.os }}"
-          mkdir -p "$REPORT_DIR"
-          allure generate allure-results/${{ matrix.os }} --clean -o "$REPORT_DIR"
+          OS_NAME=${{ matrix.os }}
+          RESULTS_DIR="allure-results/$OS_NAME"
+          REPORT_DIR="$SITE_DIR/latest/$OS_NAME"
 
-      # -----------------------------
-      # Fix paths for report (so trends/executors work)
-      # -----------------------------
-      - name: Fix Allure Paths
-        if: steps.check_allure.outputs.has_results == 'true'
-        run: |
-          REPORT_DIR="site/latest/${{ matrix.os }}"
-          if [ -f "$REPORT_DIR/index.html" ]; then
-            perl -pi -e 's|src="/|src="./|g' "$REPORT_DIR/index.html"
-            perl -pi -e 's|href="/|href="./|g' "$REPORT_DIR/index.html"
+          # Skip if no results
+          if [ -z "$(ls -A $RESULTS_DIR/*.json 2>/dev/null)" ]; then
+            echo "Skipping Allure report for $OS_NAME"
+            exit 0
           fi
 
-      # -----------------------------
-      # Create Landing Page
-      # -----------------------------
-      - name: Create Landing Page
-        if: steps.check_allure.outputs.has_results == 'true'
-        run: |
-          SITE_DIR="site"
-          mkdir -p $SITE_DIR
-          echo "<html><head><title>Allure Reports</title>
-          <style>body{font-family:sans-serif;margin:20px;}a{color:#0366d6;text-decoration:none;}a:hover{text-decoration:underline;}</style>
-          </head><body><h1>🤖 Robotics BDD Simulation CI/CD</h1><hr><ul>" > $SITE_DIR/index.html
-          for OS in ubuntu-latest windows-latest; do
-            if [ -f "$SITE_DIR/latest/$OS/index.html" ]; then
-              echo "<li><a href='latest/$OS/index.html'>Latest Report ($OS)</a></li>" >> $SITE_DIR/index.html
-            else
-              echo "<li>No report found for $OS</li>" >> $SITE_DIR/index.html
-            fi
-          done
-          echo "</ul><hr><p>Allure Trends & Executor data are available under each report's widgets/history tabs.</p></body></html>" >> $SITE_DIR/index.html
+          mkdir -p "$REPORT_DIR"
 
+          # Copy previous history if exists
+          if [ -d "$REPORT_DIR/history" ]; then
+            cp -r "$REPORT_DIR/history" "$RESULTS_DIR/history"
+          fi
+
+          # Generate Allure report
+          allure generate "$RESULTS_DIR" -o "$REPORT_DIR" --clean
+
+          # Write build info
+          date -u +"%Y-%m-%d %H:%M:%S UTC" > "$REPORT_DIR/build-info.txt"
+
+      # ------------------------------
+      # Disable Jekyll for GitHub Pages
+      # ------------------------------
       - name: Disable Jekyll
-        if: steps.check_allure.outputs.has_results == 'true'
-        run: touch site/.nojekyll
+        run: touch $SITE_DIR/.nojekyll
 
-      # -----------------------------
+      # ------------------------------
       # Upload Pages Artifact
-      # -----------------------------
+      # ------------------------------
       - name: Upload Pages Artifact
-        if: steps.check_allure.outputs.has_results == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: ${{ env.SITE_DIR }}
 
+      # ------------------------------
+      # Deploy to GitHub Pages
+      # ------------------------------
       - name: Deploy to GitHub Pages
-        if: steps.check_allure.outputs.has_results == 'true'
         id: deployment
         uses: actions/deploy-pages@v4
 
-      # -----------------------------
-      # Add Workflow Summary (Badges)
-      # -----------------------------
+      # ------------------------------
+      # Add Workflow Summary with Allure Badges
+      # ------------------------------
       - name: Add Workflow Summary (Badges)
-        if: steps.check_allure.outputs.has_results == 'true'
+        shell: bash
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
           BASE_URL="${PAGE_URL%/}"
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![All Builds](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ Tests completed (some may have failed)" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ Completed" >> $GITHUB_STEP_SUMMARY

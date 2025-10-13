@@ -1,7 +1,7 @@
 pytest
 pytest-timeout
 pytest_bdd
-pytest_html
 allure-pytest
 pytest-xdist
 docker
+#allure-pytest-binary

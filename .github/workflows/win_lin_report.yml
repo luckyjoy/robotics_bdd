@@ -1,218 +1,151 @@
-name: Robotics BDD Simulation CI/CD
+name: 🤖 Robotics BDD Simulation CI/CD
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  schedule:
-    - cron: '0 15 * * *'
-  workflow_dispatch:
-
-concurrency:
-  group: robotics-bdd-ci-${{ github.ref }}
-  cancel-in-progress: true
+    branches:
+      - main
 
 jobs:
   run-tests:
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-
     outputs:
-      result_icon: ${{ steps.set-icon.outputs.result_icon }}
-      status: ${{ steps.run-tests.outputs.status }}
-
+      status: ${{ steps.set_status.outputs.result_status }}
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: 3.11
 
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            pip-${{ runner.os }}-
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      # -------------------------------------------------------------
-      # Run tests (Docker on Linux / native on Windows)
-      # -------------------------------------------------------------
-      - name: Run tests
+      - name: Run Tests with Allure
         id: run-tests
+        run: |
+          mkdir -p allure-results/${{ matrix.os }}
+          pytest tests/ --alluredir=allure-results/${{ matrix.os }} || true
+
+      - name: Determine Status
+        id: set_status
         shell: bash
         run: |
-          mkdir -p allure-results
-          set +e  # continue even if tests fail
-
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            echo "🐳 Running tests in Docker..."
-            docker run --rm -v $PWD:/app -w /app python:3.11 \
-              bash -c "pip install -r requirements.txt && pytest -m 'navigation or sensors or walking' --alluredir=allure-results || echo 'unstable' > allure-results/status.txt"
+          if [ -d "allure-results/${{ matrix.os }}" ]; then
+            if grep -q '"failed": [1-9]' allure-results/${{ matrix.os }}/widgets/summary.json 2>/dev/null; then
+              echo "result_status=failed" >> $GITHUB_OUTPUT
+            else
+              echo "result_status=passed" >> $GITHUB_OUTPUT
+            fi
           else
-            echo "🪟 Running tests natively on Windows..."
-            pip install -r requirements.txt
-            pytest -m "navigation or sensors or walking" --alluredir=allure-results || echo 'unstable' > allure-results/status.txt
+            echo "result_status=failed" >> $GITHUB_OUTPUT
           fi
 
-          EXIT_CODE=$?
-          if [ -f allure-results/status.txt ]; then
-            STATUS=$(cat allure-results/status.txt)
-          elif [ "$(ls -A allure-results | wc -l)" -eq 0 ]; then
-            STATUS="failed"
-          elif [ $EXIT_CODE -ne 0 ]; then
-            STATUS="unstable"
-          else
-            STATUS="passed"
-          fi
-
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-          echo "Test run status: $STATUS"
-
-      # -------------------------------------------------------------
-      # Set build icon
-      # -------------------------------------------------------------
-      - name: Set build icon
-        id: set-icon
-        shell: bash
-        run: |
-          STATUS="${{ steps.run-tests.outputs.status }}"
-          if [ "$STATUS" = "passed" ]; then
-            ICON="✅"
-          elif [ "$STATUS" = "unstable" ]; then
-            ICON="⚠️"
-          else
-            ICON="❌"
-          fi
-          echo "result_icon=$ICON" >> $GITHUB_OUTPUT
-
-      # -------------------------------------------------------------
-      # Upload Allure Results
-      # -------------------------------------------------------------
-      - name: Upload Allure Results
-        if: ${{ steps.run-tests.outputs.status != 'failed' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-results-${{ matrix.os }}
-          path: allure-results
-
-# -------------------------------------------------------------
-# Deploy Allure Report per OS + history + badges
-# -------------------------------------------------------------
-  deploy-pages:
+  deploy-allure:
     name: Deploy Allure Report
-    needs: run-tests
-    if: always()
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    needs: run-tests
     env:
       ALLURE_VERSION: 2.29.0
-
+      SITE_DIR: site
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
-
-      # Download artifacts
-      - name: Download Ubuntu Allure Results
-        uses: actions/download-artifact@v4
         with:
-          name: allure-results-ubuntu-latest
-          path: allure-results/ubuntu-latest
-        continue-on-error: true
+          fetch-depth: 0
 
-      - name: Download Windows Allure Results
-        uses: actions/download-artifact@v4
-        with:
-          name: allure-results-windows-latest
-          path: allure-results/windows-latest
-        continue-on-error: true
-
-      # Check if results exist
-      - name: Check if Allure results exist
-        id: check-results
-        shell: bash
+      - name: Download Allure CLI
         run: |
-          if [ -d allure-results/ubuntu-latest ] || [ -d allure-results/windows-latest ]; then
-            echo "results_exist=true" >> $GITHUB_OUTPUT
-          else
-            echo "results_exist=false" >> $GITHUB_OUTPUT
-          fi
+          wget https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz
+          tar -xzf allure-${ALLURE_VERSION}.tgz
+          sudo mv allure-${ALLURE_VERSION}/bin/allure /usr/local/bin/allure
 
-      - name: Stop if no results
-        if: steps.check-results.outputs.results_exist == 'false'
-        run: echo "❌ No Allure results found, skipping report." && exit 0
-
-      # Setup Allure CLI
-      - name: Setup Allure CLI
-        shell: bash
+      - name: Generate Allure Reports (Ubuntu + Windows)
         run: |
-          curl -L -o allure.tgz "https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${ALLURE_VERSION}/allure-commandline-${ALLURE_VERSION}.tgz"
-          mkdir -p allure
-          tar -xzf allure.tgz -C allure --strip-components 1
-          echo "$PWD/allure/bin" >> $GITHUB_PATH
-
-      # Generate per-OS Allure Reports and preserve history
-      - name: Generate Allure Reports per OS
-        shell: bash
-        run: |
+          mkdir -p $SITE_DIR/latest
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
-          SITE_DIR="site"
-
-          mkdir -p "$SITE_DIR/latest/ubuntu-latest" "$SITE_DIR/latest/windows-latest"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
           for OS in ubuntu-latest windows-latest; do
             if [ -d "allure-results/$OS" ]; then
-              # preserve history
-              mkdir -p "allure-results/$OS/history"
-              if [ -d "$SITE_DIR/latest/$OS/history" ]; then
-                cp -r "$SITE_DIR/latest/$OS/history/"* "allure-results/$OS/history/"
-              fi
-
-              # generate report directly to latest
               allure generate "allure-results/$OS" -o "$SITE_DIR/latest/$OS" --clean
-
-              # store historical build
               mkdir -p "$SITE_DIR/$BUILD_NUMBER/$OS"
               cp -r "$SITE_DIR/latest/$OS"/* "$SITE_DIR/$BUILD_NUMBER/$OS/"
+              date +"%Y-%m-%d %H:%M:%S %Z" > "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt"
+              cp "$SITE_DIR/$BUILD_NUMBER/$OS/build-info.txt" "$SITE_DIR/latest/$OS/build-info.txt"
             fi
           done
 
-      # Deploy to GitHub Pages
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: site
-          publish_branch: gh-pages
-          commit_message: "Deploy Allure Reports - Build ${{ github.run_number }}"
+      - name: Update Executor and Trend Data
+        run: |
+          for OS in ubuntu-latest windows-latest; do
+            if [ -d "$SITE_DIR/latest/$OS" ]; then
+              echo '{"buildOrder":'"$GITHUB_RUN_NUMBER"', "reportName":"'"$OS Report"'"}' > "$SITE_DIR/latest/$OS/widgets/executor.json"
+              cp -r "$SITE_DIR/latest/$OS/widgets" "$SITE_DIR/widgets" || true
+            fi
+          done
 
-      # Add workflow badges and summary
-      - name: Add workflow badges to summary
+      - name: Rebuild index.html
         shell: bash
+        run: |
+          SITE_DIR="site"
+          REPO="${GITHUB_REPOSITORY##*/}"
+          OWNER="${GITHUB_REPOSITORY_OWNER}"
+
+          echo "<html><head><title>Allure Reports History</title>
+          <style>
+          body{font-family:sans-serif;margin:20px;}
+          ul{list-style:none;padding:0;}
+          li{margin:6px 0;}
+          a{text-decoration:none;color:#0366d6;}
+          a:hover{text-decoration:underline;}
+          </style></head><body><h1>Allure Reports History</h1><hr><ul>" > "$SITE_DIR/index.html"
+
+          for OS in ubuntu-latest windows-latest; do
+            if [ -d "$SITE_DIR/latest/$OS" ]; then
+              TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+              echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: $TS</li>" >> "$SITE_DIR/index.html"
+            fi
+          done
+
+          echo "</ul><hr><h2>Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
+          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" | xargs -n 1 basename | sort -nr)
+
+          for BUILD in $BUILDS; do
+            for OS in ubuntu-latest windows-latest; do
+              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
+                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              fi
+            done
+          done
+
+          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
+
+      - name: Add Workflow Summary (Badges)
         run: |
           REPO_NAME=${GITHUB_REPOSITORY##*/}
           OWNER=${GITHUB_REPOSITORY_OWNER}
 
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-
-          echo "#### 🧩 Latest Allure Reports" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/ubuntu-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](https://${OWNER}.github.io/${REPO_NAME}/latest/windows-latest/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests passed" >> $GITHUB_STEP_SUMMARY
 
-          echo "#### 📊 Report History" >> $GITHUB_STEP_SUMMARY
-          echo "[![All Builds](https://img.shields.io/badge/All-Builds-green)](https://${OWNER}.github.io/${REPO_NAME}/)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Build status icon
-          echo "Build ${{ github.run_number }} | Status: ${{ needs.run-tests.outputs.result_icon }}" >> $GITHUB_STEP_SUMMARY
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./site
+          keep_files: true

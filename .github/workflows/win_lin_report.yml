@@ -10,16 +10,18 @@ permissions:
   pages: write
   id-token: write
 
+# ============================================================
+# 1️⃣ RUN TESTS JOB
+# ============================================================
 jobs:
-# --------------------------------------------------------------------
-# 🧪 JOB 1: Run Tests and Upload Allure Results
-# --------------------------------------------------------------------
   run-tests:
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
+    outputs:
+      has_results: ${{ steps.results_check.outputs.has_results }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -33,21 +35,54 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install allure-pytest
 
-      - name: Run Tests with Allure
+      # --------------------------------------------------------
+      # 🐧 LINUX: RUN DOCKERIZED TESTS
+      # --------------------------------------------------------
+      - name: Run Tests inside Docker (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           mkdir -p allure-results/${{ matrix.os }}
-          pytest tests/ --alluredir=allure-results/${{ matrix.os }} || true
+          echo "🐳 Running Dockerized tests..."
+          docker build -t robotics-bdd .
+          docker run --rm -v $(pwd)/allure-results/${{ matrix.os }}:/app/allure-results robotics-bdd \
+            pytest -v --alluredir=/app/allure-results || true
+
+      # --------------------------------------------------------
+      # 🪟 WINDOWS: RUN NORMAL PYTEST
+      # --------------------------------------------------------
+      - name: Run Tests on Windows (Pytest)
+        if: matrix.os == 'windows-latest'
+        run: |
+          mkdir -p allure-results/${{ matrix.os }}
+          pytest -v --alluredir=allure-results/${{ matrix.os }} || exit 0
+
+      # --------------------------------------------------------
+      # CHECK & UPLOAD RESULTS
+      # --------------------------------------------------------
+      - name: Verify Allure Results
+        id: results_check
+        shell: bash
+        run: |
+          if [ -z "$(find allure-results/${{ matrix.os }} -type f -name '*.json' 2>/dev/null)" ]; then
+            echo "❌ No Allure results found for ${{ matrix.os }}"
+            echo "has_results=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Allure results found for ${{ matrix.os }}"
+            echo "has_results=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Upload Allure Results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: allure-results-${{ matrix.os }}
           path: allure-results/${{ matrix.os }}
 
-# --------------------------------------------------------------------
-# 🚀 JOB 2: Generate + Deploy Allure Reports to GitHub Pages
-# --------------------------------------------------------------------
+# ============================================================
+# 2️⃣ DEPLOY ALLURE REPORT JOB
+# ============================================================
   deploy-allure:
     name: Deploy Allure Report
     runs-on: ubuntu-latest
@@ -58,24 +93,9 @@ jobs:
     env:
       ALLURE_VERSION: 2.29.0
       SITE_DIR: site
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Download Allure Results Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: allure-results-*
-          merge-multiple: true
-          path: allure-results
-
-      - name: Show Downloaded Structure
-        run: |
-          echo "Downloaded artifact folder structure:"
-          tree allure-results || ls -R allure-results
 
       - name: Download Allure CLI
         run: |
@@ -83,75 +103,99 @@ jobs:
           tar -xzf allure-${ALLURE_VERSION}.tgz
           sudo mv allure-${ALLURE_VERSION}/bin/allure /usr/local/bin/allure
 
+      - name: Download Test Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: allure-results
+
+      - name: Check if Any Results Exist
+        id: check-results
+        run: |
+          if [ -z "$(find allure-results -type f -name '*.json' 2>/dev/null)" ]; then
+            echo "❌ No test results found — skipping Allure deployment."
+            echo "proceed=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Test results detected — proceeding with report generation."
+            echo "proceed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Stop if No Results
+        if: steps.check-results.outputs.proceed == 'false'
+        run: |
+          echo "⚠️ Skipping Allure deployment (no test data)."
+          exit 0
+
+      # --------------------------------------------------------
+      # GENERATE ALLURE REPORTS
+      # --------------------------------------------------------
       - name: Generate Allure Reports (Ubuntu + Windows)
         run: |
           mkdir -p $SITE_DIR/latest
-          
           for OS in ubuntu-latest windows-latest; do
-            SRC="allure-results-${OS}"
-            DEST="$SITE_DIR/latest/$OS"
-            
-            # Handle artifact folder names (in case of nesting)
-            if [ -d "allure-results/$OS" ]; then
-              SRC="allure-results/$OS"
-            elif [ -d "allure-results-${OS}" ]; then
-              SRC="allure-results-${OS}"
-            fi
-
-            if [ -d "$SRC" ]; then
-              mkdir -p "$DEST"
-              echo "✅ Generating Allure report for $OS from $SRC → $DEST"
-              allure generate "$SRC" -o "$DEST" --clean
+            SRC_DIR="allure-results/allure-results-$OS"
+            DEST_DIR="$SITE_DIR/latest/$OS"
+            if [ -d "$SRC_DIR" ] && [ "$(ls -A $SRC_DIR 2>/dev/null)" ]; then
+              mkdir -p "$DEST_DIR"
+              allure generate "$SRC_DIR" -o "$DEST_DIR" --clean
             else
-              echo "⚠️ No Allure results for $OS, skipping."
+              echo "⚠️ No results for $OS"
             fi
           done
 
-      - name: Copy Allure Metadata (Executor & Categories)
+      # --------------------------------------------------------
+      # COPY METADATA (TREND + EXECUTOR)
+      # --------------------------------------------------------
+      - name: Copy Allure Metadata
         run: |
           for OS in ubuntu-latest windows-latest; do
             REPORT_DIR="$SITE_DIR/latest/$OS"
             if [ -d "$REPORT_DIR" ]; then
-              mkdir -p "$REPORT_DIR/widgets"
+              mkdir -p "$REPORT_DIR/widgets" "$REPORT_DIR/history"
               if [ -f "supports/executor.json" ]; then
                 cp supports/executor.json "$REPORT_DIR/widgets/executor.json"
               fi
               if [ -f "supports/categories.json" ]; then
                 cp supports/categories.json "$REPORT_DIR/widgets/categories.json"
               fi
+              if [ -d "supports/history" ]; then
+                cp -r supports/history/* "$REPORT_DIR/history/" || true
+              fi
             fi
           done
 
-      - name: Create Landing Page Index
-        shell: bash
+      # --------------------------------------------------------
+      # FIX PATHS
+      # --------------------------------------------------------
+      - name: Fix Allure Paths
         run: |
-          SITE_DIR="site"
-          echo "<html><head><title>Allure Reports</title>
-          <style>body{font-family:sans-serif;margin:20px;}li{margin:6px 0;}</style>
-          </head><body><h1>🤖 Robotics BDD Simulation CI/CD (Build #${GITHUB_RUN_NUMBER})</h1><hr><ul>" > "$SITE_DIR/index.html"
+          for OS in ubuntu-latest windows-latest; do
+            REPORT_DIR="$SITE_DIR/latest/$OS"
+            if [ -f "$REPORT_DIR/index.html" ]; then
+              perl -pi -e 's|src="/|src="./|g' "$REPORT_DIR/index.html"
+              perl -pi -e 's|href="/|href="./|g' "$REPORT_DIR/index.html"
+            fi
+          done
 
+      # --------------------------------------------------------
+      # CREATE LANDING PAGE
+      # --------------------------------------------------------
+      - name: Create Landing Page
+        run: |
+          mkdir -p $SITE_DIR
+          echo "<html><head><title>Allure Reports</title>
+          <style>body{font-family:sans-serif;margin:20px;}a{color:#0366d6;text-decoration:none;}a:hover{text-decoration:underline;}</style>
+          </head><body><h1>🤖 Robotics BDD Simulation CI/CD</h1><hr><ul>" > $SITE_DIR/index.html
           for OS in ubuntu-latest windows-latest; do
             if [ -f "$SITE_DIR/latest/$OS/index.html" ]; then
-              echo "<li><a href='latest/$OS/index.html'>Latest Report ($OS)</a></li>" >> "$SITE_DIR/index.html"
+              echo "<li><a href='latest/$OS/index.html'>Latest Report ($OS)</a></li>" >> $SITE_DIR/index.html
             else
-              echo "<li><span style='color:gray'>No report found for $OS</span></li>" >> "$SITE_DIR/index.html"
+              echo "<li>No report found for $OS</li>" >> $SITE_DIR/index.html
             fi
           done
+          echo "</ul><hr><p>Allure Trends & Executor data are available under each report's widgets/history tabs.</p></body></html>" >> $SITE_DIR/index.html
 
-          echo "</ul><hr><p>Metadata copied from <code>supports/</code>.</p></body></html>" >> "$SITE_DIR/index.html"
-
-      - name: Fix Allure Report Paths
-        run: |
-          for OS in ubuntu-latest windows-latest; do
-            FILE="site/latest/$OS/index.html"
-            if [ -f "$FILE" ]; then
-              perl -pi -e 's|src="/|src="./|g' "$FILE"
-              perl -pi -e 's|href="/|href="./|g' "$FILE"
-            fi
-          done
-
-      - name: Set .nojekyll
-        run: touch site/.nojekyll
+      - name: Disable Jekyll
+        run: touch $SITE_DIR/.nojekyll
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
@@ -162,13 +206,14 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-      - name: Add Workflow Summary
+      - name: Add Workflow Summary (Badges)
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
+          BASE_URL="${PAGE_URL%/}"
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${PAGE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${PAGE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${PAGE_URL}/)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests passed" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ All tests completed" >> $GITHUB_STEP_SUMMARY

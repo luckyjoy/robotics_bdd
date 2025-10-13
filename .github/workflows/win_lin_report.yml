@@ -19,6 +19,7 @@ jobs:
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      # Allows other OS jobs to finish even if one fails
       fail-fast: false 
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -51,7 +52,7 @@ jobs:
         id: run_tests
         shell: bash
         run: |
-          # FIX: Prevent the script from immediately exiting on command failure (e.g., test failure or Docker failure)
+          # Prevent the script from immediately exiting on command failure (e.g., test failure or Docker failure)
           set +e 
           
           OS_NAME=${{ matrix.os }}
@@ -72,25 +73,24 @@ jobs:
           # Restore default behavior
           set -e 
 
-          # FIX: Detect if there are test results. If none, it's a catastrophic setup failure.
+          # If no results were created, it's a catastrophic setup failure, so we fail the job.
           if [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
             echo "❌ No Allure results found for $OS_NAME. This indicates a **Setup/Configuration Failure**."
             echo "has_results=false" >> $GITHUB_OUTPUT
-            # Fails the job, blocking deployment
             exit 1 
           else
             echo "✅ Allure results found for $OS_NAME."
-            if [ "$TEST_EXIT_CODE" -eq 1 ]; then
-              echo "⚠️ Tests failed but results were produced (Exit Code 1)."
-            elif [ "$TEST_EXIT_CODE" -eq 0 ]; then
+            if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+              echo "⚠️ Tests failed but results were produced (Exit Code $TEST_EXIT_CODE)."
+            else
               echo "✅ All tests passed (Exit Code 0)."
             fi
             echo "has_results=true" >> $GITHUB_OUTPUT
-            # If the script reaches here, the step succeeds (exit code 0), allowing artifact upload.
+            # Step succeeds, allowing artifact upload regardless of test pass/fail.
           fi
 
       - name: Upload Allure Results Artifact
-        # This always runs because the previous step ensures a successful exit (0) if results exist
+        # Always runs if the previous step succeeded (i.e., setup worked)
         uses: actions/upload-artifact@v4
         with:
           name: allure-results-${{ matrix.os }}
@@ -109,9 +109,10 @@ jobs:
         
       - name: Download Allure CLI
         run: |
+          # FIX: Correctly adds Allure binary path for Java dependencies
           wget https://github.com/allure-framework/allure2/releases/download/${{ env.ALLURE_VERSION }}/allure-${{ env.ALLURE_VERSION }}.tgz
           tar -xzf allure-${{ env.ALLURE_VERSION }}.tgz
-          sudo mv allure-${{ env.ALLURE_VERSION }}/bin/allure /usr/local/bin/allure
+          echo "$(pwd)/allure-${{ env.ALLURE_VERSION }}/bin" >> $GITHUB_PATH
           
       - name: Download Allure Artifacts
         uses: actions/download-artifact@v4

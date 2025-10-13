@@ -38,46 +38,59 @@ jobs:
           pip install -r requirements.txt
           pip install allure-pytest pytest-bdd
 
-      # --- FIX: Build Docker image on the Ubuntu runner ---
       - name: Build Docker Image
         if: matrix.os == 'ubuntu-latest'
         uses: docker/build-push-action@v5
         with:
-          context: . # Assumes Dockerfile is in repository root
+          context: .
           push: false
           tags: robotics-bdd:ci-build
           load: true
-      # ----------------------------------------------------
       
       - name: Run tests
         id: run_tests
         shell: bash
         run: |
+          # FIX: Prevent the script from immediately exiting on command failure (e.g., test failure or Docker failure)
+          set +e 
+          
           OS_NAME=${{ matrix.os }}
           RESULTS_DIR="allure-results/$OS_NAME"
           mkdir -p "$RESULTS_DIR"
 
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
-            # Use the newly built image tag
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
               pytest -v --alluredir="$RESULTS_DIR"
+            TEST_EXIT_CODE=$?
           else
             echo "🪟 Running tests on Windows..."
             pytest -v --alluredir="$RESULTS_DIR"
+            TEST_EXIT_CODE=$?
           fi
           
-          # Detect if there are test results
+          # Restore default behavior
+          set -e 
+
+          # FIX: Detect if there are test results. If none, it's a catastrophic setup failure.
           if [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
-            echo "❌ No Allure results found for $OS_NAME"
+            echo "❌ No Allure results found for $OS_NAME. This indicates a **Setup/Configuration Failure**."
             echo "has_results=false" >> $GITHUB_OUTPUT
+            # Fails the job, blocking deployment
+            exit 1 
           else
-            echo "✅ Allure results found for $OS_NAME"
+            echo "✅ Allure results found for $OS_NAME."
+            if [ "$TEST_EXIT_CODE" -eq 1 ]; then
+              echo "⚠️ Tests failed but results were produced (Exit Code 1)."
+            elif [ "$TEST_EXIT_CODE" -eq 0 ]; then
+              echo "✅ All tests passed (Exit Code 0)."
+            fi
             echo "has_results=true" >> $GITHUB_OUTPUT
+            # If the script reaches here, the step succeeds (exit code 0), allowing artifact upload.
           fi
 
       - name: Upload Allure Results Artifact
-        if: always() 
+        # This always runs because the previous step ensures a successful exit (0) if results exist
         uses: actions/upload-artifact@v4
         with:
           name: allure-results-${{ matrix.os }}
@@ -132,6 +145,16 @@ jobs:
       - name: Stop Deployment if No Results Exist
         if: steps.check_results.outputs.proceed == 'false'
         run: exit 0
+        
+      - name: Determine Combined Test Status
+        id: test_status_check
+        run: |
+          # Check downloaded Allure JSON files for any "failed" or "broken" status
+          if find allure-results -type f -name '*-testsuite.json' -exec grep -qE '"status": "(failed|broken)"' {} +; then
+            echo "status=UNSTABLE" >> $GITHUB_OUTPUT
+          else
+            echo "status=PASSED" >> $GITHUB_OUTPUT
+          fi
 
       - name: Generate Allure Reports
         shell: bash
@@ -195,10 +218,20 @@ jobs:
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
           BASE_URL="${PAGE_URL%/}"
           
+          TEST_STATUS=${{ steps.test_status_check.outputs.status }}
+          
+          if [[ "$TEST_STATUS" == "UNSTABLE" ]]; then
+            STATUS_ICON="⚠️"
+            STATUS_TEXT="Unstable (some tests failed)"
+          else
+            STATUS_ICON="✅"
+            STATUS_TEXT="All tests passed"
+          fi        
+          
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Build #${GITHUB_RUN_NUMBER} | Status: ✅ Deployment complete (Check reports for test status)" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${GITHUB_RUN_NUMBER} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY

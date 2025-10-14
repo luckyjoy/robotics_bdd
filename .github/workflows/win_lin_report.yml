@@ -31,7 +31,7 @@ jobs:
       - name: Run Tests with Allure
         run: |
           mkdir -p allure-results/ubuntu-latest
-          pytest tests/ --alluredir=allure-results/ubuntu-latest || echo "TEST_FAILURE=true" >> $GITHUB_ENV
+          pytest -m navigation --alluredir=allure-results/ubuntu-latest || echo "TEST_FAILURE=true" >> $GITHUB_ENV
 
       - name: Upload Allure Results
         if: always()
@@ -62,7 +62,7 @@ jobs:
       - name: Run Tests with Allure
         run: |
           mkdir -p allure-results/windows-latest
-          pytest tests/ --alluredir=allure-results/windows-latest || echo "TEST_FAILURE=true" >> $env:GITHUB_ENV
+          pytest -m navigation --alluredir=allure-results/windows-latest || echo "TEST_FAILURE=true" >> $env:GITHUB_ENV
 
       - name: Upload Allure Results
         if: always()

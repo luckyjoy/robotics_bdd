@@ -13,7 +13,8 @@ permissions:
 
 env:
   ALLURE_VERSION: 2.29.0
-
+  SITE_DIR: site
+  
 jobs:
   test:
     name: Run tests on ${{ matrix.os }}
@@ -105,14 +106,10 @@ jobs:
           name: allure-results-${{ matrix.os }}
           path: allure-results/${{ matrix.os }}
 
-  deploy_allure:
-    name: Deploy Allure Report to Pages
-    needs: test
+  report:
+    name: Generate Allure Report and Deploy
     runs-on: ubuntu-latest
-    if: always()  # Run regardless of test job result
-    environment:
-      name: github-pages
-
+    needs: test
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -213,7 +210,7 @@ jobs:
             a{text-decoration:none;color:#0366d6;}
             a:hover{text-decoration:underline;}
             </style></head><body>
-            <h1>🤖 Robotics BDD Simulation CI/CD Build History</h1>
+            <h1>🤖 Robotics BDD Simulation CI/CD</h1>
             <h2>🧩 Latest Allure Reports</h2><hr><ul>" > "$SITE_DIR/index.html"
 
             # --- Latest Reports ---

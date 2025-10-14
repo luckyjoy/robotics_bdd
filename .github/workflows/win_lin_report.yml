@@ -96,11 +96,13 @@ jobs:
           name: allure-results-${{ matrix.os }}
           path: allure-results/${{ matrix.os }}
 
+
+  
   report:
     name: Generate Allure Report and Deploy
     runs-on: ubuntu-latest
     needs: test
-    if: always() # Always run this job to generate a report, even if tests fail
+    if: always() # Always run this job to generate a report
 
     steps:
       - name: Checkout repository
@@ -110,46 +112,56 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: allure-results
-          pattern: allure-results-*
-          merge-multiple: true
+          # This action downloads artifacts into subdirectories named after the artifact
 
-      - name: Merge Allure results and generate report
+      - name: Generate separate Allure reports
         run: |
-          # This step will be more complex in the real workflow, 
-          # here we just prepare for the status check.
-          echo "Generating reports..."
-          # The actual report generation logic can be added here
-          # For now, we focus on the status check that follows
+          mkdir -p $SITE_DIR
+          for OS in ubuntu-latest windows-latest; do
+            SRC_DIR="allure-results/allure-results-${OS}" # Correct source directory path
+            
+            if [ -d "$SRC_DIR" ]; then
+              echo "Processing report for $OS from $SRC_DIR"
+              # The rest of your report generation logic can go here
+              # For example, running allure generate:
+              # allure generate "$SRC_DIR" -o "${SITE_DIR}/latest/${OS}" --clean
+            else
+              echo "::warning::Result directory for $OS not found at $SRC_DIR."
+            fi
+          done
 
       - name: Determine overall build status
         id: build_status
         run: |
-          FINAL_STATUS="PASSED"
+          FINAL_STATUS="PASSED" # Assume success unless proven otherwise
+          
           for OS in ubuntu-latest windows-latest; do
-            OUTCOME_FILE="allure-results/${OS}/outcome.txt"
+            # Use the correct path created by the download action
+            OUTCOME_FILE="allure-results/allure-results-${OS}/outcome.txt"
+            
             if [ ! -f "$OUTCOME_FILE" ]; then
-              echo "Outcome file for $OS not found! Marking build as FAILED."
+              echo "::error::Outcome file for $OS not found! Marking build as FAILED."
               FINAL_STATUS="FAILED"
-              break
+              break # A single missing outcome fails the entire build
             fi
 
             STATUS=$(cat "$OUTCOME_FILE")
-            echo "Status for $OS: $STATUS"
+            echo "Outcome for $OS: $STATUS"
+            
             if [[ "$STATUS" == "FAILED" ]]; then
               FINAL_STATUS="FAILED"
-              break 
+              break # A single hard failure stops evaluation
             elif [[ "$STATUS" == "UNSTABLE" ]]; then
-              FINAL_STATUS="UNSTABLE"
+              FINAL_STATUS="UNSTABLE" # Mark as unstable, but continue checking for failures
             fi
           done
+          
           echo "Final determined status: $FINAL_STATUS"
           echo "result=$FINAL_STATUS" >> $GITHUB_OUTPUT
 
-      # The rest of your report generation steps would go here
-      # For brevity, I am skipping the Allure generation and index.html steps
-      # but they would work as before.
+      # The 'Deploy to GitHub Pages' and 'Set final build result' steps remain the same
       - name: Deploy to GitHub Pages (placeholder)
-        run: echo "Skipping deploy for this example. Status is ${{ steps.build_status.outputs.result }}"
+        run: echo "Status is ${{ steps.build_status.outputs.result }}. Would deploy now."
 
       - name: Set final build result
         if: always()
@@ -159,8 +171,8 @@ jobs:
             echo "✅ All tests passed successfully."
           elif [ "$RESULT" = "UNSTABLE" ]; then
             echo "⚠️ Some tests failed, marking the build as unstable."
-            # Exiting with 0 to not fail the whole check run, but the status is known
+            # Exit with 0 so the GitHub Check status is green, but the log shows a warning
           else
-            echo "❌ Build failed. Check the test execution logs."
+            echo "❌ Build failed. Check the test execution or report generation logs."
             exit 1
           fi

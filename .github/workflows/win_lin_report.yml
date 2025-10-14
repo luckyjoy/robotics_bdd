@@ -72,11 +72,11 @@ jobs:
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
-              pytest -v -m navigation --alluredir="$RESULTS_DIR"
+              pytest -v -m sensors --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
             echo "🪟 Running tests on Windows..."
-            pytest -v -m navigation --alluredir="$RESULTS_DIR"
+            pytest -v -m sensors --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
 
@@ -96,15 +96,27 @@ jobs:
             exit 0
           fi
 
-      - name: Copy executor.json
+      - name: Create executor.json for Allure
         if: always()
         shell: bash  
         run: |
-          SRC_EXECUTOR="supports/executor.json"
-          DST_DIR="allure-results/${{ matrix.os }}"
-          if [ -f "$SRC_EXECUTOR" ]; then
-            cp "$SRC_EXECUTOR" "$DST_DIR/"
-          fi
+          for OS in ubuntu-latest windows-latest; do
+            ALLURE_RESULTS_DIR="allure-results/$OS"
+
+            # Check if the results directory exists and contains files (i.e., tests ran)
+            if [ -d "$ALLURE_RESULTS_DIR" ] && [ -n "$(ls -A $ALLURE_RESULTS_DIR 2>/dev/null)" ]; then
+              # Note: The mkdir -p "$ALLURE_RESULTS_DIR" is not strictly needed here as it was created in the 'Run tests' step,
+              # but including it doesn't hurt and ensures the directory is there before writing the file.
+              mkdir -p "$ALLURE_RESULTS_DIR"
+
+              # ---- Create executor.json ----
+              # GITHUB_REPOSITORY##*/ extracts just the repository name (e.g., 'repo-name' from 'owner/repo-name')
+              # GITHUB_SERVER_URL and GITHUB_RUN_ID provide the link back to the specific action run
+              echo "{\"name\":\"$OS\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/latest/$OS/\",\"buildOrder\":\"${GITHUB_RUN_NUMBER}\",\"buildName\":\"Build ${GITHUB_RUN_NUMBER} ($OS)\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$ALLURE_RESULTS_DIR/executor.json"
+            else
+              echo "Skipping executor.json creation for $OS: Results directory either missing or empty."
+            fi
+          done
 
       - name: Upload Allure Results Artifact
         uses: actions/upload-artifact@v4

@@ -36,6 +36,15 @@ jobs:
         with:
           python-version: 3.11
 
+      # OPTIMIZATION 1: Cache pip dependencies to speed up subsequent runs
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -58,17 +67,17 @@ jobs:
 
           OS_NAME=${{ matrix.os }}
           RESULTS_DIR="allure-results/$OS_NAME"
-          rm -rf "$RESULTS_DIR"
+          # No need to remove the directory, the runner is ephemeral
           mkdir -p "$RESULTS_DIR"
 
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
-              pytest -m sensors --alluredir="$RESULTS_DIR"
+              pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
             echo "🪟 Running tests on Windows..."
-            pytest -m sensors --alluredir="$RESULTS_DIR"
+            pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
 
@@ -126,18 +135,22 @@ jobs:
         with:
           path: allure-results
 
+      # OPTIMIZATION 2: Simplified artifact consolidation
       - name: Consolidate Artifacts to Target Folders
         shell: bash
         run: |
-          mkdir -p final-allure-results
+          mkdir -p allure-results/ubuntu-latest
+          mkdir -p allure-results/windows-latest
+          
+          # Move contents from the downloaded artifact structure to the cleaner structure
           if [ -d allure-results/allure-results-ubuntu-latest ]; then
-            mv allure-results/allure-results-ubuntu-latest final-allure-results/ubuntu-latest
+            mv allure-results/allure-results-ubuntu-latest/* allure-results/ubuntu-latest/
+            rm -rf allure-results/allure-results-ubuntu-latest
           fi
           if [ -d allure-results/allure-results-windows-latest ]; then
-            mv allure-results/allure-results-windows-latest final-allure-results/windows-latest
+            mv allure-results/allure-results-windows-latest/* allure-results/windows-latest/
+            rm -rf allure-results/allure-results-windows-latest
           fi
-          rm -rf allure-results
-          mv final-allure-results allure-results
 
       - name: Determine Combined Test Status
         id: test_status_check
@@ -153,6 +166,10 @@ jobs:
 
           echo "status=$STATUS" >> $GITHUB_OUTPUT
 
+      # OPTIMIZATION 3: Combined file generation and path fixing for efficiency.
+      # While separate steps for Allure generation and Index rebuilding are kept for clarity
+      # due to the complexity of the PDT/History fix, the steps are already quite optimized.
+      
       - name: Generate Allure Reports (History & PDT Setup)
         shell: bash
         run: |
@@ -160,12 +177,11 @@ jobs:
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
           
-          # History Fix: We no longer wipe $SITE_DIR so history can be preserved across subsequent builds
           mkdir -p "$SITE_DIR/latest"
 
           for OS in ubuntu-latest windows-latest; do
             RESULTS_DIR="allure-results/$OS"
-            REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER/$OS" # FIX: Save to a numbered sub-directory for history
+            REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER/$OS"
             REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
             
             mkdir -p "$REPORT_DIR_BUILD"
@@ -190,21 +206,17 @@ jobs:
             
             # 5. PDT FIX: Explicitly save UTC time to file for conversion in next step
             echo "$(date -u)" > "$REPORT_DIR_LATEST/build-info.txt"
-            echo "$(date -u)" > "$REPORT_DIR_BUILD/build-info.txt" # Also save to the historical copy
+            echo "$(date -u)" > "$REPORT_DIR_BUILD/build-info.txt"
             echo "Report generated for $OS in build $BUILD_NUMBER at $REPORT_DIR_BUILD"
           done
 
       - name: Fix Allure Paths
         shell: bash
         run: |
-          for OS in ubuntu-latest windows-latest; do
-            # Fix paths in both the latest and build-numbered reports
-            for REPORT_DIR in "site/latest/$OS" "site/${GITHUB_RUN_NUMBER}/${OS}"; do
-              if [ -f "$REPORT_DIR/index.html" ]; then
-                perl -pi -e 's|src="/|src="./|g' "$REPORT_DIR/index.html"
-                perl -pi -e 's|href="/|href="./|g' "$REPORT_DIR/index.html"
-              fi
-            done
+          # Use find to recursively search for index.html in the relevant site directories
+          find site -type f -name 'index.html' -path '*/latest/*' -o -path '*/${{ GITHUB_RUN_NUMBER }}/*' | while read FILE_PATH; do
+            perl -pi -e 's|src="/|src="./|g' "$FILE_PATH"
+            perl -pi -e 's|href="/|href="./|g' "$FILE_PATH"
           done
 
       - name: Rebuild index.html (History & PDT Fix)
@@ -234,7 +246,6 @@ jobs:
                 
                 # PDT FIX: Convert UTC time string to LA time string (PDT/PST)
                 if [ -n "$TS_UTC" ]; then
-                  # Pipe the UTC date through 'TZ' to convert to Los Angeles Timezone
                   TS_DISPLAY=$(date -d "$TS_UTC" -u +'%a %b %d %H:%M:%S UTC %Y' | TZ='America/Los_Angeles' date)
                   if [ -z "$TS_DISPLAY" ]; then
                     TS_DISPLAY=$TS_UTC

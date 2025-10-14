@@ -193,34 +193,50 @@ jobs:
       - name: Rebuild index.html
         shell: bash
         run: |
-          SITE_DIR="site"
-          echo "<html><head><title>Allure Reports History</title>
-          <style>
-          body{font-family:sans-serif;margin:20px;}
-          ul{list-style:none;padding:0;}
-          li{margin:6px 0;}
-          a{text-decoration:none;color:#0366d6;}
-          a:hover{text-decoration:underline;}
-          </style></head><body><h1>Allure Reports History</h1><hr><ul>" > "$SITE_DIR/index.html"
+            SITE_DIR="site"
 
-          for OS in ubuntu-latest windows-latest; do
-            if [ -d "$SITE_DIR/latest/$OS" ]; then
-              TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: $TS</li>" >> "$SITE_DIR/index.html"
-            fi
-          done
+            mkdir -p "$SITE_DIR"
+            echo "<html><head><title>Allure Reports History</title>
+            <style>
+            body{font-family:sans-serif;margin:20px;}
+            ul{list-style:none;padding:0;}
+            li{margin:6px 0;}
+            a{text-decoration:none;color:#0366d6;}
+            a:hover{text-decoration:underline;}
+            </style></head><body>
+            <h1>🤖 Robotics BDD Simulation CI/CD</h1>
+            <h2>🧩 Latest Allure Reports</h2><hr><ul>" > "$SITE_DIR/index.html"
 
-          echo "</ul><hr><h2>Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
-          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" | xargs -n 1 basename | sort -nr)
-          for BUILD in $BUILDS; do
+            # --- Latest Reports ---
             for OS in ubuntu-latest windows-latest; do
-              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              if [ -d "$SITE_DIR/latest/$OS" ]; then
+                TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: $TS</li>" >> "$SITE_DIR/index.html"
+              else
+                echo "<li><strong>$OS:</strong> (No report found)</li>" >> "$SITE_DIR/index.html"
               fi
             done
-          done
-          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
+
+            # --- Historical Reports ---
+            echo "</ul><hr><h2>📊 Report History</h2><ul>" >> "$SITE_DIR/index.html"
+
+            # Safe find: prevents basename from being called with no args
+            BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regex ".*/[0-9]\+" -printf "%f\n" 2>/dev/null | sort -nr)
+
+            if [ -z "$BUILDS" ]; then
+              echo "<li>No previous builds found.</li>" >> "$SITE_DIR/index.html"
+            else
+              for BUILD in $BUILDS; do
+                for OS in ubuntu-latest windows-latest; do
+                  if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
+                    TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                    echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+                  fi
+                done
+              done
+            fi
+
+            echo "</ul><hr><p><em>Generated automatically on $(date)</em></p></body></html>" >> "$SITE_DIR/index.html"
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3

@@ -96,29 +96,53 @@ jobs:
             exit 0
           fi
 
-      - name: Create executor.json for Allure
+      - name: Prepare Allure Results and Create Metadata
+        # Use always() to ensure this step runs even if tests fail, so reports can still be generated.
         if: always()
         shell: bash
         run: |
-          # Get the OS name from the matrix variable
+          # Use one variable to capture the OS name from the matrix (e.g., 'ubuntu-latest')
           OS_NAME="${{ matrix.os }}"
+          
+          # --- Part 1: Prepare Allure Environment Files ---
+          echo "Preparing base Allure environment files for $OS_NAME..."
+          
+          # Create the top-level results directory
+          mkdir -p allure-results
+          
+          # Copy categories.json (allow failure and suppress error output)
+          cp supports/categories.json allure-results/categories.json 2>/dev/null || echo "Note: No supports/categories.json found."
+          
+          # Determine the appropriate environment.properties based on OS_NAME (using runner labels)
+          # FIX: Change 'Linux' to 'ubuntu-latest' and 'Windows' to 'windows-latest' (or your specific matrix values)
+          if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
+            echo "Copying Linux environment.properties..."
+            cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "Note: No supports/ubuntu.properties found."
+          elif [[ "$OS_NAME" == "windows-latest" ]]; then
+            echo "Copying Windows environment.properties..."
+            cp supports/windows.properties allure-results/environment.properties 2>/dev/null || echo "Note: No supports/windows.properties found."
+          fi
+
+          # --- Part 2: Create executor.json ---
+          echo "Attempting to create executor.json..."
+          
           ALLURE_RESULTS_DIR="allure-results/$OS_NAME"
 
-          # Extract the repository name (e.g., 'repo-name' from 'owner/repo-name')
-          REPO_NAME="${GITHUB_REPOSITORY##*/}"
-
-          # Check if the results directory exists and contains files (i.e., tests ran)
+          # Check if the OS-specific results directory exists and contains files
           if [ -d "$ALLURE_RESULTS_DIR" ] && [ -n "$(ls -A $ALLURE_RESULTS_DIR 2>/dev/null)" ]; then
             
+            # Ensure the specific directory exists
             mkdir -p "$ALLURE_RESULTS_DIR"
+            
+            # Extract the repository name (e.g., 'repo-name' from 'owner/repo-name')
+            REPO_NAME="${GITHUB_REPOSITORY##*/}"
 
-            # ---- Create executor.json using echo with escaped quotes ----
-            # All inner double quotes must be escaped with a backslash (\")
+            # Create executor.json using echo with escaped quotes
             echo "{\"name\":\"$OS_NAME\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/$OS_NAME/\",\"buildOrder\":\"${GITHUB_RUN_NUMBER}\",\"buildName\":\"Build ${GITHUB_RUN_NUMBER} ($OS_NAME)\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$ALLURE_RESULTS_DIR/executor.json"
             
-            echo "Successfully created executor.json for $OS_NAME."
+            echo "Successfully created executor.json for $OS_NAME in $ALLURE_RESULTS_DIR."
           else
-            echo "Skipping executor.json creation for $OS_NAME: Results directory either missing or empty."
+            echo "Skipping executor.json creation for $OS_NAME: Results directory '$ALLURE_RESULTS_DIR' either missing or empty."
           fi
 
       - name: Upload Allure Results Artifact

@@ -10,7 +10,7 @@ env:
 
 jobs:
   # =========================
-  # 1️⃣ Test on Ubuntu
+  # 1️⃣ Run Tests on Ubuntu
   # =========================
   test_ubuntu:
     name: Run Tests (Ubuntu)
@@ -33,7 +33,7 @@ jobs:
           mkdir -p allure-results/ubuntu-latest
           pytest tests/ --alluredir=allure-results/ubuntu-latest || echo "TEST_FAILURE=true" >> $GITHUB_ENV
 
-      - name: Save Results
+      - name: Upload Allure Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -41,7 +41,7 @@ jobs:
           path: allure-results/ubuntu-latest/
 
   # =========================
-  # 2️⃣ Test on Windows
+  # 2️⃣ Run Tests on Windows
   # =========================
   test_windows:
     name: Run Tests (Windows)
@@ -64,7 +64,7 @@ jobs:
           mkdir -p allure-results/windows-latest
           pytest tests/ --alluredir=allure-results/windows-latest || echo "TEST_FAILURE=true" >> $env:GITHUB_ENV
 
-      - name: Save Results
+      - name: Upload Allure Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -72,10 +72,10 @@ jobs:
           path: allure-results/windows-latest/
 
   # =========================
-  # 3️⃣ Deploy & Determine Build Result
+  # 3️⃣ Deploy Reports + Determine Build Status
   # =========================
   deploy_allure:
-    name: Deploy Allure Report
+    name: Deploy Allure Reports
     runs-on: ubuntu-latest
     needs: [test_ubuntu, test_windows]
     if: always()
@@ -88,41 +88,43 @@ jobs:
         with:
           path: allure-results
 
+      - name: Install Allure CLI
+        run: |
+          wget https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz
+          tar -xzf allure-${ALLURE_VERSION}.tgz
+          mv allure-${ALLURE_VERSION} allure-commandline
+          echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
+
       - name: Copy Executor Info
         run: |
           if [ -f "$PWD/supports/executor.json" ]; then
-            echo "Copying executor.json to allure-results/"
-            cp "$PWD/supports/executor.json" "$PWD/allure-results/"
+            echo "✅ Copying executor.json to allure-results/"
+            find allure-results -type d -name "ubuntu-latest" -o -name "windows-latest" | while read d; do
+              cp "$PWD/supports/executor.json" "$d/"
+            done
           else
             echo "⚠️ executor.json not found at supports/executor.json"
           fi
 
-      - name: Install Allure
-        run: |
-          wget https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.zip
-          unzip allure-${ALLURE_VERSION}.zip -d /opt/allure
-          export PATH="/opt/allure/allure-${ALLURE_VERSION}/bin:$PATH"
-
       - name: Determine Build Result
-        id: build_result
+        id: build_status
         run: |
-          BUILD_STATUS="pass"
+          STATUS="pass"
 
-          # CASE 3: setup/config/env errors
+          # CASE 3: setup/config/env failure
           if [ "${{ needs.test_ubuntu.result }}" = "failure" ] || [ "${{ needs.test_windows.result }}" = "failure" ]; then
-            BUILD_STATUS="fail"
+            STATUS="fail"
           else
-            # CASE 2: tests failed but environment OK
-            UB_FAILS=$(grep -o '"status":"failed"' allure-results/ubuntu-latest/*.json 2>/dev/null | wc -l)
-            WIN_FAILS=$(grep -o '"status":"failed"' allure-results/windows-latest/*.json 2>/dev/null | wc -l)
+            UB_FAILS=$(grep -s -o '"status":"failed"' allure-results/ubuntu-latest/*.json | wc -l || true)
+            WIN_FAILS=$(grep -s -o '"status":"failed"' allure-results/windows-latest/*.json | wc -l || true)
 
             if [ "$UB_FAILS" -gt 0 ] || [ "$WIN_FAILS" -gt 0 ]; then
-              BUILD_STATUS="unstable"
+              STATUS="unstable"
             fi
           fi
 
-          echo "Final build status: $BUILD_STATUS"
-          echo "status=$BUILD_STATUS" >> $GITHUB_OUTPUT
+          echo "Final Build Status: $STATUS"
+          echo "result=$STATUS" >> $GITHUB_OUTPUT
 
       - name: Generate Allure Reports
         run: |
@@ -135,11 +137,10 @@ jobs:
             fi
           done
 
-      - name: Rebuild index.html
-        shell: bash
+      - name: Create Landing Page
         run: |
           SITE_DIR="site"
-          echo "<html><head><title>Allure Reports History</title>
+          echo "<html><head><title>Allure Reports</title>
           <style>
           body{font-family:sans-serif;margin:20px;}
           ul{list-style:none;padding:0;}
@@ -148,7 +149,7 @@ jobs:
           a:hover{text-decoration:underline;}
           </style></head><body>
           <h1>🤖 Robotics BDD Simulation CI/CD</h1>
-          <h2>🧩 Latest Allure Reports</h2><ul>" > "$SITE_DIR/index.html"
+          <h2>🧩 Latest Reports</h2><ul>" > "$SITE_DIR/index.html"
 
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
@@ -157,21 +158,11 @@ jobs:
             fi
           done
 
-          echo "</ul><hr><h2>📊 Report History</h2><ul>" >> "$SITE_DIR/index.html"
-          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" | xargs -n 1 basename | sort -nr || true)
-          for BUILD in $BUILDS; do
-            for OS in ubuntu-latest windows-latest; do
-              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
-              fi
-            done
-          done
-          echo "</ul><hr>
-          <h3>🏁 Build Result: <span style='color:#007700;'>${{ steps.build_result.outputs.status }}</span></h3>
+          echo "</ul><hr><h2>📊 Build Summary</h2>
+          <p>Build Result: <strong>${{ steps.build_status.outputs.result }}</strong></p>
           </body></html>" >> "$SITE_DIR/index.html"
 
-      - name: Deploy Allure Site
+      - name: Deploy Reports to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

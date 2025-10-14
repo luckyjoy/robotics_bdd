@@ -160,15 +160,14 @@ jobs:
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
           
-          # We no longer wipe $SITE_DIR so history can be preserved
+          # History Fix: We no longer wipe $SITE_DIR so history can be preserved across subsequent builds
           mkdir -p "$SITE_DIR/latest"
 
           for OS in ubuntu-latest windows-latest; do
             RESULTS_DIR="allure-results/$OS"
-            REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER/$OS" # *** FIX: Save to a numbered sub-directory for history ***
+            REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER/$OS" # FIX: Save to a numbered sub-directory for history
             REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
             
-            # Ensure the current build's target directory exists
             mkdir -p "$REPORT_DIR_BUILD"
 
             # 1. Copy Allure trend history from the previous LATEST report
@@ -181,15 +180,15 @@ jobs:
             # 2. Generate the Allure report into the build-numbered directory
             allure generate "$RESULTS_DIR" -o "$REPORT_DIR_BUILD" --clean
 
-            # 3. Add executor.json to the build-numbered directory
+            # 3. Add executor.json
             mkdir -p "$REPORT_DIR_BUILD/widgets"
             echo '{"buildOrder":'"$BUILD_NUMBER"', "reportName":"'"$OS Report"'"}' > "$REPORT_DIR_BUILD/widgets/executor.json"
             
-            # 4. Copy the newly generated report from the build-numbered directory to the LATEST directory
+            # 4. Copy the newly generated report to the LATEST directory
             mkdir -p "$REPORT_DIR_LATEST"
             cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/"
             
-            # 5. FIX: Explicitly save UTC time to file for conversion in next step
+            # 5. PDT FIX: Explicitly save UTC time to file for conversion in next step
             echo "$(date -u)" > "$REPORT_DIR_LATEST/build-info.txt"
             echo "$(date -u)" > "$REPORT_DIR_BUILD/build-info.txt" # Also save to the historical copy
             echo "Report generated for $OS in build $BUILD_NUMBER at $REPORT_DIR_BUILD"
@@ -213,7 +212,7 @@ jobs:
         run: |
             SITE_DIR="site"
             
-            # --- Get current time for footer in LA time ---
+            # --- Get current time for footer in LA time (PDT/PST) ---
             CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
 
             mkdir -p "$SITE_DIR"

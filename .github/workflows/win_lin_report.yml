@@ -95,7 +95,7 @@ jobs:
       - name: Set Output
         id: set_result
         run: |
-          if [ "${matrix.os}" == "ubuntu-latest" ]; then
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
             echo "outcome_ubuntu=${{ steps.run_tests.outputs.test_outcome }}" >> $GITHUB_OUTPUT
           else
             echo "outcome_windows=${{ steps.run_tests.outputs.test_outcome }}" >> $GITHUB_OUTPUT

@@ -107,9 +107,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        # Need to fetch gh-pages for history
-        with:
-          fetch-depth: 0
 
       - name: Set up Pages
         uses: actions/configure-pages@v5
@@ -125,25 +122,21 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: allure-results
-      
-      # Step to handle previous history changed from the original
-      - name: Preserve Previous Build History
+
+      # 🧱 FIX 1: Restore previously deployed Pages artifact for build history
+      - name: Restore Previously Deployed Site (for Build History)
         shell: bash
         run: |
-          HISTORY_DIR="_history"
-          if git show-ref --quiet refs/heads/${{ github.event.repository.default_branch || 'main' }}; then
-            echo "Attempting to clone for history..."
-            # Check out gh-pages to a separate directory, then copy its content
-            # The new logic uses the `_history` directory for the report generation step
-            git fetch origin gh-pages || true
-            if git show-ref --quiet refs/heads/gh-pages; then
-              echo "📜 Restoring existing gh-pages history..."
-              git clone --depth 1 --branch gh-pages "https://github.com/${{ github.repository }}.git" old_site || true
-              mkdir -p "$HISTORY_DIR"
-              cp -r old_site/* "$HISTORY_DIR/" 2>/dev/null || true
-            else
-              echo "🆕 No previous gh-pages branch found."
-            fi
+          echo "♻️ Checking for existing deployed Pages artifact..."
+          mkdir -p old_site site
+          gh run list --workflow "Robotics BDD CI/CD" --branch main --json databaseId,status --limit 1 | jq -r '.[0].databaseId' > run_id.txt 2>/dev/null || true
+          if [ -s run_id.txt ]; then
+            PREV_ID=$(cat run_id.txt)
+            echo "Found previous run ID: $PREV_ID"
+            gh run download "$PREV_ID" -n github-pages -D old_site || echo "⚠️ No previous site artifact found"
+            cp -r old_site/* site/ 2>/dev/null || true
+          else
+            echo "🆕 No previous site detected — starting fresh."
           fi
 
       - name: Consolidate Artifacts to Target Folders
@@ -167,25 +160,23 @@ jobs:
           SITE_DIR="site"
           HISTORY_DIR="_history"
 
-          # ---- Prepare site and copy previous history ----
-          rm -rf "$SITE_DIR"
-          mkdir -p "$SITE_DIR"
-          cp -r "$HISTORY_DIR"/* "$SITE_DIR/" 2>/dev/null || true
+          mkdir -p "$HISTORY_DIR"
           mkdir -p "$SITE_DIR/latest"
 
           for OS in ubuntu-latest windows-latest; do
             ALLURE_RESULTS_DIR="allure-results/$OS"
-
             if [ -d "$ALLURE_RESULTS_DIR" ] && [ -n "$(ls -A $ALLURE_RESULTS_DIR)" ]; then
-              mkdir -p "$ALLURE_RESULTS_DIR"
-
               # ---- Create executor.json ----
               echo "{\"name\":\"$OS\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY##*/}/latest/$OS/\",\"buildOrder\":\"${GITHUB_RUN_NUMBER}\",\"buildName\":\"Build ${GITHUB_RUN_NUMBER} ($OS)\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$ALLURE_RESULTS_DIR/executor.json"
 
-              # ---- Merge previous history for trends ----
-              PREV_HISTORY="$HISTORY_DIR/latest/$OS/history"
+              # 🧠 FIX 2: Restore previous Allure trend history correctly
+              PREV_HISTORY="$SITE_DIR/latest/$OS/history"
               if [ -d "$PREV_HISTORY" ]; then
-                cp -r "$PREV_HISTORY"/* "$ALLURE_RESULTS_DIR/" 2>/dev/null || true
+                mkdir -p "$ALLURE_RESULTS_DIR/history"
+                cp -r "$PREV_HISTORY"/* "$ALLURE_RESULTS_DIR/history/" 2>/dev/null || true
+                echo "✅ Trend history restored for $OS"
+              else
+                echo "ℹ️ No previous trend history found for $OS"
               fi
 
               # ---- Generate versioned report ----
@@ -193,23 +184,17 @@ jobs:
               mkdir -p "$VERSIONED_DIR"
               allure generate "$ALLURE_RESULTS_DIR" --output "$VERSIONED_DIR" --clean
 
-              # ---- Copy to latest for badges ----
+              # ---- Copy to latest ----
               LATEST_DIR="$SITE_DIR/latest/$OS"
               mkdir -p "$LATEST_DIR"
               cp -r "$VERSIONED_DIR"/* "$LATEST_DIR/"
-
             else
               echo "⚠️ Skipping $OS report generation (no results)."
             fi
           done
 
-          # ---- Update _history for trends ----
-          rm -rf "$HISTORY_DIR/latest"
-          mkdir -p "$HISTORY_DIR/latest"
-          for OS in ubuntu-latest windows-latest; do
-            mkdir -p "$HISTORY_DIR/latest/$OS"
-            cp -r "$SITE_DIR/latest/$OS/history" "$HISTORY_DIR/latest/$OS/" 2>/dev/null || true
-          done
+          # 🧱 FIX 3: Add .nojekyll to preserve _history and hidden folders
+          touch "$SITE_DIR/.nojekyll"
 
       - name: Fix Allure Paths
         shell: bash
@@ -232,9 +217,6 @@ jobs:
 
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
-              # Note: The new generate step no longer creates build-info.txt, 
-              # so we'll skip displaying the timestamp here or infer it from a different source if needed.
-              # For simplicity, I'll remove the timestamp display logic as it's no longer supported by the new generation step.
               echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong></li>" >> "$SITE_DIR/index.html"
             else
               echo "<li><strong>$OS:</strong> (No report found)</li>" >> "$SITE_DIR/index.html"
@@ -249,7 +231,6 @@ jobs:
             for BUILD in $BUILDS; do
               for OS in ubuntu-latest windows-latest; do
                 if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                  # Timestamp logic removed as per previous note.
                   echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a></li>" >> "$SITE_DIR/index.html"
                 fi
               done
@@ -270,22 +251,9 @@ jobs:
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
           BASE_URL="${PAGE_URL%/}"
-          TEST_STATUS=${{ steps.test_status_check.outputs.status }}
-
-          if [[ "$TEST_STATUS" == "FAILED" ]]; then
-            STATUS_ICON="❌"
-            STATUS_TEXT="Failed"
-          elif [[ "$TEST_STATUS" == "UNSTABLE" ]]; then
-            STATUS_ICON="⚠️"
-            STATUS_TEXT="Unstable"
-          else
-            STATUS_ICON="✅"
-            STATUS_TEXT="Passed"
-          fi
-
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Report](https://img.shields.io/badge/Ubuntu-Latest-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Report](https://img.shields.io/badge/Windows-Latest-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Build #${{ github.run_number }} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY

@@ -105,13 +105,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     steps:
-      - name: Checkout Previous Reports (gh-pages)
-        uses: actions/checkout@v4
-        with:
-          ref: gh-pages # The branch where pages are deployed
-          path: ${{ env.SITE_DIR }}
-        continue-on-error: true # Allows the first run to succeed if the branch doesn't exist
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -135,18 +128,18 @@ jobs:
           mkdir -p "$SITE_DIR/latest"
 
           for OS in ubuntu-latest windows-latest; do
-            # ⬇️ *** FIX: Correct path to downloaded artifacts ***
-            RESULTS_DIR="allure-results/allure-results-$OS"
+            RESULTS_DIR="allure-results/$OS"
             REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER/$OS"
             REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
             
+            # Ensure directories exist
             mkdir -p "$RESULTS_DIR"
             mkdir -p "$REPORT_DIR_BUILD"
             mkdir -p "$REPORT_DIR_LATEST"
 
-            # Merge trend/history from previous latest (this now works due to the checkout step)
+
+            # Merge trend/history from previous latest
             if [ -d "$REPORT_DIR_LATEST/history" ]; then
-              echo "Merging history from previous report for $OS..."
               mkdir -p "$RESULTS_DIR/history"
               cp -r "$REPORT_DIR_LATEST/history"/* "$RESULTS_DIR/history/" || true
             fi
@@ -159,7 +152,7 @@ jobs:
               cp supports/windows.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
             fi
 
-            # Copy categories.json
+            # Copy categories.json (allow failure and suppress error output)
             echo "Create $RESULTS_DIR/categories.json"
             cp supports/categories.json $RESULTS_DIR/categories.json 2>/dev/null || true
           

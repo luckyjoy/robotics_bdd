@@ -99,7 +99,8 @@ jobs:
             echo "outcome_ubuntu=${{ steps.run_tests.outputs.test_outcome }}" >> $GITHUB_OUTPUT
           else
             echo "outcome_windows=${{ steps.run_tests.outputs.test_outcome }}" >> $GITHUB_OUTPUT
-
+          fi
+          
       - name: Upload Allure Results Artifact
         uses: actions/upload-artifact@v4
         with:

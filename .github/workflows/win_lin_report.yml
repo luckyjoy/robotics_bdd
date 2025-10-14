@@ -1,76 +1,128 @@
-name: Robotics BDD CI/CD
+name: Robotics BDD Simulation CI/CD
 
 on:
   push:
-    branches: [ main ]
   pull_request:
-    branches: [ main ]
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
 
 env:
   ALLURE_VERSION: 2.29.0
+  SITE_DIR: site
 
 jobs:
-  deploy-allure:
-    name: Deploy Allure Report
+  # =========================
+  # 1️⃣ Test on Ubuntu
+  # =========================
+  test_ubuntu:
+    name: Run Tests (Ubuntu)
     runs-on: ubuntu-latest
-    needs: [test_ubuntu, test_windows]
-    if: ${{ always() }}
-    env:
-      ALLURE_VERSION: 2.29.0
-      SITE_DIR: site
     steps:
       - uses: actions/checkout@v4
 
-      - name: Collect Allure Results
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install Dependencies
         run: |
-          mkdir -p allure-results
-          echo "Collecting test results from Ubuntu and Windows..."
-          for OS in ubuntu-latest windows-latest; do
-            if [ -d "allure-results/$OS" ]; then
-              echo "Found allure-results/$OS"
-            else
-              echo "⚠️ allure-results/$OS not found, skipping."
-            fi
-          done
+          pip install -r requirements.txt
+          pip install allure-pytest
+
+      - name: Run Tests with Allure
+        run: |
+          mkdir -p allure-results/ubuntu-latest
+          pytest tests/ --alluredir=allure-results/ubuntu-latest || echo "TEST_FAILURE=true" >> $GITHUB_ENV
+
+      - name: Save Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-results
+          path: allure-results/ubuntu-latest/
+
+  # =========================
+  # 2️⃣ Test on Windows
+  # =========================
+  test_windows:
+    name: Run Tests (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install allure-pytest
+
+      - name: Run Tests with Allure
+        run: |
+          mkdir -p allure-results/windows-latest
+          pytest tests/ --alluredir=allure-results/windows-latest || echo "TEST_FAILURE=true" >> $env:GITHUB_ENV
+
+      - name: Save Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-results
+          path: allure-results/windows-latest/
+
+  # =========================
+  # 3️⃣ Deploy & Determine Build Result
+  # =========================
+  deploy_allure:
+    name: Deploy Allure Report
+    runs-on: ubuntu-latest
+    needs: [test_ubuntu, test_windows]
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Test Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: allure-results
 
       - name: Copy Executor Info
         run: |
           if [ -f "$PWD/supports/executor.json" ]; then
-            echo "Copying executor.json to allure-results..."
+            echo "Copying executor.json to allure-results/"
             cp "$PWD/supports/executor.json" "$PWD/allure-results/"
           else
-            echo "⚠️ executor.json not found at $PWD/supports/executor.json"
+            echo "⚠️ executor.json not found at supports/executor.json"
           fi
 
-      - name: Determine Build Result
-        id: build_status
+      - name: Install Allure
         run: |
-          # Default
-          BUILD_RESULT="pass"
-          
-          # If any setup/config/env error occurred in previous jobs
+          wget https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.zip
+          unzip allure-${ALLURE_VERSION}.zip -d /opt/allure
+          export PATH="/opt/allure/allure-${ALLURE_VERSION}/bin:$PATH"
+
+      - name: Determine Build Result
+        id: build_result
+        run: |
+          BUILD_STATUS="pass"
+
+          # CASE 3: setup/config/env errors
           if [ "${{ needs.test_ubuntu.result }}" = "failure" ] || [ "${{ needs.test_windows.result }}" = "failure" ]; then
-            BUILD_RESULT="fail"
+            BUILD_STATUS="fail"
           else
-            # Read test summary if available
-            UB_RESULT_FILE="allure-results/ubuntu-latest/summary.json"
-            WIN_RESULT_FILE="allure-results/windows-latest/summary.json"
+            # CASE 2: tests failed but environment OK
+            UB_FAILS=$(grep -o '"status":"failed"' allure-results/ubuntu-latest/*.json 2>/dev/null | wc -l)
+            WIN_FAILS=$(grep -o '"status":"failed"' allure-results/windows-latest/*.json 2>/dev/null | wc -l)
 
-            UB_FAILED=$(jq '.statistic.failed' "$UB_RESULT_FILE" 2>/dev/null || echo 0)
-            WIN_FAILED=$(jq '.statistic.failed' "$WIN_RESULT_FILE" 2>/dev/null || echo 0)
-
-            if [ "$UB_FAILED" -gt 0 ] || [ "$WIN_FAILED" -gt 0 ]; then
-              BUILD_RESULT="unstable"
+            if [ "$UB_FAILS" -gt 0 ] || [ "$WIN_FAILS" -gt 0 ]; then
+              BUILD_STATUS="unstable"
             fi
           fi
 
-          echo "Build status determined as: $BUILD_RESULT"
-          echo "result=$BUILD_RESULT" >> $GITHUB_OUTPUT
+          echo "Final build status: $BUILD_STATUS"
+          echo "status=$BUILD_STATUS" >> $GITHUB_OUTPUT
 
       - name: Generate Allure Reports
         run: |
@@ -83,9 +135,10 @@ jobs:
             fi
           done
 
-      - name: Generate History Index
+      - name: Rebuild index.html
+        shell: bash
         run: |
-          mkdir -p "$SITE_DIR"
+          SITE_DIR="site"
           echo "<html><head><title>Allure Reports History</title>
           <style>
           body{font-family:sans-serif;margin:20px;}
@@ -95,35 +148,30 @@ jobs:
           a:hover{text-decoration:underline;}
           </style></head><body>
           <h1>🤖 Robotics BDD Simulation CI/CD</h1>
-          <h2>🧩 Latest Allure Reports</h2><hr><ul>" > "$SITE_DIR/index.html"
+          <h2>🧩 Latest Allure Reports</h2><ul>" > "$SITE_DIR/index.html"
 
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
               TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-              echo "<li><a href='latest/$OS/'>Latest Report ($OS)</a> - $TS</li>" >> "$SITE_DIR/index.html"
-            else
-              echo "<li><strong>$OS:</strong> No report found.</li>" >> "$SITE_DIR/index.html"
+              echo "<li><a href='latest/$OS/'>Latest Report ($OS)</a> - Last run: $TS</li>" >> "$SITE_DIR/index.html"
             fi
           done
 
           echo "</ul><hr><h2>📊 Report History</h2><ul>" >> "$SITE_DIR/index.html"
-          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regex ".*/[0-9]\+" -printf "%f\n" 2>/dev/null | sort -nr)
-          if [ -z "$BUILDS" ]; then
-            echo "<li>No previous builds found.</li>" >> "$SITE_DIR/index.html"
-          else
-            for BUILD in $BUILDS; do
-              for OS in ubuntu-latest windows-latest; do
-                if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                  TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                  echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
-                fi
-              done
+          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" | xargs -n 1 basename | sort -nr || true)
+          for BUILD in $BUILDS; do
+            for OS in ubuntu-latest windows-latest; do
+              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
+                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              fi
             done
-          fi
-          echo "</ul><hr><p><strong>Status:</strong> ${{ steps.build_status.outputs.result | upper }}</p>
-          <p><em>Generated on $(date)</em></p></body></html>" >> "$SITE_DIR/index.html"
+          done
+          echo "</ul><hr>
+          <h3>🏁 Build Result: <span style='color:#007700;'>${{ steps.build_result.outputs.status }}</span></h3>
+          </body></html>" >> "$SITE_DIR/index.html"
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy Allure Site
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

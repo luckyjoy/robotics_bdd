@@ -62,6 +62,7 @@ jobs:
         id: run_tests
         shell: bash
         run: |
+          # Disable exiting on error temporarily so we can capture the exit code
           set +e
           OS_NAME=${{ matrix.os }}
           RESULTS_DIR="allure-results/$OS_NAME"
@@ -78,12 +79,14 @@ jobs:
             TEST_EXIT_CODE=$?
           fi
 
+          # Check for Allure results file existence (a sign of setup success)
           if [ ! -d "$RESULTS_DIR" ] || [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
             echo "❌ No Allure results found — setup or configuration failure."
             echo "test_outcome=FAILED" >> $GITHUB_OUTPUT
             exit 1
           fi
 
+          # Determine outcome for the CI workflow
           if [ $TEST_EXIT_CODE -ne 0 ]; then
             echo "⚠️ Some tests failed (pytest exit code $TEST_EXIT_CODE)."
             echo "test_outcome=UNSTABLE" >> $GITHUB_OUTPUT
@@ -104,6 +107,7 @@ jobs:
           if [ -f "$SRC_EXECUTOR" ]; then
             cp "$SRC_EXECUTOR" "$DST_DIR/"
           else
+            # Default executor.json content
             echo '{"name":"GitHub Actions","type":"github","buildName":"Robotics BDD Simulation","buildUrl":"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' > "$DST_DIR/executor.json"
           fi
 
@@ -138,11 +142,15 @@ jobs:
       - name: Preserve Previous Build History
         shell: bash
         run: |
+          # Fetch gh-pages branch, ignoring error if it doesn't exist
           git fetch origin gh-pages || true
+          
           if git show-ref --quiet refs/heads/gh-pages; then
             echo "📜 Restoring existing gh-pages history..."
+            # Clone the existing site to pull history
             git clone --depth 1 --branch gh-pages "https://github.com/${{ github.repository }}.git" old_site || true
             mkdir -p site
+            # Copy all files from the old site
             cp -r old_site/* site/ || true
           else
             echo "🆕 No previous gh-pages branch found."
@@ -151,12 +159,15 @@ jobs:
       - name: Consolidate Artifacts to Target Folders
         shell: bash
         run: |
+          # Move artifacts from the default download location to the structured folder
           mkdir -p allure-results/ubuntu-latest
           mkdir -p allure-results/windows-latest
+          
           if [ -d allure-results/allure-results-ubuntu-latest ]; then
             mv allure-results/allure-results-ubuntu-latest/* allure-results/ubuntu-latest/
             rm -rf allure-results/allure-results-ubuntu-latest
           fi
+          
           if [ -d allure-results/allure-results-windows-latest ]; then
             mv allure-results/allure-results-windows-latest/* allure-results/windows-latest/
             rm -rf allure-results/allure-results-windows-latest
@@ -167,8 +178,9 @@ jobs:
         shell: bash
         run: |
           STATUS="PASSED"
-          for ART in allure-results/*; do
-            if [ ! -d "$ART" ] || [ -z "$(find "$ART" -type f -name '*.json')" ]; then
+          for OS_DIR in allure-results/*; do
+            # Check if any OS folder does not contain any .json files
+            if [ ! -d "$OS_DIR" ] || [ -z "$(find "$OS_DIR" -type f -name '*.json')" ]; then
               STATUS="FAILED"
               break
             fi
@@ -179,3 +191,128 @@ jobs:
         shell: bash
         run: |
           BUILD_NUMBER=${{ github.run_number }}
+          SITE_DIR="site"
+          GITHUB_REPO="${{ github.repository }}"
+          GITHUB_RUN_ID="${{ github.run_id }}"
+          
+          mkdir -p "$SITE_DIR/latest"
+          echo "" > "$SITE_DIR/.nojekyll"
+
+          for OS in ubuntu-latest windows-latest; do
+            RESULTS_DIR="allure-results/$OS"
+            REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER/$OS"
+            REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
+            mkdir -p "$REPORT_DIR_BUILD"
+
+            # Copy trend history for continuity
+            if [ -d "$REPORT_DIR_LATEST/history" ]; then
+              echo "📈 Copying trend history for $OS..."
+              mkdir -p "$RESULTS_DIR/history"
+              cp -r "$REPORT_DIR_LATEST/history"/* "$RESULTS_DIR/history/" || true
+            fi
+
+            # Check for results before generating
+            if [ -z "$(find "$RESULTS_DIR" -type f -name '*.json' 2>/dev/null)" ]; then
+                echo "⚠️ No Allure JSON results found for $OS. Skipping report generation."
+                continue
+            fi
+
+            allure generate "$RESULTS_DIR" -o "$REPORT_DIR_BUILD" --clean
+
+            # Use echo -e to create executor.json to avoid YAML parsing issues
+            mkdir -p "$REPORT_DIR_BUILD/widgets"
+            echo -e "{\n  \"name\": \"GitHub Actions\",\n  \"type\": \"github\",\n  \"url\": \"https://github.com/$GITHUB_REPO/actions/runs/$GITHUB_RUN_ID\",\n  \"buildName\": \"Robotics BDD Simulation CI/CD\",\n  \"buildOrder\": $BUILD_NUMBER,\n  \"buildUrl\": \"https://github.com/$GITHUB_REPO/actions/runs/$GITHUB_RUN_ID\",\n  \"reportName\": \"$OS Report\",\n  \"executor\": \"GitHub Actions\"\n}" > "$REPORT_DIR_BUILD/widgets/executor.json"
+
+            # Copy the new report to the 'latest' folder
+            mkdir -p "$REPORT_DIR_LATEST"
+            cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/"
+            date -u > "$REPORT_DIR_LATEST/build-info.txt"
+            date -u > "$REPORT_DIR_BUILD/build-info.txt"
+          done
+
+      - name: Fix Allure Paths (for GitHub Pages Subdirectories)
+        shell: bash
+        run: |
+          # Use perl to change absolute paths (src="/") to relative paths (src="./") 
+          find site -type f -name 'index.html' | while read FILE_PATH; do
+            perl -pi -e 's|src="/|src="./|g' "$FILE_PATH"
+            perl -pi -e 's|href="/|href="./|g' "$FILE_PATH"
+          done
+
+      - name: Rebuild index.html (History Page)
+        shell: bash
+        run: |
+          SITE_DIR="site"
+          CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
+          mkdir -p "$SITE_DIR"
+          
+          # Create the HTML header and latest reports section
+          echo "<html><head><title>Allure Reports History</title>
+          <style>body{font-family:sans-serif;margin:20px;}ul{list-style:none;padding:0;}li{margin:6px 0;}a{text-decoration:none;color:#0366d6;}a:hover{text-decoration:underline;}</style></head><body>
+          <h1>🤖 Robotics BDD Simulation CI/CD Build History</h1>
+          <h2>🧩 Latest Allure Reports</h2><hr><ul>" > "$SITE_DIR/index.html"
+
+          for OS in ubuntu-latest windows-latest; do
+            if [ -d "$SITE_DIR/latest/$OS" ]; then
+              TS_UTC=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "")
+              TS_DISPLAY=$(date -d "$TS_UTC" -u +'%a %b %d %H:%M:%S UTC %Y' 2>/dev/null || echo "$TS_UTC")
+              echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: $TS_DISPLAY</li>" >> "$SITE_DIR/index.html"
+            else
+              echo "<li><strong>$OS:</strong> (No report found)</li>" >> "$SITE_DIR/index.html"
+            fi
+          done
+
+          # Create the report history section
+          echo "</ul><hr><h2>📊 Report History</h2><ul>" >> "$SITE_DIR/index.html"
+          # Find all numerical build folders and sort them descending
+          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regex ".*/[0-9]\+" -printf "%f\n" 2>/dev/null | sort -nr)
+          
+          if [ -z "$BUILDS" ]; then
+            echo "<li>No previous builds found.</li>" >> "$SITE_DIR/index.html"
+          else
+            for BUILD in $BUILDS; do
+              for OS in ubuntu-latest windows-latest; do
+                if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
+                  TS_UTC=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "")
+                  TS_DISPLAY=$(date -d "$TS_UTC" -u +'%a %b %d %H:%M:%S UTC %Y' 2>/dev/null || echo "$TS_UTC")
+                  echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS_DISPLAY}</li>" >> "$SITE_DIR/index.html"
+                fi
+              done
+            done
+          fi
+          
+          # Close the HTML document
+          echo "</ul><hr><p><em>Generated automatically on $CURRENT_LA_TIME</em></p></body></html>" >> "$SITE_DIR/index.html"
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Add Workflow Summary (Badges)
+        run: |
+          PAGE_URL=${{ steps.deployment.outputs.page_url }}
+          BASE_URL="${PAGE_URL%/}"
+          TEST_STATUS=${{ steps.test_status_check.outputs.status }}
+
+          if [[ "$TEST_STATUS" == "FAILED" ]]; then
+            STATUS_ICON="❌"
+            STATUS_TEXT="Failed"
+          elif [[ "$TEST_STATUS" == "UNSTABLE" ]]; then
+            STATUS_ICON="⚠️"
+            STATUS_TEXT="Unstable"
+          else
+            STATUS_ICON="✅"
+            STATUS_TEXT="Passed"
+          fi
+
+          echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Report](https://img.shields.io/badge/Ubuntu-Latest-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Report](https://img.shields.io/badge/Windows-Latest-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${{ github.run_number }} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY

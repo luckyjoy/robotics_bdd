@@ -67,7 +67,6 @@ jobs:
 
           OS_NAME=${{ matrix.os }}
           RESULTS_DIR="allure-results/$OS_NAME"
-          # No need to remove the directory, the runner is ephemeral
           mkdir -p "$RESULTS_DIR"
 
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
@@ -81,14 +80,12 @@ jobs:
             TEST_EXIT_CODE=$?
           fi
 
-          # Detect setup/config/env failure
           if [ ! -d "$RESULTS_DIR" ] || [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
             echo "❌ No Allure results found — setup or configuration failure."
             echo "test_outcome=FAILED" >> $GITHUB_OUTPUT
             exit 1
           fi
 
-          # Detect pytest failures
           if [ $TEST_EXIT_CODE -ne 0 ]; then
             echo "⚠️ Some tests failed (pytest exit code $TEST_EXIT_CODE)."
             echo "test_outcome=UNSTABLE" >> $GITHUB_OUTPUT
@@ -135,14 +132,12 @@ jobs:
         with:
           path: allure-results
 
-      # OPTIMIZATION 2: Simplified artifact consolidation
       - name: Consolidate Artifacts to Target Folders
         shell: bash
         run: |
           mkdir -p allure-results/ubuntu-latest
           mkdir -p allure-results/windows-latest
           
-          # Move contents from the downloaded artifact structure to the cleaner structure
           if [ -d allure-results/allure-results-ubuntu-latest ]; then
             mv allure-results/allure-results-ubuntu-latest/* allure-results/ubuntu-latest/
             rm -rf allure-results/allure-results-ubuntu-latest
@@ -156,27 +151,20 @@ jobs:
         id: test_status_check
         shell: bash
         run: |
-          echo "Upstream status: ${{ needs.test.outputs.test_outcome }}"
           STATUS="${{ needs.test.outputs.test_outcome }}"
-
-          # If Allure results missing, mark as failed
           if [ -z "$(find allure-results -type f -name '*.json' 2>/dev/null)" ]; then
             STATUS="FAILED"
           fi
-
           echo "status=$STATUS" >> $GITHUB_OUTPUT
 
-      # OPTIMIZATION 3: Combined file generation and path fixing for efficiency.
-      # While separate steps for Allure generation and Index rebuilding are kept for clarity
-      # due to the complexity of the PDT/History fix, the steps are already quite optimized.
-      
       - name: Generate Allure Reports (History & PDT Setup)
         shell: bash
         run: |
-          echo "Generating Allure reports..."
-          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
+          # FIX: Assign the GitHub Actions context variable to a local Bash variable
+          BUILD_NUMBER=${{ github.run_number }}
+          echo "Generating Allure reports for build $BUILD_NUMBER..."
+
           SITE_DIR="site"
-          
           mkdir -p "$SITE_DIR/latest"
 
           for OS in ubuntu-latest windows-latest; do
@@ -213,8 +201,8 @@ jobs:
       - name: Fix Allure Paths
         shell: bash
         run: |
-          # Use find to recursively search for index.html in the relevant site directories
-          find site -type f -name 'index.html' -path '*/latest/*' -o -path '*/${{ GITHUB_RUN_NUMBER }}/*' | while read FILE_PATH; do
+          # FIX: Use GITHUB_RUN_NUMBER in the find path expression
+          find site -type f -name 'index.html' -path '*/latest/*' -o -path '*/${{ github.run_number }}/*' | while read FILE_PATH; do
             perl -pi -e 's|src="/|src="./|g' "$FILE_PATH"
             perl -pi -e 's|href="/|href="./|g' "$FILE_PATH"
           done
@@ -224,7 +212,6 @@ jobs:
         run: |
             SITE_DIR="site"
             
-            # --- Get current time for footer in LA time (PDT/PST) ---
             CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
 
             mkdir -p "$SITE_DIR"
@@ -244,7 +231,6 @@ jobs:
               if [ -d "$SITE_DIR/latest/$OS" ]; then
                 TS_UTC=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "")
                 
-                # PDT FIX: Convert UTC time string to LA time string (PDT/PST)
                 if [ -n "$TS_UTC" ]; then
                   TS_DISPLAY=$(date -d "$TS_UTC" -u +'%a %b %d %H:%M:%S UTC %Y' | TZ='America/Los_Angeles' date)
                   if [ -z "$TS_DISPLAY" ]; then
@@ -263,7 +249,6 @@ jobs:
             # --- Historical Reports ---
             echo "</ul><hr><h2>📊 Report History</h2><ul>" >> "$SITE_DIR/index.html"
 
-            # HISTORY FIX: Find all numbered directories (previous builds)
             BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regex ".*/[0-9]\+" -printf "%f\n" 2>/dev/null | sort -nr)
 
             if [ -z "$BUILDS" ]; then
@@ -274,7 +259,6 @@ jobs:
                   if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
                     TS_UTC=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "")
 
-                    # PDT FIX: Convert UTC time string to LA time string (PDT/PST)
                     if [ -n "$TS_UTC" ]; then
                       TS_DISPLAY=$(date -d "$TS_UTC" -u +'%a %b %d %H:%M:%S UTC %Y' | TZ='America/Los_Angeles' date)
                       if [ -z "$TS_DISPLAY" ]; then
@@ -290,7 +274,6 @@ jobs:
               done
             fi
 
-            # Use the pre-calculated LA time for the 'Generated automatically on' footer
             echo "</ul><hr><p><em>Generated automatically on $CURRENT_LA_TIME</em></p></body></html>" >> "$SITE_DIR/index.html"
 
       - name: Upload Pages Artifact
@@ -325,4 +308,4 @@ jobs:
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Build #${GITHUB_RUN_NUMBER} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${{ github.run_number }} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY

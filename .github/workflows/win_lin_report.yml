@@ -70,11 +70,11 @@ jobs:
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
-              pytest -v -m sensors --alluredir="$RESULTS_DIR"
+              pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
             echo "🪟 Running tests on Windows..."
-            pytest -v -m sensors --alluredir="$RESULTS_DIR"
+            pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
 
@@ -191,7 +191,6 @@ jobs:
 
             allure generate "$RESULTS_DIR" -o "$REPORT_DIR_BUILD" --clean
 
-            # This executor.json is for the Allure widgets/index page and is still needed here for build history consistency.
             mkdir -p "$REPORT_DIR_BUILD/widgets"
             echo '{' > "$REPORT_DIR_BUILD/widgets/executor.json"
             echo '  "name": "GitHub Actions",' >> "$REPORT_DIR_BUILD/widgets/executor.json"

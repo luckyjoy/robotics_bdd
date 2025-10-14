@@ -45,6 +45,7 @@ jobs:
 
       - name: Copy executor.json
         if: always()
+        shell: bash
         run: |
           SRC_EXECUTOR="supports/executor.json"
           DST_DIR="allure-results/${{ matrix.os }}"

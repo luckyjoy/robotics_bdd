@@ -14,7 +14,7 @@ permissions:
 env:
   ALLURE_VERSION: 2.29.0
   SITE_DIR: site
-  
+
 jobs:
   test:
     name: Run tests on ${{ matrix.os }}
@@ -36,7 +36,6 @@ jobs:
         with:
           python-version: 3.11
 
-      # OPTIMIZATION 1: Cache pip dependencies to speed up subsequent runs
       - name: Cache pip dependencies
         uses: actions/cache@v4
         with:
@@ -64,7 +63,6 @@ jobs:
         shell: bash
         run: |
           set +e
-
           OS_NAME=${{ matrix.os }}
           RESULTS_DIR="allure-results/$OS_NAME"
           mkdir -p "$RESULTS_DIR"
@@ -96,54 +94,6 @@ jobs:
             exit 0
           fi
 
-      - name: Prepare Allure Results and Create Metadata
-        # Use always() to ensure this step runs even if tests fail, so reports can still be generated.
-        if: always()
-        shell: bash
-        run: |
-          # Use one variable to capture the OS name from the matrix (e.g., 'ubuntu-latest')
-          OS_NAME="${{ matrix.os }}"
-          ALLURE_RESULTS_DIR="allure-results/$OS_NAME"
-          
-          # --- Part 1: Prepare Allure Environment Files ---
-          echo "Preparing base Allure environment files for $OS_NAME..."
-          
-          # Create the top-level results directory
-          mkdir -p allure-results
-          
-          # Copy categories.json (allow failure and suppress error output)
-          cp supports/categories.json $ALLURE_RESULTS/categories.json 2>/dev/null || echo "Note: No supports/categories.json found."
-          
-          # Determine the appropriate environment.properties based on OS_NAME (using runner labels)
-          # FIX: Change 'Linux' to 'ubuntu-latest' and 'Windows' to 'windows-latest' (or your specific matrix values)
-          if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
-            echo "Copying Linux environment.properties..."
-            cp supports/ubuntu.properties $ALLURE_RESULTS/environment.properties 2>/dev/null || echo "Note: No supports/ubuntu.properties found."
-          elif [[ "$OS_NAME" == "windows-latest" ]]; then
-            echo "Copying Windows environment.properties..."
-            cp supports/windows.properties $ALLURE_RESULTS/environment.properties 2>/dev/null || echo "Note: No supports/windows.properties found."
-          fi
-
-          # --- Part 2: Create executor.json ---
-          echo "Attempting to create executor.json..."
-
-          # Check if the OS-specific results directory exists and contains files
-          if [ -d "$ALLURE_RESULTS_DIR" ] && [ -n "$(ls -A $ALLURE_RESULTS_DIR 2>/dev/null)" ]; then
-            
-            # Ensure the specific directory exists
-            mkdir -p "$ALLURE_RESULTS_DIR"
-            
-            # Extract the repository name (e.g., 'repo-name' from 'owner/repo-name')
-            REPO_NAME="${GITHUB_REPOSITORY##*/}"
-
-            # Create executor.json using echo with escaped quotes
-            echo "{\"name\":\"$OS_NAME\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/$OS_NAME/\",\"buildOrder\":\"${GITHUB_RUN_NUMBER}\",\"buildName\":\"Build ${GITHUB_RUN_NUMBER} ($OS_NAME)\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$ALLURE_RESULTS_DIR/executor.json"
-            
-            echo "Successfully created executor.json for $OS_NAME in $ALLURE_RESULTS_DIR."
-          else
-            echo "Skipping executor.json creation for $OS_NAME: Results directory '$ALLURE_RESULTS_DIR' either missing or empty."
-          fi
-
       - name: Upload Allure Results Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -170,77 +120,63 @@ jobs:
         with:
           path: allure-results
 
-      - name: Consolidate Artifacts to Target Folders
+      - name: Merge Artifacts (All OS)
         shell: bash
         run: |
-          mkdir -p allure-results/ubuntu-latest
-          mkdir -p allure-results/windows-latest
-          
-          if [ -d allure-results/allure-results-ubuntu-latest ]; then
-            mv allure-results/allure-results-ubuntu-latest/* allure-results/ubuntu-latest/
-            rm -rf allure-results/allure-results-ubuntu-latest
-          fi
-          if [ -d allure-results/allure-results-windows-latest ]; then
-            mv allure-results/allure-results-windows-latest/* allure-results/windows-latest/
-            rm -rf allure-results/allure-results-windows-latest
-          fi
-
-      - name: Determine Combined Test Status
-        id: test_status_check
-        shell: bash
-        run: |
-          STATUS="${{ needs.test.outputs.test_outcome }}"
-          if [ -z "$(find allure-results -type f -name '*.json' 2>/dev/null)" ]; then
-            STATUS="FAILED"
-          fi
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-
-      - name: Generate Allure Reports (History & PDT Setup)
-        shell: bash
-        run: |
-          # FIX: Assign the GitHub Actions context variable to a local Bash variable
-          BUILD_NUMBER=${{ github.run_number }}
-          echo "Generating Allure reports for build $BUILD_NUMBER..."
-
-          SITE_DIR="site"
-          mkdir -p "$SITE_DIR/latest"
+          MERGED_DIR="allure-results/merged"
+          mkdir -p "$MERGED_DIR"
 
           for OS in ubuntu-latest windows-latest; do
-            RESULTS_DIR="allure-results/$OS"
-            REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER/$OS"
-            REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
-            
-            mkdir -p "$REPORT_DIR_BUILD"
-
-            # 1. Copy Allure trend history from the previous LATEST report
-            if [ -d "$REPORT_DIR_LATEST/history" ]; then
-              echo "Copying Allure trend history from $REPORT_DIR_LATEST/history..."
-              mkdir -p "$RESULTS_DIR/history"
-              cp -r "$REPORT_DIR_LATEST/history"/* "$RESULTS_DIR/history/" || true
+            if [ -d "allure-results/allure-results-$OS" ]; then
+              cp -r allure-results/allure-results-$OS/* "$MERGED_DIR/"
+              rm -rf allure-results/allure-results-$OS
             fi
-
-            # 2. Generate the Allure report into the build-numbered directory
-            allure generate "$RESULTS_DIR" -o "$REPORT_DIR_BUILD" --clean
-
-            # 3. Add executor.json
-            mkdir -p "$REPORT_DIR_BUILD/widgets"
-            echo '{"buildOrder":'"$BUILD_NUMBER"', "reportName":"'"$OS Report"'"}' > "$REPORT_DIR_BUILD/widgets/executor.json"
-            
-            # 4. Copy the newly generated report to the LATEST directory
-            mkdir -p "$REPORT_DIR_LATEST"
-            cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/"
-            
-            # 5. PDT FIX: Explicitly save UTC time to file for conversion in next step
-            echo "$(date -u)" > "$REPORT_DIR_LATEST/build-info.txt"
-            echo "$(date -u)" > "$REPORT_DIR_BUILD/build-info.txt"
-            echo "Report generated for $OS in build $BUILD_NUMBER at $REPORT_DIR_BUILD"
           done
+
+          # Merge environment variables
+          {
+            echo "OS=Ubuntu"
+            cat supports/ubuntu.properties 2>/dev/null || true
+            echo "OS=Windows"
+            cat supports/windows.properties 2>/dev/null || true
+          } > "$MERGED_DIR/environment.properties"
+
+          # Create single executor.json
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          echo "{\"name\":\"CI Build\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/\",\"buildOrder\":\"${GITHUB_RUN_NUMBER}\",\"buildName\":\"Build ${GITHUB_RUN_NUMBER}\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$MERGED_DIR/executor.json"
+
+      - name: Generate Allure Report with History
+        shell: bash
+        run: |
+          SITE_DIR="site"
+          BUILD_NUMBER=${{ github.run_number }}
+          MERGED_DIR="allure-results/merged"
+          REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER"
+          REPORT_DIR_LATEST="$SITE_DIR/latest"
+
+          mkdir -p "$REPORT_DIR_BUILD"
+          mkdir -p "$REPORT_DIR_LATEST"
+
+          # Copy trend/history from previous latest build
+          if [ -d "$REPORT_DIR_LATEST/history" ]; then
+            mkdir -p "$MERGED_DIR/history"
+            cp -r "$REPORT_DIR_LATEST/history"/* "$MERGED_DIR/history/"
+          fi
+
+          # Generate Allure report
+          allure generate "$MERGED_DIR" -o "$REPORT_DIR_BUILD" --clean
+
+          # Copy to latest
+          cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/"
+
+          # Save build timestamp
+          date -u > "$REPORT_DIR_BUILD/build-info.txt"
+          date -u > "$REPORT_DIR_LATEST/build-info.txt"
 
       - name: Fix Allure Paths
         shell: bash
         run: |
-          # FIX: Use GITHUB_RUN_NUMBER in the find path expression
-          find site -type f -name 'index.html' -path '*/latest/*' -o -path '*/${{ github.run_number }}/*' | while read FILE_PATH; do
+          find site -type f \( -path "*/latest/*" -o -path "*/${{ github.run_number }}/*" \) -name 'index.html' | while read FILE_PATH; do
             perl -pi -e 's|src="/|src="./|g' "$FILE_PATH"
             perl -pi -e 's|href="/|href="./|g' "$FILE_PATH"
           done
@@ -248,71 +184,42 @@ jobs:
       - name: Rebuild index.html (History & PDT Fix)
         shell: bash
         run: |
-            SITE_DIR="site"
-            
-            CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
+          SITE_DIR="site"
+          CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
 
-            mkdir -p "$SITE_DIR"
-            echo "<html><head><title>Allure Reports History</title>
-            <style>
-            body{font-family:sans-serif;margin:20px;}
-            ul{list-style:none;padding:0;}
-            li{margin:6px 0;}
-            a{text-decoration:none;color:#0366d6;}
-            a:hover{text-decoration:underline;}
-            </style></head><body>
-            <h1>🤖 Robotics BDD Simulation CI/CD Build History</h1>
-            <h2>🧩 Latest Allure Reports</h2><hr><ul>" > "$SITE_DIR/index.html"
+          mkdir -p "$SITE_DIR"
+          echo "<html><head><title>Allure Reports History</title>
+          <style>
+          body{font-family:sans-serif;margin:20px;}
+          ul{list-style:none;padding:0;}
+          li{margin:6px 0;}
+          a{text-decoration:none;color:#0366d6;}
+          a:hover{text-decoration:underline;}
+          </style></head><body>
+          <h1>🤖 Robotics BDD Simulation CI/CD Build History</h1>
+          <h2>🧩 Latest Allure Reports</h2><hr><ul>" > "$SITE_DIR/index.html"
 
-            # --- Latest Reports ---        
-            for OS in ubuntu-latest windows-latest; do
-              if [ -d "$SITE_DIR/latest/$OS" ]; then
-                TS_UTC=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "")
-                
-                if [ -n "$TS_UTC" ]; then
-                  TS_DISPLAY=$(date -d "$TS_UTC" -u +'%a %b %d %H:%M:%S UTC %Y' | TZ='America/Los_Angeles' date)
-                  if [ -z "$TS_DISPLAY" ]; then
-                    TS_DISPLAY=$TS_UTC
-                  fi
-                else
-                  TS_DISPLAY="(no timestamp)"
-                fi
+          # Latest report
+          if [ -d "$SITE_DIR/latest" ]; then
+            TS_UTC=$(cat "$SITE_DIR/latest/build-info.txt" 2>/dev/null || echo "")
+            TS_DISPLAY=$(TZ='America/Los_Angeles' date -d "$TS_UTC" '+%a %b %d %H:%M:%S %Z %Y' 2>/dev/null || echo "$TS_UTC")
+            echo "<li><strong><a href='latest/'>Latest Report (All OS)</a></strong> - Last run: $TS_DISPLAY</li>" >> "$SITE_DIR/index.html"
+          fi
 
-                echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: $TS_DISPLAY</li>" >> "$SITE_DIR/index.html"
-              else
-                echo "<li><strong>$OS:</strong> (No report found)</li>" >> "$SITE_DIR/index.html"
-              fi
+          # Historical reports
+          echo "</ul><hr><h2>📊 Report History</h2><ul>" >> "$SITE_DIR/index.html"
+          BUILDS=$(find "$SITE_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -nr)
+          if [ -z "$BUILDS" ]; then
+            echo "<li>No previous builds found.</li>" >> "$SITE_DIR/index.html"
+          else
+            for BUILD in $BUILDS; do
+              TS_UTC=$(cat "$SITE_DIR/$BUILD/build-info.txt" 2>/dev/null || echo "")
+              TS_DISPLAY=$(TZ='America/Los_Angeles' date -d "$TS_UTC" '+%a %b %d %H:%M:%S %Z %Y' 2>/dev/null || echo "$TS_UTC")
+              echo "<li><a href='${BUILD}/'>Build #${BUILD} (All OS)</a> - ${TS_DISPLAY}</li>" >> "$SITE_DIR/index.html"
             done
+          fi
 
-            # --- Historical Reports ---
-            echo "</ul><hr><h2>📊 Report History</h2><ul>" >> "$SITE_DIR/index.html"
-
-            BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -regex ".*/[0-9]\+" -printf "%f\n" 2>/dev/null | sort -nr)
-
-            if [ -z "$BUILDS" ]; then
-              echo "<li>No previous builds found.</li>" >> "$SITE_DIR/index.html"
-            else
-              for BUILD in $BUILDS; do
-                for OS in ubuntu-latest windows-latest; do
-                  if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
-                    TS_UTC=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "")
-
-                    if [ -n "$TS_UTC" ]; then
-                      TS_DISPLAY=$(date -d "$TS_UTC" -u +'%a %b %d %H:%M:%S UTC %Y' | TZ='America/Los_Angeles' date)
-                      if [ -z "$TS_DISPLAY" ]; then
-                        TS_DISPLAY=$TS_UTC
-                      fi
-                    else
-                      TS_DISPLAY="(no timestamp)"
-                    fi
-                    
-                    echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS_DISPLAY}</li>" >> "$SITE_DIR/index.html"
-                  fi
-                done
-              done
-            fi
-
-            echo "</ul><hr><p><em>Generated automatically on $CURRENT_LA_TIME</em></p></body></html>" >> "$SITE_DIR/index.html"
+          echo "</ul><hr><p><em>Generated automatically on $CURRENT_LA_TIME</em></p></body></html>" >> "$SITE_DIR/index.html"
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
@@ -327,7 +234,7 @@ jobs:
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
           BASE_URL="${PAGE_URL%/}"
-          TEST_STATUS=${{ steps.test_status_check.outputs.status }}
+          TEST_STATUS=${{ needs.test.outputs.test_outcome }}
 
           if [[ "$TEST_STATUS" == "FAILED" ]]; then
             STATUS_ICON="❌"
@@ -342,8 +249,7 @@ jobs:
 
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![All OS Latest Report](https://img.shields.io/badge/All-OS_Latest_Build-blue)](${BASE_URL}/latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build #${{ github.run_number }} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY

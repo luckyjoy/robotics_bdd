@@ -103,6 +103,7 @@ jobs:
         run: |
           # Use one variable to capture the OS name from the matrix (e.g., 'ubuntu-latest')
           OS_NAME="${{ matrix.os }}"
+          ALLURE_RESULTS_DIR="allure-results/$OS_NAME"
           
           # --- Part 1: Prepare Allure Environment Files ---
           echo "Preparing base Allure environment files for $OS_NAME..."
@@ -111,22 +112,20 @@ jobs:
           mkdir -p allure-results
           
           # Copy categories.json (allow failure and suppress error output)
-          cp supports/categories.json allure-results/categories.json 2>/dev/null || echo "Note: No supports/categories.json found."
+          cp supports/categories.json $ALLURE_RESULTS/categories.json 2>/dev/null || echo "Note: No supports/categories.json found."
           
           # Determine the appropriate environment.properties based on OS_NAME (using runner labels)
           # FIX: Change 'Linux' to 'ubuntu-latest' and 'Windows' to 'windows-latest' (or your specific matrix values)
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "Copying Linux environment.properties..."
-            cp supports/ubuntu.properties allure-results/environment.properties 2>/dev/null || echo "Note: No supports/ubuntu.properties found."
+            cp supports/ubuntu.properties $ALLURE_RESULTS/environment.properties 2>/dev/null || echo "Note: No supports/ubuntu.properties found."
           elif [[ "$OS_NAME" == "windows-latest" ]]; then
             echo "Copying Windows environment.properties..."
-            cp supports/windows.properties allure-results/environment.properties 2>/dev/null || echo "Note: No supports/windows.properties found."
+            cp supports/windows.properties $ALLURE_RESULTS/environment.properties 2>/dev/null || echo "Note: No supports/windows.properties found."
           fi
 
           # --- Part 2: Create executor.json ---
           echo "Attempting to create executor.json..."
-          
-          ALLURE_RESULTS_DIR="allure-results/$OS_NAME"
 
           # Check if the OS-specific results directory exists and contains files
           if [ -d "$ALLURE_RESULTS_DIR" ] && [ -n "$(ls -A $ALLURE_RESULTS_DIR 2>/dev/null)" ]; then

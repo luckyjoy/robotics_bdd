@@ -19,10 +19,13 @@ jobs:
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false 
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-    
+
+    outputs:
+      test_outcome: ${{ steps.run_tests.outputs.test_outcome }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -46,17 +49,16 @@ jobs:
           push: false
           tags: robotics-bdd:ci-build
           load: true
-      
+
       - name: Run tests
         id: run_tests
         shell: bash
         run: |
-          set +e 
-          
+          set +e
+
           OS_NAME=${{ matrix.os }}
           RESULTS_DIR="allure-results/$OS_NAME"
-          
-          rm -rf "$RESULTS_DIR" 
+          rm -rf "$RESULTS_DIR"
           mkdir -p "$RESULTS_DIR"
 
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
@@ -69,14 +71,23 @@ jobs:
             pytest -v --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
-          
-          set -e 
 
-          if [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
-            echo "❌ No Allure results found for $OS_NAME. **Setup/Configuration Failure**."
-            exit 1 
+          # Detect setup/config/env failure
+          if [ ! -d "$RESULTS_DIR" ] || [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
+            echo "❌ No Allure results found — setup or configuration failure."
+            echo "test_outcome=FAILED" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          # Detect pytest failures
+          if [ $TEST_EXIT_CODE -ne 0 ]; then
+            echo "⚠️ Some tests failed (pytest exit code $TEST_EXIT_CODE)."
+            echo "test_outcome=UNSTABLE" >> $GITHUB_OUTPUT
+            exit 0
           else
-            echo "✅ Allure results found for $OS_NAME."
+            echo "✅ All tests passed successfully."
+            echo "test_outcome=PASSED" >> $GITHUB_OUTPUT
+            exit 0
           fi
 
       - name: Upload Allure Results Artifact
@@ -87,23 +98,23 @@ jobs:
 
   deploy_allure:
     name: Deploy Allure Report to Pages
-    needs: test 
+    needs: test
     runs-on: ubuntu-latest
+    if: always()  # Run regardless of test job result
     environment:
       name: github-pages
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
-      # FIX: Use the specific Allure CLI installation logic requested by the user
+
       - name: Download Allure CLI
         run: |
           wget https://github.com/allure-framework/allure2/releases/download/${{ env.ALLURE_VERSION }}/allure-${{ env.ALLURE_VERSION }}.tgz
           tar -xzf allure-${{ env.ALLURE_VERSION }}.tgz
           mv allure-${{ env.ALLURE_VERSION }} allure-commandline
           echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
-          
+
       - name: Download Allure Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -122,29 +133,19 @@ jobs:
           rm -rf allure-results
           mv final-allure-results allure-results
 
-      - name: Check for any results
-        id: check_results
-        run: |
-          if [ -z "$(find allure-results -type f -name '*.json' 2>/dev/null)" ]; then
-            echo "proceed=false" >> $GITHUB_OUTPUT
-          else
-            echo "proceed=true" >> $GITHUB_OUTPUT
-          fi
-        
-      - name: Stop Deployment if No Results Exist
-        if: steps.check_results.outputs.proceed == 'false'
-        run: exit 0
-        
-      # FIX (3): Determine Combined Test Status
       - name: Determine Combined Test Status
         id: test_status_check
+        shell: bash
         run: |
-          # Centralized check for any "failed" or "broken" status in any downloaded artifact
-          if find allure-results -type f -name '*-testsuite.json' -exec grep -qE '"status": "(failed|broken)"' {} +; then
-            echo "status=UNSTABLE" >> $GITHUB_OUTPUT
-          else
-            echo "status=PASSED" >> $GITHUB_OUTPUT
+          echo "Upstream status: ${{ needs.test.outputs.test_outcome }}"
+          STATUS="${{ needs.test.outputs.test_outcome }}"
+
+          # If Allure results missing, mark as failed
+          if [ -z "$(find allure-results -type f -name '*.json' 2>/dev/null)" ]; then
+            STATUS="FAILED"
           fi
+
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
 
       - name: Generate Allure Reports
         shell: bash
@@ -152,43 +153,35 @@ jobs:
           echo "Generating Allure reports..."
           BUILD_NUMBER=${GITHUB_RUN_NUMBER}
           SITE_DIR="site"
-          
-          # Initialize site folder structure
-          # NOTE: Since we cannot guarantee history persistence via GitHub Pages in the same job,
-          # we rely on copying history from the previous run's output location (if it exists)
           rm -rf "$SITE_DIR"
           mkdir -p "$SITE_DIR/latest"
-          
+
           for OS in ubuntu-latest windows-latest; do
             RESULTS_DIR="allure-results/$OS"
             REPORT_DIR_BUILD="allure-report-${BUILD_NUMBER}-${OS}"
             REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
-            
-            # FIX (1, 2): Copy history from previous report's final location *before* generating
+
             if [ -d "$REPORT_DIR_LATEST/history" ]; then
               echo "Copying Allure trend history from $REPORT_DIR_LATEST/history..."
               mkdir -p "$RESULTS_DIR/history"
-              cp -r "$REPORT_DIR_LATEST/history"/* "$RESULTS_DIR/history/"
+              cp -r "$REPORT_DIR_LATEST/history"/* "$RESULTS_DIR/history/" || true
             fi
-          
-            # Generate the report for the current OS
+
             allure generate "$RESULTS_DIR" -o "$REPORT_DIR_BUILD" --clean
-            
-            # FIX (1): Add executor.json for trend/history tracking and build context
+
             mkdir -p "$REPORT_DIR_BUILD/widgets"
             echo '{"buildOrder":'"$BUILD_NUMBER"', "reportName":"'"$OS Report"'"}' > "$REPORT_DIR_BUILD/widgets/executor.json"
 
-            # Copy to final destination folders (latest view)
             mkdir -p "$REPORT_DIR_LATEST"
             cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/"
-            
-            echo "Report generated at $REPORT_DIR_LATEST"
+
+            echo "$(date)" > "$REPORT_DIR_LATEST/build-info.txt"
+            echo "Report generated for $OS at $REPORT_DIR_LATEST"
           done
 
       - name: Fix Allure Paths
         shell: bash
         run: |
-          # FIX (2): Fix paths for individual reports
           for OS in ubuntu-latest windows-latest; do
             REPORT_DIR="site/latest/$OS"
             if [ -f "$REPORT_DIR/index.html" ]; then
@@ -197,22 +190,37 @@ jobs:
             fi
           done
 
-      - name: Create Landing Page and Deploy
+      - name: Rebuild index.html
+        shell: bash
         run: |
           SITE_DIR="site"
-          mkdir -p $SITE_DIR
-          # FIX (2): Landing page links to individual OS reports
-          echo "<html><head><title>Allure Reports</title><style>body{font-family:sans-serif;margin:20px;}a{color:#0366d6;text-decoration:none;}a:hover{text-decoration:underline;}</style></head><body><h1>🤖 Robotics BDD Simulation CI/CD</h1><hr><ul>" > $SITE_DIR/index.html
+          echo "<html><head><title>Allure Reports History</title>
+          <style>
+          body{font-family:sans-serif;margin:20px;}
+          ul{list-style:none;padding:0;}
+          li{margin:6px 0;}
+          a{text-decoration:none;color:#0366d6;}
+          a:hover{text-decoration:underline;}
+          </style></head><body><h1>Allure Reports History</h1><hr><ul>" > "$SITE_DIR/index.html"
+
           for OS in ubuntu-latest windows-latest; do
-            if [ -f "$SITE_DIR/latest/$OS/index.html" ]; then
-              echo "<li><a href='latest/$OS/index.html'>Latest Report ($OS)</a></li>" >> $SITE_DIR/index.html
-            else
-              echo "<li>No report found for $OS</li>" >> $SITE_DIR/index.html
+            if [ -d "$SITE_DIR/latest/$OS" ]; then
+              TS=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+              echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: $TS</li>" >> "$SITE_DIR/index.html"
             fi
           done
-          echo "</ul><hr><p>Allure Trends & Executor data are available under each report's widgets/history tabs.</p></body></html>" >> $SITE_DIR/index.html
 
-          touch $SITE_DIR/.nojekyll
+          echo "</ul><hr><h2>Historical Builds</h2><ul>" >> "$SITE_DIR/index.html"
+          BUILDS=$(find "$SITE_DIR" -maxdepth 1 -type d -name "[0-9]*" | xargs -n 1 basename | sort -nr)
+          for BUILD in $BUILDS; do
+            for OS in ubuntu-latest windows-latest; do
+              if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
+                TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
+                echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+              fi
+            done
+          done
+          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
@@ -222,23 +230,24 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        
+
       - name: Add Workflow Summary (Badges)
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
           BASE_URL="${PAGE_URL%/}"
-          
           TEST_STATUS=${{ steps.test_status_check.outputs.status }}
-          
-          # FIX (3): Final status is determined accurately by the centralized check
-          if [[ "$TEST_STATUS" == "UNSTABLE" ]]; then
+
+          if [[ "$TEST_STATUS" == "FAILED" ]]; then
+            STATUS_ICON="❌"
+            STATUS_TEXT="Failed (setup/config error)"
+          elif [[ "$TEST_STATUS" == "UNSTABLE" ]]; then
             STATUS_ICON="⚠️"
             STATUS_TEXT="Unstable (some tests failed)"
           else
             STATUS_ICON="✅"
             STATUS_TEXT="All tests passed"
-          fi        
-          
+          fi
+
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY

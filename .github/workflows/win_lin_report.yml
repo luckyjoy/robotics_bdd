@@ -210,7 +210,7 @@ jobs:
             a{text-decoration:none;color:#0366d6;}
             a:hover{text-decoration:underline;}
             </style></head><body>
-            <h1>🤖 Robotics BDD Simulation CI/CD</h1>
+            <h1>🤖 Robotics BDD Simulation CI/CD Build History</h1>
             <h2>🧩 Latest Allure Reports</h2><hr><ul>" > "$SITE_DIR/index.html"
 
             # --- Latest Reports ---

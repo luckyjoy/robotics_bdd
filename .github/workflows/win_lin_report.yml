@@ -230,8 +230,13 @@ jobs:
                 for OS in ubuntu-latest windows-latest; do
                   if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
                     TS=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "(no timestamp)")
-                    echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD}
+                    echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS}</li>" >> "$SITE_DIR/index.html"
+                  fi
+                done
+              done
+            fi
 
+            echo "</ul><hr><p><em>Generated automatically on $(date)</em></p></body></html>" >> "$SITE_DIR/index.html"
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3

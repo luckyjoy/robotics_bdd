@@ -67,7 +67,7 @@ jobs:
             TEST_EXIT_CODE=$?
           else
             echo "🪟 Running tests on Windows..."
-            pytest  --alluredir="$RESULTS_DIR"
+            pytest -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
 

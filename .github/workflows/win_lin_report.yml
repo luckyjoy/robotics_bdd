@@ -1,9 +1,19 @@
-name: 🤖 Robotics BDD Simulation CI/CD
+name: Robotics BDD CI/CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+env:
+  ALLURE_VERSION: 2.29.0
+  SITE_DIR: site
   
 jobs:
   run-tests:

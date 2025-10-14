@@ -39,7 +39,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install allure-pytest pytest-bdd
 
       - name: Build Docker Image
         if: matrix.os == 'ubuntu-latest'
@@ -88,6 +87,16 @@ jobs:
             echo "✅ All tests passed successfully."
             echo "test_outcome=PASSED" >> $GITHUB_OUTPUT
             exit 0
+          fi
+
+      - name: Copy executor.json
+        if: always()
+        shell: bash  
+        run: |
+          SRC_EXECUTOR="supports/executor.json"
+          DST_DIR="allure-results/${{ matrix.os }}"
+          if [ -f "$SRC_EXECUTOR" ]; then
+            cp "$SRC_EXECUTOR" "$DST_DIR/"
           fi
 
       - name: Upload Allure Results Artifact
@@ -204,7 +213,7 @@ jobs:
             a{text-decoration:none;color:#0366d6;}
             a:hover{text-decoration:underline;}
             </style></head><body>
-            <h1>🤖 Robotics BDD Simulation CI/CD</h1>
+            <h1>🤖 Robotics BDD Simulation CI/CD Build History</h1>
             <h2>🧩 Latest Allure Reports</h2><hr><ul>" > "$SITE_DIR/index.html"
 
             # --- Latest Reports ---

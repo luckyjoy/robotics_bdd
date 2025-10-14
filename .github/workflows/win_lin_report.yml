@@ -141,6 +141,7 @@ jobs:
             fi
 
             # Add environment.properties
+            echo "Create $RESULTS_DIR/environment.properties"
             if [ "$OS" == "ubuntu-latest" ]; then
               cp supports/ubuntu.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
             else
@@ -148,7 +149,8 @@ jobs:
             fi
 
             # Copy categories.json (allow failure and suppress error output)
-            cp supports/categories.json $RESULTS_DIR/categories.json 2>/dev/null || echo "Note: No supports/categories.json found."
+            echo "Create $RESULTS_DIR/categories.json"
+            cp supports/categories.json $RESULTS_DIR/categories.json 2>/dev/null || true
           
             # Add executor.json
             REPO_NAME="${GITHUB_REPOSITORY##*/}"

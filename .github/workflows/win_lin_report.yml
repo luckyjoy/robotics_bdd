@@ -131,8 +131,12 @@ jobs:
             RESULTS_DIR="allure-results/$OS"
             REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER/$OS"
             REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
-
+            
+            # Ensure directories exist
+            mkdir -p "$RESULTS_DIR"
             mkdir -p "$REPORT_DIR_BUILD"
+            mkdir -p "$REPORT_DIR_LATEST"
+
 
             # Merge trend/history from previous latest
             if [ -d "$REPORT_DIR_LATEST/history" ]; then

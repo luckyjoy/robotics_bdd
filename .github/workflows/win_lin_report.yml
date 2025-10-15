@@ -110,7 +110,7 @@ jobs:
 
       # ⬇️ *** FIX: Add a short delay to ensure the previous run's artifact is indexed and available ***
       - name: Wait for previous artifact to index
-        run: sleep 10s
+        run: sleep 15s # Increased delay
         shell: bash
 
       # ⬇️ *** FIX: Download dedicated 'allure-history' artifact from previous successful run ***
@@ -123,6 +123,13 @@ jobs:
           name: allure-history # Use a dedicated artifact name for history
           path: ${{ env.SITE_DIR }}
         continue-on-error: true # Allows the first run to succeed if no artifact exists
+
+      # ⬇️ *** DEBUG: Check if historical data was successfully downloaded ***
+      - name: Verify downloaded history structure
+        run: |
+          echo "Listing contents of $SITE_DIR after download:"
+          ls -R "${{ env.SITE_DIR }}" || echo "site directory is empty or missing"
+        shell: bash
 
       - name: Download Allure CLI
         run: |

@@ -24,6 +24,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     outputs:
       test_outcome: ${{ steps.outcome.outputs.result }}
+      # build_number is already available via github.run_number
       build_number: ${{ github.run_number }}
 
     steps:
@@ -48,45 +49,72 @@ jobs:
 
       - name: Run tests with Allure
         id: run_tests
-        shell: bash
+        # Use shell: bash for all OS for consistency in the script logic below
+        shell: bash 
+        # The script is modified to write the exit code of pytest/docker AND 
+        # the overall test status (PASS/FAIL/UNSTABLE) to a file for later use in the report job.
         run: |
           mkdir -p allure-results
+          TEST_EXIT_CODE=1 # Default to failure
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
               pytest -v --alluredir=allure-results
-            EXIT_CODE=$?
+            TEST_EXIT_CODE=$?
           else
             echo "🪟 Running tests on Windows..."
             pytest -v --alluredir=allure-results
-            EXIT_CODE=$?
+            TEST_EXIT_CODE=$?
           fi
-          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          # Output exit code for the next step (Determine overall outcome)
+          echo "test_exit_code=$TEST_EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          # Determine and save test status to a file for the report job's trend generation
+          if [ "$TEST_EXIT_CODE" -eq 0 ]; then
+            echo "status=PASS" > test_status.txt
+          elif [ "$TEST_EXIT_CODE" -gt 0 ]; then
+            echo "status=UNSTABLE" > test_status.txt
+          else
+            # This handles unexpected non-zero, non-greater-than-zero codes, though technically the shell usually just gives 0 or > 0.
+            echo "status=UNSTABLE" > test_status.txt 
+          fi
+
 
       - name: Generate Allure report
         run: |
           wget -q https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz
           tar -xzf allure-${ALLURE_VERSION}.tgz
           mv allure-${ALLURE_VERSION} allure
+          # Ensure a report is generated even if tests failed
           ./allure/bin/allure generate allure-results --clean -o allure-report
 
       - name: Determine overall outcome
         id: outcome
+        # This step now determines the outcome based on the entire job's execution
         run: |
-          CODE=${{ steps.run_tests.outputs.exit_code }}
-          if [ "$CODE" -eq 0 ]; then
+          CODE=${{ steps.run_tests.outputs.test_exit_code }}
+          JOB_FAILED=${{ job.status == 'failure' }} # Check if setup/config failed (Requirement 3: FAIL)
+          
+          if $JOB_FAILED; then
+            echo "result=FAIL" >> $GITHUB_OUTPUT
+          elif [ "$CODE" -eq 0 ]; then
             echo "result=PASS" >> $GITHUB_OUTPUT
           elif [ "$CODE" -gt 0 ]; then
             echo "result=UNSTABLE" >> $GITHUB_OUTPUT
           else
+            # Default fallback, covers unexpected failure during the run step but after initial setup
             echo "result=FAIL" >> $GITHUB_OUTPUT
           fi
-
+          
+      # Upload the Allure report and the test_status.txt file
       - name: Upload Allure report artifact
         uses: actions/upload-artifact@v4
         with:
           name: allure-report-${{ matrix.os }}
-          path: allure-report/
+          path: |
+            allure-report/
+            test_status.txt
 
   report:
     name: 📊 Generate Dashboard & Deploy
@@ -97,16 +125,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5 # Needed for `jq` if we were to use it, but keeping it simple with shell.
 
       - name: Download test artifacts
         uses: actions/download-artifact@v4
         with:
           path: allure-downloads
 
-      - name: Restore previously deployed site (keep old builds)
+      # FIX 6: Restores ALL previous builds and adds the status file for the current run
+      - name: Restore history & Consolidate current build
         run: |
+          BUILD=${{ needs.test.outputs.build_number }}
+          
+          # Restore previously deployed site (keep old builds)
           mkdir -p previous
-          gh run download --name "allure-history" --dir previous || true
+          # Use the GITHUB_TOKEN implied by permissions:id-token:write and gh cli
+          echo "Attempting to download allure-history artifact..."
+          gh run download -n "allure-history" -D previous || echo "⚠️ No previous 'allure-history' found. Starting fresh."
+          
+          # Restore previous builds
           if [ -d previous/${SITE_DIR}/builds ]; then
             echo "♻️ Restoring previous build history..."
             mkdir -p ${SITE_DIR}/builds
@@ -114,25 +151,52 @@ jobs:
           else
             echo "⚠️ No previous site found — starting fresh."
           fi
-
-      - name: Merge new build reports
-        run: |
-          BUILD=${{ needs.test.outputs.build_number }}
+          
+          # Merge new build reports
           mkdir -p ${SITE_DIR}/builds/${BUILD}
+          CURRENT_BUILD_STATUS_FILE="${SITE_DIR}/builds/${BUILD}/status.txt"
+          
+          # Copy all OS reports and consolidate the status
           for OS_DIR in allure-downloads/*; do
-            OS_NAME=$(basename "$OS_DIR" | sed 's/allure-report-//')
-            mkdir -p "${SITE_DIR}/builds/${BUILD}/${OS_NAME}"
-            cp -r "$OS_DIR"/* "${SITE_DIR}/builds/${BUILD}/${OS_NAME}/"
+            if [ -d "$OS_DIR/allure-report" ]; then
+              OS_NAME=$(basename "$OS_DIR" | sed 's/allure-report-//')
+              mkdir -p "${SITE_DIR}/builds/${BUILD}/${OS_NAME}"
+              cp -r "$OS_DIR"/allure-report/* "${SITE_DIR}/builds/${BUILD}/${OS_NAME}/"
+              
+              # Extract the test status (PASS/UNSTABLE) from the uploaded file
+              if [ -f "$OS_DIR/test_status.txt" ]; then
+                  STATUS_FROM_FILE=$(cat "$OS_DIR/test_status.txt" | cut -d= -f2)
+                  # If any OS run is UNSTABLE, the build status is UNSTABLE
+                  if [ "$STATUS_FROM_FILE" = "UNSTABLE" ]; then
+                    echo "status=UNSTABLE" > "$CURRENT_BUILD_STATUS_FILE"
+                  elif [ ! -f "$CURRENT_BUILD_STATUS_FILE" ]; then
+                    # Default to PASS if status file doesn't exist yet
+                    echo "status=PASS" > "$CURRENT_BUILD_STATUS_FILE"
+                  fi
+              fi
+            fi
           done
+
+          # Final status override: If the 'test' job failed (setup error), the build status is FAIL
+          if [[ "${{ needs.test.result }}" == "failure" ]]; then
+            echo "status=FAIL" > "$CURRENT_BUILD_STATUS_FILE"
+          fi
+
+          # Create 'latest' symlink/copy
           rm -rf ${SITE_DIR}/latest
           cp -r ${SITE_DIR}/builds/${BUILD} ${SITE_DIR}/latest
 
+      # FIX 5: Generate index.html (history + trend) - using Here-Documents for safe output
+      # FIX: YAML Structure - Using Here-Documents for safe output (addressing original error)
       - name: Generate index.html (history + trend)
         run: |
           mkdir -p ${SITE_DIR}
           INDEX=${SITE_DIR}/index.html
           NOW=$(TZ='America/Los_Angeles' date)
-          echo "<html><head><title>🤖 Robotics BDD Dashboard</title>
+          
+          # Use Here-Document for complex HTML/CSS/JS content to avoid YAML parsing issues
+          cat << EOF_HEADER > $INDEX
+          <html><head><title>🤖 Robotics BDD Dashboard</title>
           <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
           <style>
           body{font-family:sans-serif;margin:20px;}
@@ -140,72 +204,98 @@ jobs:
           a:hover{text-decoration:underline;}
           </style></head><body>
           <h1>🤖 Robotics BDD Simulation CI/CD</h1>
-          <h2>📊 Report History & Trends</h2><hr><ul>" > $INDEX
+          <h2>📊 Report History & Trends</h2><hr><ul>
+          EOF_HEADER
 
-          LABELS="";PASS="";FAIL="";UNSTABLE=""
-
+          LABELS="";PASS_COUNT="";FAIL_COUNT="";UNSTABLE_COUNT=""
+          
+          # FIX 5: Collect data for trend chart and history list
           for B in $(find ${SITE_DIR}/builds -mindepth 1 -maxdepth 1 -type d | sort -V); do
             N=$(basename "$B")
             echo "<li>Build #$N →" >> $INDEX
-            for O in $(ls "$B"); do
+            
+            # List OS reports for history
+            for O in $(ls "$B" | grep -v 'status.txt'); do
               echo " <a href='builds/$N/$O/index.html'>$O Report</a>" >> $INDEX
             done
             echo "</li>" >> $INDEX
 
-            STATUS_FILE="$B/status.txt"
-            STATUS="UNSTABLE"
-            if grep -q "PASS" "$STATUS_FILE" 2>/dev/null; then STATUS="PASS"; fi
-            if grep -q "FAIL" "$STATUS_FILE" 2>/dev/null; then STATUS="FAIL"; fi
+            # Get overall build status from the file
+            STATUS="FAIL" # Default to FAIL if no status file is found
+            if [ -f "$B/status.txt" ]; then
+              STATUS=$(cat "$B/status.txt" | cut -d= -f2)
+            fi
 
+            # Populate trend data
             LABELS="$LABELS'$N',"
             if [ "$STATUS" == "PASS" ]; then
-              PASS="$PASS 1,"; FAIL="$FAIL 0,"; UNSTABLE="$UNSTABLE 0,"
+              PASS_COUNT="$PASS_COUNT 1,"; FAIL_COUNT="$FAIL_COUNT 0,"; UNSTABLE_COUNT="$UNSTABLE_COUNT 0,"
             elif [ "$STATUS" == "FAIL" ]; then
-              PASS="$PASS 0,"; FAIL="$FAIL 1,"; UNSTABLE="$UNSTABLE 0,"
-            else
-              PASS="$PASS 0,"; FAIL="$FAIL 0,"; UNSTABLE="$UNSTABLE 1,"
+              PASS_COUNT="$PASS_COUNT 0,"; FAIL_COUNT="$FAIL_COUNT 1,"; UNSTABLE_COUNT="$UNSTABLE_COUNT 0,"
+            else # UNSTABLE
+              PASS_COUNT="$PASS_COUNT 0,"; FAIL_COUNT="$FAIL_COUNT 0,"; UNSTABLE_COUNT="$UNSTABLE_COUNT 1,"
             fi
           done
 
-          echo "</ul><canvas id='trend' width='900' height='400'></canvas>
+          # Use Here-Document for the chart script/footer to avoid YAML parsing issues
+          cat << EOF_FOOTER >> $INDEX
+          </ul><canvas id='trend' width='900' height='400'></canvas>
           <script>
           const ctx=document.getElementById('trend').getContext('2d');
           new Chart(ctx,{
             type:'line',
             data:{
-              labels:[$LABELS],
+              labels:[${LABELS}],
               datasets:[
-                {label:'PASS',data:[$PASS],borderColor:'green',fill:false},
-                {label:'FAIL',data:[$FAIL],borderColor:'red',fill:false},
-                {label:'UNSTABLE',data:[$UNSTABLE],borderColor:'orange',fill:false}
+                {label:'PASS',data:[${PASS_COUNT}],borderColor:'green',fill:false},
+                {label:'FAIL',data:[${FAIL_COUNT}],borderColor:'red',fill:false},
+                {label:'UNSTABLE',data:[${UNSTABLE_COUNT}],borderColor:'orange',fill:false}
               ]},
             options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}});
           </script>
-          <hr><p><em>Generated: $NOW</em></p></body></html>" >> $INDEX
+          <hr><p><em>Generated: $NOW</em></p></body></html>
+          EOF_FOOTER
 
-      - name: Upload artifact for GitHub Pages (Source: GitHub Actions)
+      - name: Upload artifact for GitHub Pages
+        # REQUIREMENT 1: Build and deployment with Source: GitHub Actions (No gh-pages)
         uses: actions/upload-pages-artifact@v3
         with:
           path: ${{ env.SITE_DIR }}
 
       - name: Deploy Allure Dashboard
         id: deployment
+        # REQUIREMENT 1: Use actions/deploy-pages@v4
         uses: actions/deploy-pages@v4
 
       - name: Save history for next run
+        # FIX 6: Saving the full site directory with builds for next run restoration
         uses: actions/upload-artifact@v4
         with:
           name: allure-history
           path: ${{ env.SITE_DIR }}
           retention-days: 10
 
-      - name: Add Workflow Summary (badges)
+      - name: Add Workflow Summary (Badges)
         run: |
-          STATUS=${{ needs.test.outputs.test_outcome }}
-          if [[ "$STATUS" == "PASS" ]]; then ICON="✅"; TEXT="Pass (Everything succeeded)"; fi
-          if [[ "$STATUS" == "UNSTABLE" ]]; then ICON="⚠️"; TEXT="Unstable (Some tests failed)"; fi
-          if [[ "$STATUS" == "FAIL" ]]; then ICON="❌"; TEXT="Fail (Setup/config/env issue)"; fi
+          PAGE_URL=${{ steps.deployment.outputs.page_url }}
+          BASE_URL="${PAGE_URL%/}"
+          TEST_STATUS=${{ needs.test.outputs.test_outcome }}
+
+          if [[ "$TEST_STATUS" == "FAIL" ]]; then
+            STATUS_ICON="❌"
+            STATUS_TEXT="Failed (setup/config error)"
+          elif [[ "$TEST_STATUS" == "UNSTABLE" ]]; then
+            STATUS_ICON="⚠️"
+            STATUS_TEXT="Unstable (some tests failed)"
+          else
+            STATUS_ICON="✅"
+            STATUS_TEXT="All tests passed"
+          fi
 
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "Build #${{ github.run_number }} | $ICON $TEXT" >> $GITHUB_STEP_SUMMARY
-          echo "[📊 View Report Dashboard](${{ steps.deployment.outputs.page_url }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
+          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${{ github.run_number }} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY

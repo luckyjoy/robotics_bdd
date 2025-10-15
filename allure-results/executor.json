@@ -11,7 +11,7 @@
     "Product Model": "BDD-Sim-PyBullet",
     "Test Framework": "Gherkin (Behave)",
     "Git Branch": "main",
-    "Git Commit": "591208c",
+    "Git Commit": "5f8ccb7",
     "OS": "Windows",
     "Python": "3.13.7",
     "Docker Image": "robotics-bdd-local:latest"

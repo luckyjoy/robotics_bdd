@@ -2,9 +2,9 @@ name: Robotics BDD CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: write
@@ -30,23 +30,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: 3.11
-
       - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
       - name: Build Docker Image (Linux only)
         if: matrix.os == 'ubuntu-latest'
         uses: docker/build-push-action@v5
@@ -55,7 +51,6 @@ jobs:
           push: false
           tags: robotics-bdd:ci-build
           load: true
-
       - name: Run tests
         id: run_tests
         shell: bash
@@ -114,21 +109,22 @@ jobs:
           mv allure-${{ env.ALLURE_VERSION }} allure-commandline
           echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
 
-      # --- Try to restore previous deployed site (for history & builds) ---
+      # --- Download previous site artifact for history ---
       - name: Download Previous Site
         uses: actions/download-artifact@v4
         with:
-          name: allure-history-archive
+          name: allure-history
           path: previous-site
         continue-on-error: true
 
-      # --- Merge new test results from both OSes ---
+      # --- Download Allure Results for this run ---
       - name: Download Allure Results
         uses: actions/download-artifact@v4
         with:
           path: ${{ env.RESULTS_DIR }}
 
-      - name: Merge History
+      # --- Restore history for trend charts ---
+      - name: Restore Allure History
         run: |
           mkdir -p "${{ env.RESULTS_DIR }}/history"
           if [ -d "previous-site/latest/history" ]; then
@@ -136,36 +132,42 @@ jobs:
             cp -r previous-site/latest/history/* "${{ env.RESULTS_DIR }}/history/" || true
           fi
 
+      # --- Generate Allure Report ---
       - name: Generate Allure Report
         run: |
           allure generate "${{ env.RESULTS_DIR }}" --clean -o allure-report
 
-      # --- Append new build into /builds folder and keep existing ---
+      # --- Flatten report to avoid symlinks ---
+      - name: Flatten Allure Report
+        run: |
+          mkdir -p site_flat
+          rsync -a --copy-links allure-report/ site_flat/
+
+      # --- Merge previous builds & add new build ---
       - name: Merge Previous Builds & Preserve index.html
         run: |
-          mkdir -p "${{ env.SITE_DIR }}/builds"
+          mkdir -p site_flat/builds
           if [ -d "previous-site/builds" ]; then
             echo "🔁 Restoring previous builds..."
-            cp -r previous-site/builds "${{ env.SITE_DIR }}/" || true
+            cp -r previous-site/builds/* site_flat/builds/
           fi
           BUILD_ID=${{ github.run_number }}
-          BUILD_PATH="${{ env.SITE_DIR }}/builds/${BUILD_ID}"
+          BUILD_PATH="site_flat/builds/${BUILD_ID}"
           mkdir -p "$BUILD_PATH"
-          cp -r allure-report/* "$BUILD_PATH/"
-          rm -rf "${{ env.SITE_DIR }}/latest"
-          cp -r "$BUILD_PATH" "${{ env.SITE_DIR }}/latest"
+          cp -r site_flat/* "$BUILD_PATH/"
+          rm -rf site_flat/latest
+          cp -r "$BUILD_PATH" site_flat/latest
 
-          # Preserve previous index.html before overwriting
+          # Preserve previous index.html for reference
           if [ -f "previous-site/index.html" ]; then
-            cp previous-site/index.html "${{ env.SITE_DIR }}/index_prev.html"
+            cp previous-site/index.html site_flat/index_prev.html
           fi
 
-      # --- Rebuild index.html while keeping historical list ---
-      - name: Update Build History Index (Preserve Existing)
+      # --- Rebuild main index.html ---
+      - name: Update Build History Index
         run: |
-          SITE_DIR="${{ env.SITE_DIR }}"
+          SITE_DIR="site_flat"
           INDEX="$SITE_DIR/index.html"
-          mkdir -p "$SITE_DIR"
           CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
 
           echo "<html><head><title>Allure Report History</title>
@@ -202,7 +204,7 @@ jobs:
             options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}});
           </script>" >> "$INDEX"
 
-          # Append previous index backup (if any)
+          # Append previous index snapshot if exists
           if [ -f "$SITE_DIR/index_prev.html" ]; then
             echo "<hr><details><summary>Previous Index Snapshot</summary>" >> "$INDEX"
             tail -n +1 "$SITE_DIR/index_prev.html" >> "$INDEX"
@@ -211,18 +213,21 @@ jobs:
 
           echo "</body></html>" >> "$INDEX"
 
-      - name: Upload Updated Report Archive
+      # --- Upload flattened site artifact ---
+      - name: Upload Updated Report Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: allure-history-archive
-          path: ${{ env.SITE_DIR }}
+          name: allure-history
+          path: site_flat
           retention-days: 30
 
-      - name: Deploy to GitHub Pages (via Actions)
+      # --- Deploy directly from workspace ---
+      - name: Deploy Allure Reports
         uses: actions/deploy-pages@v4
         with:
-          artifact_name: allure-history-archive
+          artifact_name: allure-history
 
+      # --- Workflow Summary Badges ---
       - name: Add Workflow Summary (Badges)
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}

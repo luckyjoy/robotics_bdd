@@ -13,7 +13,7 @@ permissions:
 
 env:
   ALLURE_VERSION: 2.29.0
-  SITE_DIR: site_flat
+  SITE_DIR: site
   RESULTS_DIR: allure-results
 
 jobs:
@@ -119,12 +119,20 @@ jobs:
         with:
           path: ${{ env.RESULTS_DIR }}
 
-      - name: Merge Previous Builds
+      # --- Merge previous builds safely ---
+      - name: Download Previous Site
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-history-archive
+          path: previous-site
+        continue-on-error: true
+
+      - name: Merge Previous Builds Safely
         run: |
           rm -rf ${{ env.SITE_DIR }}
           mkdir -p ${{ env.SITE_DIR }}/builds
-          # Restore previous builds safely
           if [ -d "previous-site/builds" ]; then
+            # Convert symlinks to real files to satisfy GitHub Pages
             rsync -a --copy-links previous-site/builds/ ${{ env.SITE_DIR }}/builds/
           fi
 
@@ -132,61 +140,42 @@ jobs:
         run: |
           allure generate "${{ env.RESULTS_DIR }}" --clean -o allure-report
 
-      - name: Add Current Build
+      - name: Add New Build
         run: |
           BUILD_ID=${{ github.run_number }}
-          BUILD_PATH="${{ env.SITE_DIR }}/builds/$BUILD_ID"
+          BUILD_PATH="${{ env.SITE_DIR }}/builds/${BUILD_ID}"
           mkdir -p "$BUILD_PATH"
           rsync -a --copy-links allure-report/ "$BUILD_PATH/"
           rm -rf "${{ env.SITE_DIR }}/latest"
           cp -r "$BUILD_PATH" "${{ env.SITE_DIR }}/latest"
 
-      - name: Rebuild index.html with Trend
+      - name: Clean any symlinks before deploy
+        run: |
+          find ${{ env.SITE_DIR }} -type l -delete
+
+      - name: Rebuild Index.html
         run: |
           INDEX="${{ env.SITE_DIR }}/index.html"
           CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
-          echo "<html><head><title>Allure Report History</title>
-          <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
-          <style>body{font-family:sans-serif;margin:20px;}a{text-decoration:none;color:#0366d6;}a:hover{text-decoration:underline;}</style>
-          </head><body><h1>🤖 Robotics BDD CI/CD History</h1>
+          echo "<html><head><title>Allure Report History</title></head><body>
+          <h1>🤖 Robotics BDD CI/CD History</h1>
           <p>Generated on $CURRENT_LA_TIME</p><hr><ul>" > "$INDEX"
 
           BUILDS=$(find "${{ env.SITE_DIR }}/builds" -mindepth 1 -maxdepth 1 -type d | sort -V)
-          LABELS=""
-          PASS_COUNTS=""
-          FAIL_COUNTS=""
           for BUILD_DIR in $BUILDS; do
             BUILD_NUM=$(basename "$BUILD_DIR")
             echo "<li><a href='builds/${BUILD_NUM}/index.html'>Build #${BUILD_NUM}</a></li>" >> "$INDEX"
-            if [ -f "$BUILD_DIR/history/history-trend.json" ]; then
-              PASS=$(jq '[.data[] | select(.status=="passed")] | length' "$BUILD_DIR/history/history-trend.json" 2>/dev/null || echo 0)
-              FAIL=$(jq '[.data[] | select(.status=="failed")] | length' "$BUILD_DIR/history/history-trend.json" 2>/dev/null || echo 0)
-              LABELS="$LABELS'$BUILD_NUM',"
-              PASS_COUNTS="$PASS_COUNTS$PASS,"
-              FAIL_COUNTS="$FAIL_COUNTS$FAIL,"
-            fi
           done
+          echo "</ul></body></html>" >> "$INDEX"
 
-          echo "</ul><canvas id='trendChart' width='800' height='400'></canvas>
-          <script>
-          const ctx=document.getElementById('trendChart').getContext('2d');
-          new Chart(ctx,{type:'line',data:{
-            labels:[${LABELS%,}],
-            datasets:[
-              {label:'Pass',data:[${PASS_COUNTS%,}],borderColor:'green',fill:false},
-              {label:'Fail',data:[${FAIL_COUNTS%,}],borderColor:'red',fill:false}
-            ]},
-            options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}});
-          </script></body></html>" >> "$INDEX"
-
-      - name: Upload Site Artifact
+      - name: Upload Updated Report Artifact
         uses: actions/upload-artifact@v4
         with:
           name: allure-history-archive
           path: ${{ env.SITE_DIR }}
           retention-days: 30
 
-      - name: Deploy Pages
+      - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
         with:
           artifact_name: allure-history-archive

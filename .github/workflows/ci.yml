@@ -1,0 +1,182 @@
+name: 🤖 Robotics BDD Simulation CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+env:
+  ALLURE_VERSION: 2.29.0
+  SITE_DIR: site
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    outputs:
+      build_number: ${{ github.run_number }}
+      test_outcome: ${{ steps.status.outputs.result }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build Docker (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: robotics-bdd:ci-build
+          load: true
+
+      - name: Run Tests
+        id: run_tests
+        shell: bash
+        run: |
+          mkdir -p allure-results
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            echo "🐳 Running tests in Docker..."
+            docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
+              pytest -v --alluredir=allure-results
+            CODE=$?
+          else
+            echo "🪟 Running tests on Windows..."
+            pytest -v --alluredir=allure-results
+            CODE=$?
+          fi
+          echo "exit_code=$CODE" >> $GITHUB_OUTPUT
+
+      - name: Determine test result status
+        id: status
+        run: |
+          CODE=${{ steps.run_tests.outputs.exit_code }}
+          if [ "$CODE" -eq 0 ]; then
+            echo "✅ All tests passed."
+            echo "result=PASS" >> $GITHUB_OUTPUT
+          elif [ "$CODE" -gt 0 ]; then
+            echo "⚠️ Some tests failed."
+            echo "result=UNSTABLE" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Setup/config failure."
+            echo "result=FAIL" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate Allure Report
+        run: |
+          wget https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz
+          tar -xzf allure-${ALLURE_VERSION}.tgz
+          mv allure-${ALLURE_VERSION} allure
+          ./allure/bin/allure generate allure-results --clean -o allure-report
+
+      - name: Upload Allure Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report-${{ matrix.os }}
+          path: allure-report/
+
+  report:
+    runs-on: ubuntu-latest
+    needs: test
+    env:
+      SITE_DIR: site
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all Allure reports
+        uses: actions/download-artifact@v4
+        with:
+          path: allure-downloads
+
+      - name: Restore previous site (preserve all builds)
+        run: |
+          mkdir -p previous
+          gh run download --name "allure-history" --dir previous || true
+          if [ -d previous/site ]; then
+            cp -r previous/site/* site/ || true
+          fi
+
+      - name: Merge new build results
+        run: |
+          BUILD=${{ needs.test.outputs.build_number }}
+          mkdir -p $SITE_DIR/builds/$BUILD
+          for OS_DIR in allure-downloads/*; do
+            OS_NAME=$(basename "$OS_DIR" | sed 's/allure-report-//')
+            mkdir -p "$SITE_DIR/builds/$BUILD/$OS_NAME"
+            cp -r "$OS_DIR"/* "$SITE_DIR/builds/$BUILD/$OS_NAME"/
+          done
+          cp -r "$SITE_DIR/builds/$BUILD" "$SITE_DIR/latest" || true
+
+      - name: Generate index.html with trends
+        run: |
+          mkdir -p $SITE_DIR
+          NOW=$(TZ='America/Los_Angeles' date)
+          INDEX="$SITE_DIR/index.html"
+          echo "<html><head><title>🤖 Robotics BDD Dashboard</title>
+          <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
+          <style>body{font-family:sans-serif;margin:20px;}
+          a{color:#0366d6;text-decoration:none;}
+          a:hover{text-decoration:underline;}</style></head><body>
+          <h1>🤖 Robotics BDD Simulation CI/CD</h1>
+          <h2>📊 Report History & Trends</h2><hr><ul>" > $INDEX
+          LABELS="";PASS="";FAIL="";UNSTABLE=""
+          for B in $(find $SITE_DIR/builds -mindepth 1 -maxdepth 1 -type d | sort -n); do
+            N=$(basename $B)
+            echo "<li>Build #$N →" >> $INDEX
+            for O in $(ls $B); do
+              echo " <a href='builds/$N/$O/index.html'>$O Report</a>" >> $INDEX
+            done
+            echo "</li>" >> $INDEX
+            LABELS="$LABELS'$N',"
+            PASS="$PASS 1,";FAIL="$FAIL 0,";UNSTABLE="$UNSTABLE 0,"
+          done
+          echo "</ul><canvas id='trend' width='800' height='400'></canvas>
+          <script>
+          const ctx=document.getElementById('trend').getContext('2d');
+          new Chart(ctx,{type:'line',data:{labels:[$LABELS],
+            datasets:[{label:'PASS',data:[$PASS],borderColor:'green',fill:false},
+                      {label:'FAIL',data:[$FAIL],borderColor:'red',fill:false},
+                      {label:'UNSTABLE',data:[$UNSTABLE],borderColor:'orange',fill:false}]},
+            options:{scales:{y:{beginAtZero:true}}}});
+          </script><hr><p><em>Updated $NOW</em></p></body></html>" >> $INDEX
+
+      - name: Upload for GitHub Pages Source (GitHub Actions)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.SITE_DIR }}
+
+      - name: Deploy (GitHub Actions source)
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Save history artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-history
+          path: ${{ env.SITE_DIR }}
+          retention-days: 10
+
+      - name: Add Workflow Summary
+        run: |
+          STATUS=${{ needs.test.outputs.test_outcome }}
+          if [[ "$STATUS" == "FAIL" ]]; then ICON="❌"; TEXT="Fail (setup/config error)"; fi
+          if [[ "$STATUS" == "UNSTABLE" ]]; then ICON="⚠️"; TEXT="Unstable (some tests failed)"; fi
+          if [[ "$STATUS" == "PASS" ]]; then ICON="✅"; TEXT="Pass (all tests succeeded)"; fi
+          echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${{ github.run_number }} | $ICON $TEXT" >> $GITHUB_STEP_SUMMARY
+          echo "[📊 View All Reports](${{ steps.deployment.outputs.page_url }})" >> $GITHUB_STEP_SUMMARY

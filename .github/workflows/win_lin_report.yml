@@ -114,7 +114,7 @@ jobs:
           mv allure-${{ env.ALLURE_VERSION }} allure-commandline
           echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
 
-      # --- Restore previous site for history & builds ---
+      # --- Download previous site artifact safely ---
       - name: Download Previous Site
         uses: actions/download-artifact@v4
         with:
@@ -128,7 +128,7 @@ jobs:
         with:
           path: ${{ env.RESULTS_DIR }}
 
-      # --- Merge history ---
+      # --- Merge previous history safely ---
       - name: Merge History
         run: |
           mkdir -p "${{ env.RESULTS_DIR }}/history"
@@ -137,47 +137,41 @@ jobs:
             cp -r previous-site/latest/history/* "${{ env.RESULTS_DIR }}/history/" || true
           fi
 
-      # --- Generate Allure Report ---
       - name: Generate Allure Report
         run: |
           allure generate "${{ env.RESULTS_DIR }}" --clean -o allure-report
 
-      # --- Merge previous builds safely ---
-      - name: Merge Previous Builds & Preserve Index
+      # --- Merge builds safely (no recursion) ---
+      - name: Merge Previous Builds & Preserve index.html
         run: |
           SITE_DIR="${{ env.SITE_DIR }}"
           mkdir -p "$SITE_DIR/builds"
           if [ -d "previous-site/builds" ]; then
             echo "🔁 Restoring previous builds..."
-            find previous-site/builds/* -maxdepth 0 -type d -exec cp -r {} "$SITE_DIR/builds/" \;
+            rsync -a --ignore-existing previous-site/builds/ "$SITE_DIR/builds/"
           fi
 
           BUILD_ID=${{ github.run_number }}
           BUILD_PATH="$SITE_DIR/builds/$BUILD_ID"
           mkdir -p "$BUILD_PATH"
-
-          # Copy allure-report without nested builds
           rsync -a --exclude 'builds' allure-report/ "$BUILD_PATH/"
 
           rm -rf "$SITE_DIR/latest"
           cp -r "$BUILD_PATH" "$SITE_DIR/latest"
 
-          # Preserve previous index.html
+          # Preserve previous index.html for reference
           if [ -f "previous-site/index.html" ]; then
             cp previous-site/index.html "$SITE_DIR/index_prev.html"
           fi
 
-      # --- Remove any symlinks before upload ---
-      - name: Clean Symlinks
-        run: |
-          find "${{ env.SITE_DIR }}" -type l -exec rm -f {} \;
+          # Remove any symlinks before upload
+          find "$SITE_DIR" -type l -exec rm -f {} \;
 
-      # --- Update index.html ---
+      # --- Update Build History Index ---
       - name: Update Build History Index
         run: |
           SITE_DIR="${{ env.SITE_DIR }}"
           INDEX="$SITE_DIR/index.html"
-          mkdir -p "$SITE_DIR"
           CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
 
           echo "<html><head><title>Allure Report History</title>
@@ -214,7 +208,7 @@ jobs:
             options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}});
           </script>" >> "$INDEX"
 
-          # Append previous index backup if exists
+          # Append previous index snapshot
           if [ -f "$SITE_DIR/index_prev.html" ]; then
             echo "<hr><details><summary>Previous Index Snapshot</summary>" >> "$INDEX"
             tail -n +1 "$SITE_DIR/index_prev.html" >> "$INDEX"
@@ -223,17 +217,15 @@ jobs:
 
           echo "</body></html>" >> "$INDEX"
 
-      # --- Upload artifact ---
-      - name: Upload Updated Report Archive
-        uses: actions/upload-artifact@v4
+      # --- Upload artifact for next workflow ---
+      - uses: actions/upload-artifact@v4
         with:
           name: allure-history-archive
           path: ${{ env.SITE_DIR }}
           retention-days: 30
 
       # --- Deploy to GitHub Pages ---
-      - name: Deploy Allure Reports
-        uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v4
         with:
           artifact_name: allure-history-archive
 

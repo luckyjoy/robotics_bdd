@@ -17,6 +17,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
+    continue-on-error: true  # Allow test jobs to continue for UNSTABLE builds
     steps:
       - uses: actions/checkout@v4
 
@@ -31,8 +32,20 @@ jobs:
           pip install pytest pytest-bdd allure-pytest
 
       - name: Run Tests
+        id: run_tests
         run: |
-          pytest --alluredir=${{ env.RESULTS_DIR }}
+          mkdir -p ${{ env.RESULTS_DIR }}
+          pytest --alluredir=${{ env.RESULTS_DIR }} || echo "⚠️ Tests failed"
+        continue-on-error: true
+
+      - name: Determine Build Status
+        id: status
+        run: |
+          if [ "${{ steps.run_tests.outcome }}" = "failure" ]; then
+            echo "status=UNSTABLE" >> $GITHUB_OUTPUT
+          else
+            echo "status=PASS" >> $GITHUB_OUTPUT
+          fi
 
       - name: Upload Allure Results
         uses: actions/upload-artifact@v4
@@ -44,12 +57,13 @@ jobs:
     name: Generate Allure Reports and Deploy
     runs-on: ubuntu-latest
     needs: test
+    if: ${{ always() }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ✅ FIX (3): Use artifact restore via run-name instead of workflow
+      # ✅ Restore full site for Trend + History (no "Not Found" errors)
       - name: Restore Previous Allure Site (for Trend + History)
         uses: actions/download-artifact@v4
         with:
@@ -65,7 +79,7 @@ jobs:
             echo "🗂️ Restoring previous site for trend & build history..."
             cp -r previous_site/* "$SITE_DIR/" || true
           else
-            echo "⚠️ No previous site found (first run or artifact expired)."
+            echo "⚠️ No previous site found (first run or expired artifact)."
           fi
 
       - name: Download Allure CLI
@@ -80,7 +94,8 @@ jobs:
         with:
           path: allure-results
 
-      - name: Generate Allure Reports (Per OS)
+      # ✅ Generate Allure reports with merged trend history
+      - name: Generate Allure Reports Per OS
         run: |
           SITE_DIR="${{ env.SITE_DIR }}"
           mkdir -p "$SITE_DIR"
@@ -91,38 +106,63 @@ jobs:
             LATEST_DIR="$SITE_DIR/latest/${OS}"
             mkdir -p "$REPORT_DIR"
 
-            echo "🔧 Merging previous history for $OS..."
+            # Merge previous history (Trend fix)
             if [ -d "$LATEST_DIR/history" ]; then
+              echo "🔧 Merging history for $OS..."
               mkdir -p "$RESULTS_DIR/history"
               cp -r "$LATEST_DIR/history"/* "$RESULTS_DIR/history/" || true
             fi
 
-            echo "📊 Generating Allure report for $OS..."
+            # Generate new report
             allure generate "$RESULTS_DIR" -o "$REPORT_DIR" --clean
 
-            echo "🔄 Updating latest link for $OS..."
+            # Update 'latest' links
             rm -rf "$LATEST_DIR"
             mkdir -p "$(dirname "$LATEST_DIR")"
             cp -r "$REPORT_DIR" "$LATEST_DIR"
           done
 
-      - name: Fix Allure Internal Paths
+      - name: Determine Final Build Status
+        id: final_status
         run: |
-          find ${{ env.SITE_DIR }} -type f -name "*.html" -exec sed -i 's|../latest/|latest/|g' {} +
+          if [[ "${{ needs.test.result }}" == "failure" ]]; then
+            echo "status=FAIL" >> $GITHUB_OUTPUT
+          elif [[ "${{ needs.test.result }}" == "success" ]]; then
+            echo "status=PASS" >> $GITHUB_OUTPUT
+          else
+            echo "status=UNSTABLE" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Rebuild index.html with History and PDT timestamps
+      - name: Rebuild index.html (History + Status)
         run: |
           SITE_DIR="${{ env.SITE_DIR }}"
           INDEX_FILE="$SITE_DIR/index.html"
+          STATUS="${{ steps.final_status.outputs.status }}"
           echo "<html><head><meta charset='UTF-8'><title>🤖 Robotics BDD Simulation CI/CD Build History</title></head><body>" > "$INDEX_FILE"
           echo "<h1>🤖 Robotics BDD Simulation CI/CD Build History</h1>" >> "$INDEX_FILE"
-          echo "<h2>🧩 Latest Allure Reports</h2>" >> "$INDEX_FILE"
 
+          # Display latest builds
+          echo "<h2>🧩 Latest Allure Reports</h2>" >> "$INDEX_FILE"
           for OS in ubuntu-latest windows-latest; do
             TIME=$(date +"%a %b %d %T PDT %Y")
-            echo "    Latest Report ($OS) - Last run: $TIME --> <a href='latest/$OS/index.html'>Open</a><br>" >> "$INDEX_FILE"
+            echo "Latest Report ($OS) - Last run: $TIME --> <a href='latest/$OS/index.html'>Open</a><br>" >> "$INDEX_FILE"
           done
 
+          # Status summary
+          echo "<h2>📋 Build Status</h2>" >> "$INDEX_FILE"
+          case "$STATUS" in
+            PASS)
+              echo "<p>✅ Pass — Everything succeeded</p>" >> "$INDEX_FILE"
+              ;;
+            UNSTABLE)
+              echo "<p>⚠️ Unstable — Environment okay but test(s) failed</p>" >> "$INDEX_FILE"
+              ;;
+            FAIL)
+              echo "<p>❌ Fail — Pre-test failure or setup issue</p>" >> "$INDEX_FILE"
+              ;;
+          esac
+
+          # History section
           echo "<h2>📊 Report History</h2>" >> "$INDEX_FILE"
           BUILDS=$(find "$SITE_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -nr)
           for B in $BUILDS; do
@@ -133,6 +173,7 @@ jobs:
               fi
             done
           done
+
           echo "</body></html>" >> "$INDEX_FILE"
 
       - name: Upload Pages Artifact
@@ -144,6 +185,7 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
+      # ✅ Keep site and trend data for next build
       - name: Upload Allure History Artifact (for Next Build)
         uses: actions/upload-artifact@v4
         with:

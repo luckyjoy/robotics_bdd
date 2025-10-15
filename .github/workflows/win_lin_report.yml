@@ -66,33 +66,26 @@ jobs:
           mkdir -p "$RESULTS_DIR"
 
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
-            echo "🐳 Running tests in Docker..."
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
               pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
-            echo "🪟 Running tests on Windows..."
             pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
 
           if [ ! -d "$RESULTS_DIR" ] || [ -z "$(find $RESULTS_DIR -type f -name '*.json')" ]; then
-            echo "❌ No Allure results found — setup/configuration failure."
             echo "test_outcome=FAIL" >> $GITHUB_OUTPUT
             exit 1
           fi
 
           if [ $TEST_EXIT_CODE -ne 0 ]; then
-            echo "⚠️ Some tests failed (pytest exit code $TEST_EXIT_CODE)."
             echo "test_outcome=UNSTABLE" >> $GITHUB_OUTPUT
-            exit 0
           else
-            echo "✅ All tests passed successfully."
             echo "test_outcome=PASS" >> $GITHUB_OUTPUT
-            exit 0
           fi
 
-      - name: Upload Allure Results Artifact
+      - name: Upload Allure Results
         uses: actions/upload-artifact@v4
         with:
           name: allure-results-${{ matrix.os }}
@@ -114,7 +107,7 @@ jobs:
           mv allure-${{ env.ALLURE_VERSION }} allure-commandline
           echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
 
-      # --- Download Previous Reports for History ---
+      # --- Download previous site artifact ---
       - name: Download Previous Site
         uses: actions/download-artifact@v4
         with:
@@ -122,18 +115,17 @@ jobs:
           path: previous-site
         continue-on-error: true
 
-      # --- Download latest test results ---
+      # --- Download Allure results from all OSes ---
       - name: Download Allure Results
         uses: actions/download-artifact@v4
         with:
           path: ${{ env.RESULTS_DIR }}
 
-      # --- Restore history for trends ---
+      # --- Restore previous history ---
       - name: Merge History
         run: |
           mkdir -p "${{ env.RESULTS_DIR }}/history"
           if [ -d "previous-site/latest/history" ]; then
-            echo "♻️ Restoring previous history..."
             cp -r previous-site/latest/history/* "${{ env.RESULTS_DIR }}/history/" || true
           fi
 
@@ -142,12 +134,11 @@ jobs:
         run: |
           allure generate "${{ env.RESULTS_DIR }}" --clean -o allure-report
 
-      # --- Merge builds, preserve index.html, and prevent nested copies ---
-      - name: Merge Previous Builds & Preserve index
+      # --- Merge previous builds and append new build ---
+      - name: Merge Builds & Flatten Structure
         run: |
           mkdir -p "${{ env.SITE_DIR }}/builds"
           if [ -d "previous-site/builds" ]; then
-            echo "🔁 Restoring previous builds..."
             cp -r previous-site/builds/* "${{ env.SITE_DIR }}/builds/" || true
           fi
 
@@ -155,28 +146,23 @@ jobs:
           BUILD_PATH="${{ env.SITE_DIR }}/builds/${BUILD_ID}"
           mkdir -p "$BUILD_PATH"
 
-          # Copy Allure report excluding any nested builds
+          # Copy allure-report content without recursive builds folder
           shopt -s extglob
           cp -r allure-report/!(builds) "$BUILD_PATH/"
           shopt -u extglob
 
+          # Update latest folder
           rm -rf "${{ env.SITE_DIR }}/latest"
           cp -r "$BUILD_PATH" "${{ env.SITE_DIR }}/latest"
 
-          # Preserve previous index.html
-          if [ -f "previous-site/index.html" ]; then
-            cp previous-site/index.html "${{ env.SITE_DIR }}/index_prev.html"
-          fi
-
-          # Remove symlinks to satisfy GitHub Pages deployment
+          # Remove all symlinks to prevent deployment issues
           find "${{ env.SITE_DIR }}" -type l -exec rm -f {} \;
 
-      # --- Rebuild index.html with trend charts ---
-      - name: Update Build History Index
+      # --- Update build history index ---
+      - name: Update Index.html
         run: |
           SITE_DIR="${{ env.SITE_DIR }}"
           INDEX="$SITE_DIR/index.html"
-          mkdir -p "$SITE_DIR"
           CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
 
           echo "<html><head><title>Allure Report History</title>
@@ -211,16 +197,9 @@ jobs:
               {label:'Fail',data:[${FAIL_COUNTS%,}],borderColor:'red',fill:false}
             ]},
             options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}});
-          </script>" >> "$INDEX"
+          </script></body></html>" >> "$INDEX"
 
-          if [ -f "$SITE_DIR/index_prev.html" ]; then
-            echo "<hr><details><summary>Previous Index Snapshot</summary>" >> "$INDEX"
-            tail -n +1 "$SITE_DIR/index_prev.html" >> "$INDEX"
-            echo "</details>" >> "$INDEX"
-          fi
-          echo "</body></html>" >> "$INDEX"
-
-      # --- Upload artifact for next run ---
+      # --- Upload artifact for next runs ---
       - name: Upload Updated Report Archive
         uses: actions/upload-artifact@v4
         with:
@@ -228,14 +207,14 @@ jobs:
           path: ${{ env.SITE_DIR }}
           retention-days: 30
 
-      # --- Deploy directly via GitHub Pages ---
-      - name: Deploy to GitHub Pages
+      # --- Deploy to GitHub Pages directly from workspace ---
+      - name: Deploy Allure Reports
         uses: actions/deploy-pages@v4
         with:
           artifact_name: allure-history-archive
 
-      # --- Add Workflow Summary (Badges) ---
-      - name: Add Workflow Summary (Badges)
+      # --- Add Workflow Summary with Badges ---
+      - name: Add Workflow Summary
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
           BASE_URL="${PAGE_URL%/}"

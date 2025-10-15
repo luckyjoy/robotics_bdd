@@ -115,21 +115,21 @@ jobs:
           echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
 
       # --- Download Previous Site for History & Builds ---
-      - name: Download Previous Site
+      - name: Download Previous Site Artifact
         uses: actions/download-artifact@v4
         with:
           name: allure-history-archive
           path: previous-site
         continue-on-error: true
 
-      # --- Download Latest Allure Results ---
+      # --- Download latest test results from both OSes ---
       - name: Download Allure Results
         uses: actions/download-artifact@v4
         with:
           path: ${{ env.RESULTS_DIR }}
 
-      # --- Restore history from previous builds ---
-      - name: Merge History
+      # --- Merge history for trend charts ---
+      - name: Restore History
         run: |
           mkdir -p "${{ env.RESULTS_DIR }}/history"
           if [ -d "previous-site/latest/history" ]; then
@@ -137,39 +137,46 @@ jobs:
             cp -r previous-site/latest/history/* "${{ env.RESULTS_DIR }}/history/" || true
           fi
 
+      # --- Generate Allure Report ---
       - name: Generate Allure Report
         run: |
           allure generate "${{ env.RESULTS_DIR }}" --clean -o allure-report
 
-      # --- Merge Builds & Preserve Previous Index ---
-      - name: Merge Previous Builds & Preserve Index
+      # --- Append new build into /builds folder and avoid recursive copy ---
+      - name: Merge Previous Builds & Preserve index.html
         run: |
           SITE_DIR="${{ env.SITE_DIR }}"
           mkdir -p "$SITE_DIR/builds"
 
-          # Restore previous builds individually to avoid recursive copying
+          # Copy previous builds if exist
           if [ -d "previous-site/builds" ]; then
-            for BUILD in previous-site/builds/*; do
-              BUILD_NAME=$(basename "$BUILD")
-              cp -r "$BUILD" "$SITE_DIR/builds/$BUILD_NAME"
-            done
+            echo "🔁 Restoring previous builds..."
+            cp -r previous-site/builds/* "$SITE_DIR/builds/"
           fi
 
+          # Copy new build
           BUILD_ID=${{ github.run_number }}
           BUILD_PATH="$SITE_DIR/builds/$BUILD_ID"
           mkdir -p "$BUILD_PATH"
-          cp -r allure-report/* "$BUILD_PATH/"
 
-          # Update latest build pointer
+          # Copy allure-report files except builds folder itself
+          shopt -s extglob
+          cp -r allure-report/!(builds) "$BUILD_PATH/" || true
+          shopt -u extglob
+
+          # Update latest symlink
           rm -rf "$SITE_DIR/latest"
           cp -r "$BUILD_PATH" "$SITE_DIR/latest"
 
-          # Preserve previous index for reference
+          # Remove any symlinks to avoid deploy issues
+          find "$SITE_DIR" -type l -exec rm -f {} \;
+
+          # Preserve previous index.html for reference
           if [ -f "previous-site/index.html" ]; then
             cp previous-site/index.html "$SITE_DIR/index_prev.html"
           fi
 
-      # --- Rebuild index.html with trend chart ---
+      # --- Rebuild index.html dynamically ---
       - name: Update Build History Index
         run: |
           SITE_DIR="${{ env.SITE_DIR }}"
@@ -211,7 +218,7 @@ jobs:
             options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}});
           </script>" >> "$INDEX"
 
-          # Append previous index snapshot
+          # Append previous index backup if any
           if [ -f "$SITE_DIR/index_prev.html" ]; then
             echo "<hr><details><summary>Previous Index Snapshot</summary>" >> "$INDEX"
             tail -n +1 "$SITE_DIR/index_prev.html" >> "$INDEX"
@@ -228,13 +235,13 @@ jobs:
           path: ${{ env.SITE_DIR }}
           retention-days: 30
 
-      # --- Deploy artifact via GitHub Pages (direct workspace) ---
+      # --- Deploy reports directly from workspace ---
       - name: Deploy Allure Reports
         uses: actions/deploy-pages@v4
         with:
           artifact_name: allure-history-archive
 
-      # --- Workflow Summary with Badges ---
+      # --- Add workflow summary badges ---
       - name: Add Workflow Summary (Badges)
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
@@ -256,4 +263,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUM_)
+          echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${{ github.run_number }} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY

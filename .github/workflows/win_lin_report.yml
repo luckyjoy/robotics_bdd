@@ -78,7 +78,6 @@ jobs:
             TEST_EXIT_CODE=$?
           fi
 
-          # Check for missing results
           if [ ! -d "$RESULTS_DIR" ] || [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
             echo "❌ No Allure results found — setup or configuration failure."
             echo "test_outcome=FAIL" >> $GITHUB_OUTPUT
@@ -105,21 +104,29 @@ jobs:
     name: Generate Allure Reports & Deploy
     runs-on: ubuntu-latest
     needs: test
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Wait for previous artifact to index
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Wait for artifact indexing
         run: sleep 10s
 
-      - name: Download previous report history
-        uses: dawidd6/action-download-artifact@v3
+      # ✅ FIX (1) + (2): Restore full previous site (build history + trends)
+      - name: Download previous site (for history & trends)
+        uses: actions/checkout@v4
         with:
-          workflow: ${{ github.workflow }}
-          branch: main
-          workflow_conclusion: success
-          name: allure-history
-          path: ${{ env.SITE_DIR }}
+          ref: gh-pages
+          path: previous-site
         continue-on-error: true
+
+      - name: Restore Allure History
+        run: |
+          mkdir -p "${{ env.SITE_DIR }}/latest"
+          if [ -d "previous-site/latest" ]; then
+            echo "♻️ Restoring previous history for trend charts..."
+            cp -r previous-site/* "${{ env.SITE_DIR }}/" || true
+          fi
 
       - name: Download Allure CLI
         run: |
@@ -146,13 +153,13 @@ jobs:
             REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
             mkdir -p "$RESULTS_DIR" "$REPORT_DIR_BUILD" "$REPORT_DIR_LATEST"
 
-            # Merge previous history for trend
-            if [ -d "$REPORT_DIR_LATEST/history" ]; then
+            # ✅ FIX (1): Preserve trend data from previous site
+            if [ -d "previous-site/latest/$OS/history" ]; then
               mkdir -p "$RESULTS_DIR/history"
-              cp -r "$REPORT_DIR_LATEST/history"/* "$RESULTS_DIR/history/" || true
+              cp -r "previous-site/latest/$OS/history/"* "$RESULTS_DIR/history/" || true
             fi
 
-            # Environment
+            # Copy env info
             if [ "$OS" == "ubuntu-latest" ]; then
               cp supports/ubuntu.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
             else
@@ -165,7 +172,7 @@ jobs:
             echo "{\"name\":\"$OS\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/$OS/\",\"buildOrder\":\"${BUILD_NUMBER}\",\"buildName\":\"Build ${BUILD_NUMBER} ($OS)\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$RESULTS_DIR/executor.json"
 
             allure generate "$RESULTS_DIR" -o "$REPORT_DIR_BUILD" --clean
-            cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/"
+            cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/" || true
             date -u > "$REPORT_DIR_BUILD/build-info.txt"
             date -u > "$REPORT_DIR_LATEST/build-info.txt"
           done
@@ -224,10 +231,10 @@ jobs:
             for OS in ubuntu-latest windows-latest; do
               BUILD_FILE="$SITE_DIR/$BUILD/$OS/executor.json"
               if [ -f "$BUILD_FILE" ]; then
-                STATUS=$(jq -r '.buildName' "$BUILD_FILE" 2>/dev/null || echo "PASS")
-                if [[ "$STATUS" == *"PASS"* ]]; then
+                BUILD_NAME=$(jq -r '.buildName' "$BUILD_FILE" 2>/dev/null || echo "")
+                if [[ "$BUILD_NAME" == *"PASS"* ]]; then
                   ((TOTAL_PASS+=1))
-                elif [[ "$STATUS" == *"Unstable"* ]]; then
+                elif [[ "$BUILD_NAME" == *"Unstable"* ]]; then
                   ((TOTAL_UNSTABLE+=1))
                 else
                   ((TOTAL_FAIL+=1))

@@ -108,14 +108,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ⬇️ *** FIX: Download the previously deployed website to preserve history ***
-      - name: Download previous reports artifact
+      # ⬇️ *** FIX: Download dedicated 'allure-history' artifact from previous successful run ***
+      - name: Download previous report history
         uses: dawidd6/action-download-artifact@v3
         with:
           workflow: ${{ github.workflow }}
           branch: main
           workflow_conclusion: success
-          name: github-pages # Default name for artifact from actions/deploy-pages
+          name: allure-history # Use a dedicated artifact name for history
           path: ${{ env.SITE_DIR }}
         continue-on-error: true # Allows the first run to succeed if no artifact exists
 
@@ -245,6 +245,14 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      
+      # ⬇️ *** FIX: Upload the complete site as a dedicated history artifact for the next run ***
+      - name: Upload Allure History Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-history
+          path: ${{ env.SITE_DIR }}
+          retention-days: 7 # Keep history artifact for 7 days
 
       # ⬇️ *** FIX: Use the output from the correct deployment step ***
       - name: Add Workflow Summary (Badges)
@@ -271,4 +279,3 @@ jobs:
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build #${{ github.run_number }} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY
-

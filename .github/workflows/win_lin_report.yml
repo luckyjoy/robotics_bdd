@@ -1,148 +1,177 @@
-name: 🤖 Robotics BDD Simulation CI/CD
+name: Robotics BDD CI/CD
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
 
 env:
-  SITE_DIR: reports/allure-site
+  ALLURE_VERSION: 2.29.0
+  SITE_DIR: site
 
 jobs:
-  test-linux:
-    name: 🐧 Ubuntu (Docker + Allure)
-    runs-on: ubuntu-latest
+  test:
+    name: Run tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    outputs:
+      test_outcome: ${{ steps.run_tests.outputs.test_outcome }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Build & Run Docker Tests
-        run: |
-          docker build -t robotics-bdd .
-          mkdir -p reports/allure-results
-          docker run --rm \
-            -v ${{ github.workspace }}/reports:/app/reports \
-            robotics-bdd bash -c "
-              pytest --alluredir=/app/reports/allure-results || echo 'TEST_FAILED' > /tmp/test_status
-            "
-
-      - name: Determine build status
-        id: linux_status
-        run: |
-          if [ -f /tmp/test_status ]; then
-            echo "status=UNSTABLE" >> $GITHUB_OUTPUT
-          else
-            echo "status=PASS" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Generate Allure Report
-        run: |
-          allure generate reports/allure-results --clean -o reports/allure-report || true
-
-      - name: Upload Allure Artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/setup-python@v5
         with:
-          name: allure-report-ubuntu
-          path: reports/allure-report
+          python-version: 3.11
 
-  test-windows:
-    name: 🪟 Windows (Pytest + Allure)
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/cache@v4
         with:
-          python-version: "3.11"
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
-      - name: Install dependencies
-        run: |
+      - run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install allure-pytest
+
+      - name: Build Docker Image
+        if: matrix.os == 'ubuntu-latest'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: robotics-bdd:ci-build
+          load: true
 
       - name: Run tests
+        id: run_tests
+        shell: bash
         run: |
-          pytest --alluredir=allure-results || echo "TEST_FAILED" > test_status.txt
+          set +e
+          OS_NAME=${{ matrix.os }}
+          RESULTS_DIR="allure-results/$OS_NAME"
+          mkdir -p "$RESULTS_DIR"
 
-      - name: Determine build status
-        id: win_status
-        run: |
-          if (Test-Path test_status.txt) {
-            echo "status=UNSTABLE" >> $env:GITHUB_OUTPUT
-          } else {
-            echo "status=PASS" >> $env:GITHUB_OUTPUT
-          }
-
-      - name: Generate Allure Report
-        run: |
-          allure generate allure-results --clean -o allure-report || exit 0
-
-      - name: Upload Allure Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-report-windows
-          path: allure-report
-
-  deploy:
-    name: 📊 Merge History + Deploy Site
-    needs: [test-linux, test-windows]
-    runs-on: ubuntu-latest
-    if: always()
-
-    steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
-
-      - name: Download Allure Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: ./reports
-
-      - name: Restore Allure History
-        uses: actions/cache@v4
-        with:
-          path: ./reports/allure-history
-          key: allure-history
-          restore-keys: allure-history
-
-      - name: Merge reports and preserve trend
-        run: |
-          mkdir -p $SITE_DIR/latest
-          mkdir -p reports/allure-results/history
-          if [ -d "./reports/allure-history" ]; then
-            cp -r ./reports/allure-history/* ./reports/allure-results/history/ || true
+          if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
+            echo "🐳 Running tests in Docker..."
+            docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
+              pytest -v -m sensors --alluredir="$RESULTS_DIR"
+            TEST_EXIT_CODE=$?
+          else
+            echo "🪟 Running tests on Windows..."
+            pytest -v -m sensors --alluredir="$RESULTS_DIR"
+            TEST_EXIT_CODE=$?
           fi
-          allure generate ./reports/allure-results --clean -o $SITE_DIR/latest/combined
-          cp -r $SITE_DIR/latest/combined/history ./reports/allure-history || true
 
-      - name: Generate Report Index (with History)
+          if [ ! -d "$RESULTS_DIR" ] || [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
+            echo "❌ Setup/config/env failed — marking FAIL."
+            echo "test_outcome=FAIL" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          if [ $TEST_EXIT_CODE -ne 0 ]; then
+            echo "⚠️ Some tests failed — marking UNSTABLE."
+            echo "test_outcome=UNSTABLE" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "✅ All tests passed — marking PASS."
+            echo "test_outcome=PASS" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.os }}
+          path: allure-results/${{ matrix.os }}
+
+  report:
+    name: Generate Allure Reports & Deploy
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: sleep 10s  # Ensure previous artifacts indexed
+
+      - name: Download previous history
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: ${{ github.workflow }}
+          branch: main
+          workflow_conclusion: success
+          name: allure-history
+          path: ${{ env.SITE_DIR }}
+        continue-on-error: true
+
+      - run: |
+          wget https://github.com/allure-framework/allure2/releases/download/${{ env.ALLURE_VERSION }}/allure-${{ env.ALLURE_VERSION }}.tgz
+          tar -xzf allure-${{ env.ALLURE_VERSION }}.tgz
+          mv allure-${{ env.ALLURE_VERSION }} allure-commandline
+          echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: allure-results
+
+      - name: Generate Allure Reports Per OS
+        shell: bash
         run: |
-          BUILD_NO=${{ github.run_number }}
-          NOW=$(date +"%a %b %d %T %Z %Y")
-          mkdir -p $SITE_DIR
-          INDEX="$SITE_DIR/index.html"
-          echo "🤖 Robotics BDD Simulation CI/CD Build History" > $INDEX
-          echo "" >> $INDEX
-          echo "🧩 Latest Allure Reports" >> $INDEX
-          echo "    Latest Report (ubuntu-latest) - Build #$BUILD_NO - $NOW" >> $INDEX
-          echo "    Latest Report (windows-latest) - Build #$BUILD_NO - $NOW" >> $INDEX
-          echo "" >> $INDEX
-          echo "📊 Report History" >> $INDEX
-          echo "" >> $INDEX
+          SITE_DIR="site"
+          BUILD_NUMBER=${{ github.run_number }}
+          mkdir -p "$SITE_DIR/latest"
 
-          mkdir -p build_history
-          echo "$BUILD_NO|$NOW" >> build_history/build_log.txt
-          tac build_history/build_log.txt | while read line; do
-            num=$(echo "$line" | cut -d"|" -f1)
-            time=$(echo "$line" | cut -d"|" -f2-)
-            echo "    Build #$num - $time" >> $INDEX
+          for OS in ubuntu-latest windows-latest; do
+            RESULTS_DIR="allure-results/allure-results-$OS"
+            REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER/$OS"
+            REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
+            mkdir -p "$RESULTS_DIR" "$REPORT_DIR_BUILD" "$REPORT_DIR_LATEST"
+
+            # Merge trend/history
+            if [ -d "$REPORT_DIR_LATEST/history" ]; then
+              mkdir -p "$RESULTS_DIR/history"
+              cp -r "$REPORT_DIR_LATEST/history"/* "$RESULTS_DIR/history/" || true
+            fi
+
+            # Add environment.properties
+            if [ "$OS" == "ubuntu-latest" ]; then
+              cp supports/ubuntu.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
+            else
+              cp supports/windows.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
+            fi
+
+            # Copy categories.json
+            cp supports/categories.json "$RESULTS_DIR/categories.json" 2>/dev/null || true
+
+            # executor.json
+            REPO_NAME="${GITHUB_REPOSITORY##*/}"
+            echo "{\"name\":\"$OS\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/$OS/\",\"buildOrder\":\"${BUILD_NUMBER}\",\"buildName\":\"Build ${BUILD_NUMBER} ($OS)\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$RESULTS_DIR/executor.json"
+
+            # Generate report
+            allure generate "$RESULTS_DIR" -o "$REPORT_DIR_BUILD" --clean
+            cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/"
+            date -u > "$REPORT_DIR_BUILD/build-info.txt"
+            date -u > "$REPORT_DIR_LATEST/build-info.txt"
           done
 
-      # ✅ Upload Pages Artifact (Source: GitHub Actions)
+      - name: Fix Allure Paths
+        shell: bash
+        run: |
+          find site -type f \( -path "*/latest/*" -o -path "*/${{ github.run_number }}/*" \) -name 'index.html' | while read FILE_PATH; do
+            perl -pi -e 's|src="/|src="./|g' "$FILE_PATH"
+            perl -pi -e 's|href="/|href="./|g' "$FILE_PATH"
+          done
+
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -152,25 +181,32 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-      # ✅ Keep site and trend data for next build
-      - name: Upload Allure History Artifact (for Next Build)
+      - name: Upload Allure History Artifact
         uses: actions/upload-artifact@v4
         with:
           name: allure-history
           path: ${{ env.SITE_DIR }}
           retention-days: 14
 
-      - name: Add Workflow Summary (Badges)
+      - name: Add Workflow Summary
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
           BASE_URL="${PAGE_URL%/}"
-          STATUS_ICON="✅"
-          STATUS_TEXT="Pass"
+          TEST_STATUS=${{ needs.test.outputs.test_outcome }}
+
+          if [[ "$TEST_STATUS" == "FAIL" ]]; then
+            STATUS_ICON="❌"
+            STATUS_TEXT="Failed (setup/config error)"
+          elif [[ "$TEST_STATUS" == "UNSTABLE" ]]; then
+            STATUS_ICON="⚠️"
+            STATUS_TEXT="Unstable (some tests failed)"
+          else
+            STATUS_ICON="✅"
+            STATUS_TEXT="All tests passed"
+          fi
 
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Build #${GITHUB_RUN_NUMBER} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${{ github.run_number }} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY

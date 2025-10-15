@@ -108,12 +108,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Checkout Previous Reports (gh-pages)
-        uses: actions/checkout@v4
+      # ⬇️ *** FIX: Download the previously deployed website to preserve history ***
+      - name: Download previous reports artifact
+        uses: dawidd6/action-download-artifact@v3
         with:
-          ref: gh-pages
+          workflow: ${{ github.workflow }}
+          branch: main
+          workflow_conclusion: success
+          name: github-pages # Default name for artifact from actions/deploy-pages
           path: ${{ env.SITE_DIR }}
-        continue-on-error: true
+        continue-on-error: true # Allows the first run to succeed if no artifact exists
 
       - name: Download Allure CLI
         run: |
@@ -232,17 +236,21 @@ jobs:
 
           echo "</ul><hr><p><em>Generated automatically on $CURRENT_LA_TIME</em></p></body></html>" >> "$SITE_DIR/index.html"
 
-      # ⬇️ *** FIX: Replace artifact deployment with a direct push to gh-pages branch ***
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      # ⬇️ *** FIX: Use the standard artifact deployment method ***
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./site
+          path: ${{ env.SITE_DIR }}
 
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      # ⬇️ *** FIX: Use the output from the correct deployment step ***
       - name: Add Workflow Summary (Badges)
         run: |
-          REPO_NAME="${GITHUB_REPOSITORY##*/}"
-          BASE_URL="https://${{ github.repository_owner }}.github.io/${REPO_NAME}"
+          PAGE_URL=${{ steps.deployment.outputs.page_url }}
+          BASE_URL="${PAGE_URL%/}"
           TEST_STATUS=${{ needs.test.outputs.test_outcome }}
 
           if [[ "$TEST_STATUS" == "FAILED" ]]; then

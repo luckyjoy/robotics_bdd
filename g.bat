@@ -7,7 +7,7 @@ git add .
 rem echo Git pushed a dummy file for CI Demo
 echo.
 echo git commit -m "Update Test Runs with Docker..."
-git commit -m "Fix Workflow Summary..."
+git commit -m "Fix Missing Builds in Build History..."
 echo git branch -M main
 REM Ensure branch is main
 git branch -M main

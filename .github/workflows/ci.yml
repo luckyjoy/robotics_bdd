@@ -16,9 +16,6 @@ env:
   SITE_DIR: site
 
 jobs:
-  # ===================================================================
-  # JOB 1: RUN TESTS ON LINUX (DOCKER) & WINDOWS (PYTEST)
-  # ===================================================================
   test:
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -39,12 +36,20 @@ jobs:
         with:
           python-version: 3.11
 
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build Docker Image (Linux only)
+      - name: Build Docker Image
         if: matrix.os == 'ubuntu-latest'
         uses: docker/build-push-action@v5
         with:
@@ -53,7 +58,7 @@ jobs:
           tags: robotics-bdd:ci-build
           load: true
 
-      - name: Run tests & Determine Outcome
+      - name: Run tests
         id: run_tests
         shell: bash
         run: |
@@ -62,34 +67,32 @@ jobs:
           RESULTS_DIR="allure-results/$OS_NAME"
           mkdir -p "$RESULTS_DIR"
 
-          # (Requirement 2) Run tests differently based on OS
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
               pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
-            echo "🪟 Running tests directly on Windows..."
+            echo "🪟 Running tests on Windows..."
             pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
 
-          # (Requirement 3) Set job outcome based on test results
           if [ ! -d "$RESULTS_DIR" ] || [ -z "$(find $RESULTS_DIR -type f -name '*.json' 2>/dev/null)" ]; then
             echo "❌ No Allure results found — setup or configuration failure."
             echo "test_outcome=FAIL" >> $GITHUB_OUTPUT
-            exit 1 # Fail the step if results are missing
+            exit 1
           fi
 
           if [ $TEST_EXIT_CODE -ne 0 ]; then
             echo "⚠️ Some tests failed (pytest exit code $TEST_EXIT_CODE)."
             echo "test_outcome=UNSTABLE" >> $GITHUB_OUTPUT
+            exit 0
           else
             echo "✅ All tests passed successfully."
             echo "test_outcome=PASS" >> $GITHUB_OUTPUT
+            exit 0
           fi
-          # Do not fail the step for test failures, so the report job always runs
-          exit 0
 
       - name: Upload Allure Results Artifact
         uses: actions/upload-artifact@v4
@@ -97,9 +100,6 @@ jobs:
           name: allure-results-${{ matrix.os }}
           path: allure-results/${{ matrix.os }}
 
-  # ===================================================================
-  # JOB 2: GENERATE & DEPLOY ALLURE REPORT
-  # ===================================================================
   report:
     name: Generate Allure Reports & Deploy
     runs-on: ubuntu-latest
@@ -109,23 +109,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download previous site (for history)
+      - name: Wait for artifact indexing
+        run: sleep 10s
+
+      # Restore previous site for history & trends
+      - name: Download previous site (for history & trends)
         uses: actions/checkout@v4
         with:
-          ref: gh-pages # Branch where GitHub Pages deploys
+          ref: gh-pages
           path: previous-site
-        continue-on-error: true # Don't fail if the branch doesn't exist yet
+        continue-on-error: true
 
-      # (Requirement 6) Fix: Restore ENTIRE previous site to find all build folders
       - name: Restore Allure History
         run: |
-          mkdir -p "${{ env.SITE_DIR }}"
-          if [ -d "previous-site" ] && [ "$(ls -A previous-site)" ]; then
-            echo "♻️ Restoring previous build site to preserve history..."
-            cp -r previous-site/* "${{ env.SITE_DIR }}/"
-          else
-            echo "No previous site found. A new history will be created."
-          fi
+          mkdir -p "${{ env.SITE_DIR }}/latest"
+          for OS in ubuntu-latest windows-latest; do
+            if [ -d "previous-site/latest/$OS/history" ]; then
+              mkdir -p "$SITE_DIR/latest/$OS/history"
+              cp -rL previous-site/latest/$OS/history/* "$SITE_DIR/latest/$OS/history/" || true
+            fi
+          done
 
       - name: Download Allure CLI
         run: |
@@ -139,10 +142,10 @@ jobs:
         with:
           path: allure-results
 
-      - name: Generate Allure Reports
+      - name: Generate Allure Reports Per OS
         shell: bash
         run: |
-          SITE_DIR="${{ env.SITE_DIR }}"
+          SITE_DIR="site"
           BUILD_NUMBER=${{ github.run_number }}
           mkdir -p "$SITE_DIR/latest"
 
@@ -150,49 +153,122 @@ jobs:
             RESULTS_DIR="allure-results/allure-results-$OS"
             REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER/$OS"
             REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
+
             mkdir -p "$RESULTS_DIR" "$REPORT_DIR_BUILD" "$REPORT_DIR_LATEST"
 
-            # (Requirement 5) Fix: Copy history from restored site to generate trends
-            if [ -d "$SITE_DIR/latest/$OS/history" ]; then
-              mkdir -p "$RESULTS_DIR/history"
-              echo "♻️ Copying history for $OS to generate new trend chart..."
-              cp -r "$SITE_DIR/latest/$OS/history/"* "$RESULTS_DIR/history/"
-            fi
-
-            # Add environment and executor info to the report
+            # Copy environment info and categories
             if [ "$OS" == "ubuntu-latest" ]; then
               cp supports/ubuntu.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
             else
               cp supports/windows.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
             fi
-            
+            cp supports/categories.json "$RESULTS_DIR/categories.json" 2>/dev/null || true
+
+            # executor.json
             REPO_NAME="${GITHUB_REPOSITORY##*/}"
             echo "{\"name\":\"$OS\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/$OS/\",\"buildOrder\":\"${BUILD_NUMBER}\",\"buildName\":\"Build ${BUILD_NUMBER} ($OS)\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$RESULTS_DIR/executor.json"
 
+            # Generate Allure report
             allure generate "$RESULTS_DIR" -o "$REPORT_DIR_BUILD" --clean
-            cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/"
+            cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/" || true
+            date -u > "$REPORT_DIR_BUILD/build-info.txt"
+            date -u > "$REPORT_DIR_LATEST/build-info.txt"
           done
 
-      - name: Rebuild History Index Page
+      - name: Fix Allure Paths
         shell: bash
         run: |
-          SITE_DIR="${{ env.SITE_DIR }}"
-          echo "<html><head><title>Allure Reports History</title>" > "$SITE_DIR/index.html"
-          echo "<style>body{font-family:sans-serif;margin:40px;} h1,h2{border-bottom:1px solid #ccc;padding-bottom:5px;} ul{list-style:none;padding:0;} li{margin:10px 0;}</style>" >> "$SITE_DIR/index.html"
-          echo "</head><body><h1>🤖 Robotics BDD Simulation CI/CD</h1>" >> "$SITE_DIR/index.html"
-          echo "<h2>Latest Reports</h2><ul>" >> "$SITE_DIR/index.html"
-          echo "<li><a href='latest/ubuntu-latest/'>Latest Report (Ubuntu)</a></li>" >> "$SITE_DIR/index.html"
-          echo "<li><a href='latest/windows-latest/'>Latest Report (Windows)</a></li>" >> "$SITE_DIR/index.html"
-          echo "</ul><h2>Report History</h2><ul>" >> "$SITE_DIR/index.html"
-          
-          # Find all numbered build directories and list them, newest first
-          find "$SITE_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -nr | while read BUILD; do
-            echo "<li><b>Build #$BUILD</b> &rarr; <a href='${BUILD}/ubuntu-latest/'>Ubuntu Report</a> / <a href='${BUILD}/windows-latest/'>Windows Report</a></li>" >> "$SITE_DIR/index.html"
+          find site -type f \( -path "*/latest/*" -o -path "*/${{ github.run_number }}/*" \) -name 'index.html' | while read FILE_PATH; do
+            perl -pi -e 's|src="/|src="./|g' "$FILE_PATH"
+            perl -pi -e 's|href="/|href="./|g' "$FILE_PATH"
           done
-          
-          echo "</ul></body></html>" >> "$SITE_DIR/index.html"
 
-      # (Requirement 1) Use GitHub Actions to build and deploy the report artifact
+      - name: Rebuild index.html with Trend Charts
+        shell: bash
+        run: |
+          SITE_DIR="site"
+          CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
+          mkdir -p "$SITE_DIR"
+
+          echo "<html><head><title>Allure Reports History</title>
+          <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
+          <style>
+          body{font-family:sans-serif;margin:20px;}
+          ul{list-style:none;padding:0;}
+          li{margin:6px 0;}
+          a{text-decoration:none;color:#0366d6;}
+          a:hover{text-decoration:underline;}
+          </style></head><body>
+          <h1>🤖 Robotics BDD Simulation CI/CD Build History</h1>
+          <h2>🧩 Latest Allure Reports</h2><hr><ul>" > "$SITE_DIR/index.html"
+
+          for OS in ubuntu-latest windows-latest; do
+            if [ -d "$SITE_DIR/latest/$OS" ]; then
+              TS_UTC=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "")
+              TS_DISPLAY=$(TZ='America/Los_Angeles' date -d "$TS_UTC" '+%a %b %d %H:%M:%S %Z %Y' 2>/dev/null || echo "$TS_UTC")
+              echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: $TS_DISPLAY</li>" >> "$SITE_DIR/index.html"
+            else
+              echo "<li><strong>$OS:</strong> (No report found)</li>" >> "$SITE_DIR/index.html"
+            fi
+          done
+
+          echo "</ul><hr><h2>📊 Report History & Trends</h2>" >> "$SITE_DIR/index.html"
+          BUILDS=$(find "$SITE_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -n)
+          echo "<canvas id='trendChart' width='800' height='400'></canvas>" >> "$SITE_DIR/index.html"
+          echo "<ul>" >> "$SITE_DIR/index.html"
+
+          LABELS=""
+          PASS_COUNTS=""
+          FAIL_COUNTS=""
+          UNSTABLE_COUNTS=""
+
+          for BUILD in $BUILDS; do
+            TOTAL_PASS=0
+            TOTAL_FAIL=0
+            TOTAL_UNSTABLE=0
+            for OS in ubuntu-latest windows-latest; do
+              BUILD_FILE="$SITE_DIR/$BUILD/$OS/executor.json"
+              if [ -f "$BUILD_FILE" ]; then
+                BUILD_NAME=$(jq -r '.buildName' "$BUILD_FILE" 2>/dev/null || echo "")
+                if [[ "$BUILD_NAME" == *"PASS"* ]]; then
+                  ((TOTAL_PASS+=1))
+                elif [[ "$BUILD_NAME" == *"Unstable"* ]]; then
+                  ((TOTAL_UNSTABLE+=1))
+                else
+                  ((TOTAL_FAIL+=1))
+                fi
+              fi
+            done
+            LABELS="$LABELS'$BUILD',"
+            PASS_COUNTS="$PASS_COUNTS$TOTAL_PASS,"
+            FAIL_COUNTS="$FAIL_COUNTS$TOTAL_FAIL,"
+            UNSTABLE_COUNTS="$UNSTABLE_COUNTS$TOTAL_UNSTABLE,"
+
+            echo "<li><a href='${BUILD}/ubuntu-latest/'>Build #${BUILD}</a> / <a href='${BUILD}/windows-latest/'>Build #${BUILD}</a></li>" >> "$SITE_DIR/index.html"
+          done
+
+          echo "</ul>
+          <script>
+          const ctx = document.getElementById('trendChart').getContext('2d');
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: [${LABELS%,}],
+              datasets: [
+                {label: 'PASS', data: [${PASS_COUNTS%,}], borderColor: 'green', fill: false},
+                {label: 'FAIL', data: [${FAIL_COUNTS%,}], borderColor: 'red', fill: false},
+                {label: 'UNSTABLE', data: [${UNSTABLE_COUNTS%,}], borderColor: 'orange', fill: false}
+              ]
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { position: 'top' } },
+              scales: { y: { beginAtZero: true, stepSize: 1 } }
+            }
+          });
+          </script>
+          <hr><p><em>Generated automatically on $CURRENT_LA_TIME</em></p></body></html>" >> "$SITE_DIR/index.html"
+
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -201,6 +277,13 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Upload Allure History Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-history
+          path: ${{ env.SITE_DIR }}
+          retention-days: 7
 
       - name: Add Workflow Summary (Badges)
         run: |

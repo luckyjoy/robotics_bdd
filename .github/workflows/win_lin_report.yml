@@ -13,7 +13,7 @@ permissions:
 
 env:
   ALLURE_VERSION: 2.29.0
-  SITE_DIR: site_flat
+  SITE_DIR: site
   RESULTS_DIR: allure-results
 
 jobs:
@@ -66,26 +66,33 @@ jobs:
           mkdir -p "$RESULTS_DIR"
 
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
+            echo "🐳 Running tests in Docker..."
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
               pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
+            echo "🪟 Running tests on Windows..."
             pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
 
           if [ ! -d "$RESULTS_DIR" ] || [ -z "$(find $RESULTS_DIR -type f -name '*.json')" ]; then
+            echo "❌ No Allure results found — setup/configuration failure."
             echo "test_outcome=FAIL" >> $GITHUB_OUTPUT
             exit 1
           fi
 
           if [ $TEST_EXIT_CODE -ne 0 ]; then
+            echo "⚠️ Some tests failed (pytest exit code $TEST_EXIT_CODE)."
             echo "test_outcome=UNSTABLE" >> $GITHUB_OUTPUT
+            exit 0
           else
+            echo "✅ All tests passed successfully."
             echo "test_outcome=PASS" >> $GITHUB_OUTPUT
+            exit 0
           fi
 
-      - name: Upload Allure Results
+      - name: Upload Allure Results Artifact
         uses: actions/upload-artifact@v4
         with:
           name: allure-results-${{ matrix.os }}
@@ -107,7 +114,7 @@ jobs:
           mv allure-${{ env.ALLURE_VERSION }} allure-commandline
           echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
 
-      # --- Download previous site artifact ---
+      # --- Restore previous site for history & builds ---
       - name: Download Previous Site
         uses: actions/download-artifact@v4
         with:
@@ -115,17 +122,18 @@ jobs:
           path: previous-site
         continue-on-error: true
 
-      # --- Download Allure results from all OSes ---
+      # --- Download latest test results ---
       - name: Download Allure Results
         uses: actions/download-artifact@v4
         with:
           path: ${{ env.RESULTS_DIR }}
 
-      # --- Restore previous history ---
+      # --- Merge history ---
       - name: Merge History
         run: |
           mkdir -p "${{ env.RESULTS_DIR }}/history"
           if [ -d "previous-site/latest/history" ]; then
+            echo "♻️ Restoring previous history..."
             cp -r previous-site/latest/history/* "${{ env.RESULTS_DIR }}/history/" || true
           fi
 
@@ -134,35 +142,42 @@ jobs:
         run: |
           allure generate "${{ env.RESULTS_DIR }}" --clean -o allure-report
 
-      # --- Merge previous builds and append new build ---
-      - name: Merge Builds & Flatten Structure
+      # --- Merge previous builds safely ---
+      - name: Merge Previous Builds & Preserve Index
         run: |
-          mkdir -p "${{ env.SITE_DIR }}/builds"
+          SITE_DIR="${{ env.SITE_DIR }}"
+          mkdir -p "$SITE_DIR/builds"
           if [ -d "previous-site/builds" ]; then
-            cp -r previous-site/builds/* "${{ env.SITE_DIR }}/builds/" || true
+            echo "🔁 Restoring previous builds..."
+            find previous-site/builds/* -maxdepth 0 -type d -exec cp -r {} "$SITE_DIR/builds/" \;
           fi
 
           BUILD_ID=${{ github.run_number }}
-          BUILD_PATH="${{ env.SITE_DIR }}/builds/${BUILD_ID}"
+          BUILD_PATH="$SITE_DIR/builds/$BUILD_ID"
           mkdir -p "$BUILD_PATH"
 
-          # Copy allure-report content without recursive builds folder
-          shopt -s extglob
-          cp -r allure-report/!(builds) "$BUILD_PATH/"
-          shopt -u extglob
+          # Copy allure-report without nested builds
+          rsync -a --exclude 'builds' allure-report/ "$BUILD_PATH/"
 
-          # Update latest folder
-          rm -rf "${{ env.SITE_DIR }}/latest"
-          cp -r "$BUILD_PATH" "${{ env.SITE_DIR }}/latest"
+          rm -rf "$SITE_DIR/latest"
+          cp -r "$BUILD_PATH" "$SITE_DIR/latest"
 
-          # Remove all symlinks to prevent deployment issues
+          # Preserve previous index.html
+          if [ -f "previous-site/index.html" ]; then
+            cp previous-site/index.html "$SITE_DIR/index_prev.html"
+          fi
+
+      # --- Remove any symlinks before upload ---
+      - name: Clean Symlinks
+        run: |
           find "${{ env.SITE_DIR }}" -type l -exec rm -f {} \;
 
-      # --- Update build history index ---
-      - name: Update Index.html
+      # --- Update index.html ---
+      - name: Update Build History Index
         run: |
           SITE_DIR="${{ env.SITE_DIR }}"
           INDEX="$SITE_DIR/index.html"
+          mkdir -p "$SITE_DIR"
           CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
 
           echo "<html><head><title>Allure Report History</title>
@@ -197,9 +212,18 @@ jobs:
               {label:'Fail',data:[${FAIL_COUNTS%,}],borderColor:'red',fill:false}
             ]},
             options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}});
-          </script></body></html>" >> "$INDEX"
+          </script>" >> "$INDEX"
 
-      # --- Upload artifact for next runs ---
+          # Append previous index backup if exists
+          if [ -f "$SITE_DIR/index_prev.html" ]; then
+            echo "<hr><details><summary>Previous Index Snapshot</summary>" >> "$INDEX"
+            tail -n +1 "$SITE_DIR/index_prev.html" >> "$INDEX"
+            echo "</details>" >> "$INDEX"
+          fi
+
+          echo "</body></html>" >> "$INDEX"
+
+      # --- Upload artifact ---
       - name: Upload Updated Report Archive
         uses: actions/upload-artifact@v4
         with:
@@ -207,14 +231,14 @@ jobs:
           path: ${{ env.SITE_DIR }}
           retention-days: 30
 
-      # --- Deploy to GitHub Pages directly from workspace ---
+      # --- Deploy to GitHub Pages ---
       - name: Deploy Allure Reports
         uses: actions/deploy-pages@v4
         with:
           artifact_name: allure-history-archive
 
-      # --- Add Workflow Summary with Badges ---
-      - name: Add Workflow Summary
+      # --- Workflow Summary Badges ---
+      - name: Add Workflow Summary (Badges)
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
           BASE_URL="${PAGE_URL%/}"

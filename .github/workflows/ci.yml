@@ -14,7 +14,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     outputs:
-      test_outcome: ${{ steps.set_outcome.outputs.test_outcome }}
+      build_number: ${{ github.run_number }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -26,95 +27,86 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run Pytest with Allure
+      - name: Run tests with Allure
         run: |
           pytest --alluredir=allure-results || echo "Tests failed but continuing"
 
       - name: Generate Allure Report
         run: |
-          allure generate allure-results --clean -o allure-report || echo "Allure generation failed"
+          allure generate allure-results --clean -o allure-report || echo "Report generation failed"
 
-      - name: Determine test outcome
-        id: set_outcome
-        run: |
-          if [ -f allure-results/summary.json ]; then
-            STATUS=$(jq -r '.status' allure-results/summary.json)
-          else
-            STATUS="UNKNOWN"
-          fi
-          echo "test_outcome=$STATUS" >> $GITHUB_OUTPUT
+      - name: Upload Allure Report for deploy job
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report/
 
   deploy:
     runs-on: ubuntu-latest
     needs: test
     env:
       SITE_DIR: site
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Allure Report
-        run: |
-          mkdir -p "${{ env.SITE_DIR }}/latest"
-          cp -r allure-report "${{ env.SITE_DIR }}/latest/ubuntu-latest"
+      - name: Download Allure Report from test job
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report
 
-      - name: Restore existing deployment (to preserve history)
+      - name: Restore existing gh-pages (preserve history)
         run: |
           mkdir -p old_site
-          echo "Fetching existing site content..."
           git fetch origin gh-pages || true
           git checkout origin/gh-pages -- . || true
           cp -r . old_site || true
-          echo "Existing site copied."
 
       - name: Determine build number
-        id: build_number
-        run: |
-          BUILD_NUM=${{ github.run_number }}
-          echo "BUILD_NUM=$BUILD_NUM" >> $GITHUB_ENV
+        run: echo "BUILD_NUM=${{ needs.test.outputs.build_number }}" >> $GITHUB_ENV
 
-      - name: Preserve old builds and append new one
+      - name: Merge old builds + new build
         run: |
           mkdir -p "${{ env.SITE_DIR }}/history"
-          # Copy previous builds if any
           if [ -d old_site/history ]; then
             cp -r old_site/history/* "${{ env.SITE_DIR }}/history/" || true
           fi
-
-          # Copy new build folder
           cp -r allure-report "${{ env.SITE_DIR }}/history/build-${{ env.BUILD_NUM }}"
 
-      - name: Generate index.html (Dashboard + Trends)
+      - name: Generate index.html dashboard
         run: |
-          CURRENT_LA_TIME=$(TZ="America/Los_Angeles" date)
+          CURRENT_TIME=$(TZ="America/Los_Angeles" date)
+          mkdir -p "${{ env.SITE_DIR }}"
+          INDEX="${{ env.SITE_DIR }}/index.html"
+
           echo "<!DOCTYPE html><html><head><meta charset='UTF-8'>
           <title>🤖 Robotics BDD Simulation CI/CD Dashboard</title>
           <style>
-            body { font-family: Arial; background: #f9f9f9; padding: 20px; }
-            h2 { color: #222; }
-            a { color: #0056b3; text-decoration: none; }
-            .build-history { margin-top: 20px; }
+            body { font-family: Arial, sans-serif; background: #fafafa; padding: 20px; }
+            h1,h2 { color: #222; }
+            ul { line-height: 1.6; }
+            a { color: #0078d7; text-decoration: none; }
+            a:hover { text-decoration: underline; }
           </style>
-          <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
           </head><body>
           <h1>🤖 Robotics BDD Simulation CI/CD</h1>
-          <h2>📊 Report History & Trends</h2><hr>" > "${{ env.SITE_DIR }}/index.html"
+          <h2>📊 Report History & Trends</h2><hr>" > "$INDEX"
 
-          echo "<ul>" >> "${{ env.SITE_DIR }}/index.html"
+          echo "<ul>" >> "$INDEX"
           for dir in $(ls -r "${{ env.SITE_DIR }}/history"); do
             BUILD_NUM=$(echo $dir | sed 's/build-//')
-            echo "<li>Build #${BUILD_NUM} → <a href='history/${dir}/index.html'>Report</a></li>" >> "${{ env.SITE_DIR }}/index.html"
+            echo "<li>Build #${BUILD_NUM} → <a href='history/${dir}/index.html'>Allure Report</a></li>" >> "$INDEX"
           done
-          echo "</ul>" >> "${{ env.SITE_DIR }}/index.html"
+          echo "</ul><hr>" >> "$INDEX"
+          echo "<p><em>Generated: $CURRENT_TIME</em></p></body></html>" >> "$INDEX"
 
-          echo "<hr><p><em>Generated on $CURRENT_LA_TIME</em></p></body></html>" >> "${{ env.SITE_DIR }}/index.html"
-
-      - name: Upload Pages Artifact
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: ${{ env.SITE_DIR }}
 
       - name: Deploy to GitHub Pages
-        id: deployment
         uses: actions/deploy-pages@v4
 
       - name: Add Workflow Summary (Badges)

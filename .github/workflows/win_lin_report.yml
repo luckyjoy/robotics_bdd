@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -105,12 +105,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     steps:
-      # ⬇️ *** FIX: Checkout the main repository FIRST. ***
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ⬇️ *** FIX: Checkout previous reports SECOND, into the 'site' directory. ***
-      # This prevents the main checkout from deleting the history.
       - name: Checkout Previous Reports (gh-pages)
         uses: actions/checkout@v4
         with:
@@ -235,19 +232,17 @@ jobs:
 
           echo "</ul><hr><p><em>Generated automatically on $CURRENT_LA_TIME</em></p></body></html>" >> "$SITE_DIR/index.html"
 
-      - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
+      # ⬇️ *** FIX: Replace artifact deployment with a direct push to gh-pages branch ***
       - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
 
       - name: Add Workflow Summary (Badges)
         run: |
-          PAGE_URL=${{ steps.deployment.outputs.page_url }}
-          BASE_URL="${PAGE_URL%/}"
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          BASE_URL="https://${{ github.repository_owner }}.github.io/${REPO_NAME}"
           TEST_STATUS=${{ needs.test.outputs.test_outcome }}
 
           if [[ "$TEST_STATUS" == "FAILED" ]]; then
@@ -268,3 +263,4 @@ jobs:
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build #${{ github.run_number }} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY
+

@@ -70,11 +70,11 @@ jobs:
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
-              pytest -m sensors --alluredir="$RESULTS_DIR"
+              pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
             echo "🪟 Running tests on Windows..."
-            pytest -m sensors --alluredir="$RESULTS_DIR"
+            pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
 
@@ -112,23 +112,18 @@ jobs:
       - name: Wait for artifact indexing
         run: sleep 10s
 
-      # Restore previous site for history & trends
-      - name: Download previous site (for history & trends)
+      # ✅ Restore all previous builds (history + trends)
+      - name: Download previous site
         uses: actions/checkout@v4
         with:
           ref: gh-pages
           path: previous-site
         continue-on-error: true
 
-      - name: Restore Allure History
+      - name: Restore previous builds
         run: |
-          mkdir -p "${{ env.SITE_DIR }}/latest"
-          for OS in ubuntu-latest windows-latest; do
-            if [ -d "previous-site/latest/$OS/history" ]; then
-              mkdir -p "$SITE_DIR/latest/$OS/history"
-              cp -rL previous-site/latest/$OS/history/* "$SITE_DIR/latest/$OS/history/" || true
-            fi
-          done
+          mkdir -p "${{ env.SITE_DIR }}"
+          cp -r previous-site/* "${{ env.SITE_DIR }}/" 2>/dev/null || true
 
       - name: Download Allure CLI
         run: |
@@ -153,10 +148,15 @@ jobs:
             RESULTS_DIR="allure-results/allure-results-$OS"
             REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER/$OS"
             REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
-
             mkdir -p "$RESULTS_DIR" "$REPORT_DIR_BUILD" "$REPORT_DIR_LATEST"
 
-            # Copy environment info and categories
+            # ✅ Preserve trend history
+            if [ -d "$SITE_DIR/latest/$OS/history" ]; then
+              mkdir -p "$RESULTS_DIR/history"
+              cp -r "$SITE_DIR/latest/$OS/history/"* "$RESULTS_DIR/history/" || true
+            fi
+
+            # Copy env info
             if [ "$OS" == "ubuntu-latest" ]; then
               cp supports/ubuntu.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
             else
@@ -168,7 +168,6 @@ jobs:
             REPO_NAME="${GITHUB_REPOSITORY##*/}"
             echo "{\"name\":\"$OS\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/$OS/\",\"buildOrder\":\"${BUILD_NUMBER}\",\"buildName\":\"Build ${BUILD_NUMBER} ($OS)\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$RESULTS_DIR/executor.json"
 
-            # Generate Allure report
             allure generate "$RESULTS_DIR" -o "$REPORT_DIR_BUILD" --clean
             cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/" || true
             date -u > "$REPORT_DIR_BUILD/build-info.txt"

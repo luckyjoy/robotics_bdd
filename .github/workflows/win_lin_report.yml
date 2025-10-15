@@ -108,12 +108,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ⬇️ *** FIX: Add a short delay to ensure the previous run's artifact is indexed and available ***
+      # ⬇️ *** FIX: Wait for previous artifact indexing ***
       - name: Wait for previous artifact to index
-        run: sleep 15s # Increased delay
+        run: sleep 15s 
         shell: bash
 
-      # ⬇️ *** FIX: Download dedicated 'allure-history' artifact from previous successful run ***
+      # ⬇️ *** FIX: Download history to a temporary location (old_site) ***
       - name: Download previous report history
         uses: dawidd6/action-download-artifact@v3
         with:
@@ -121,15 +121,36 @@ jobs:
           branch: main
           workflow_conclusion: success
           name: allure-history # Use a dedicated artifact name for history
-          path: ${{ env.SITE_DIR }}
+          path: old_site # Download to a temporary path
         continue-on-error: true # Allows the first run to succeed if no artifact exists
 
       # ⬇️ *** DEBUG: Check if historical data was successfully downloaded ***
       - name: Verify downloaded history structure
         run: |
-          echo "Listing contents of $SITE_DIR after download:"
-          ls -R "${{ env.SITE_DIR }}" || echo "site directory is empty or missing"
+          echo "Listing contents of old_site after download:"
+          ls -R "old_site" || echo "old_site directory is empty or missing"
         shell: bash
+      
+      # ⬇️ *** FIX: Integrate Historical Reports into SITE_DIR ***
+      - name: Integrate Historical Reports
+        shell: bash
+        run: |
+          OLD_SITE="old_site"
+          SITE_DIR="${{ env.SITE_DIR }}"
+
+          mkdir -p "$SITE_DIR"
+
+          if [ -d "$OLD_SITE" ]; then
+            echo "Moving contents from $OLD_SITE to $SITE_DIR..."
+            # Move all subdirectories (which are build numbers and 'latest') from old_site to site
+            # This integrates the entire history structure (273, 272, latest) into the current site directory
+            find "$OLD_SITE" -mindepth 1 -maxdepth 1 -exec mv {} "$SITE_DIR/" \; 2>/dev/null || true
+            rm -rf "$OLD_SITE"
+            echo "Contents of $SITE_DIR after integrating old reports:"
+            ls -R "$SITE_DIR"
+          else
+            echo "No previous allure-history artifact found. Starting history fresh."
+          fi
 
       - name: Download Allure CLI
         run: |
@@ -159,11 +180,15 @@ jobs:
             mkdir -p "$REPORT_DIR_BUILD"
             mkdir -p "$REPORT_DIR_LATEST"
 
-            # Merge trend/history from previous latest
-            if [ -d "$REPORT_DIR_LATEST/history" ]; then
+            # ⬇️ *** FIX: This path is now guaranteed to exist if history was downloaded ***
+            PREVIOUS_HISTORY_PATH="$REPORT_DIR_LATEST/history" 
+            if [ -d "$PREVIOUS_HISTORY_PATH" ]; then
               echo "Merging history from previous report for $OS..."
               mkdir -p "$RESULTS_DIR/history"
-              cp -r "$REPORT_DIR_LATEST/history"/* "$RESULTS_DIR/history/" || true
+              # Copies trend/history files from the previous build's 'latest' report into the current results
+              cp -r "$PREVIOUS_HISTORY_PATH"/* "$RESULTS_DIR/history/" || true
+            else
+              echo "Warning: Previous history path not found at $PREVIOUS_HISTORY_PATH. This will result in an empty trend graph."
             fi
 
             # Add environment.properties
@@ -182,10 +207,10 @@ jobs:
             REPO_NAME="${GITHUB_REPOSITORY##*/}"
             echo "{\"name\":\"$OS\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/$OS/\",\"buildOrder\":\"${BUILD_NUMBER}\",\"buildName\":\"Build ${BUILD_NUMBER} ($OS)\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$RESULTS_DIR/executor.json"
 
-            # Generate Allure report
+            # Generate Allure report (creates the new history files including build 274's data)
             allure generate "$RESULTS_DIR" -o "$REPORT_DIR_BUILD" --clean
 
-            # Copy to latest
+            # Copy to latest (Fixes Issue 3 by overwriting with current run's data)
             mkdir -p "$REPORT_DIR_LATEST"
             cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/"
 
@@ -222,6 +247,7 @@ jobs:
 
           for OS in ubuntu-latest windows-latest; do
             if [ -d "$SITE_DIR/latest/$OS" ]; then
+              # This line now reads the build-info.txt updated in the current run (Build 274)
               TS_UTC=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "")
               TS_DISPLAY=$(TZ='America/Los_Angeles' date -d "$TS_UTC" '+%a %b %d %H:%M:%S %Z %Y' 2>/dev/null || echo "$TS_UTC")
               echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: $TS_DISPLAY</li>" >> "$SITE_DIR/index.html"
@@ -231,6 +257,7 @@ jobs:
           done
 
           echo "</ul><hr><h2>📊 Report History</h2><ul>" >> "$SITE_DIR/index.html"
+          # This now lists all build folders (274, 273, 272, etc.) that were integrated into $SITE_DIR
           BUILDS=$(find "$SITE_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -nr)
           if [ -z "$BUILDS" ]; then
             echo "<li>No previous builds found.</li>" >> "$SITE_DIR/index.html"
@@ -248,7 +275,6 @@ jobs:
 
           echo "</ul><hr><p><em>Generated automatically on $CURRENT_LA_TIME</em></p></body></html>" >> "$SITE_DIR/index.html"
 
-      # ⬇️ *** FIX: Use the standard artifact deployment method ***
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -266,7 +292,6 @@ jobs:
           path: ${{ env.SITE_DIR }}
           retention-days: 7 # Keep history artifact for 7 days
 
-      # ⬇️ *** FIX: Use the output from the correct deployment step ***
       - name: Add Workflow Summary (Badges)
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}

@@ -13,7 +13,7 @@ permissions:
 
 env:
   ALLURE_VERSION: 2.29.0
-  SITE_DIR: site
+  SITE_DIR: site_flat
   RESULTS_DIR: allure-results
 
 jobs:
@@ -114,66 +114,44 @@ jobs:
           mv allure-${{ env.ALLURE_VERSION }} allure-commandline
           echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
 
-      # --- Download previous site artifact for history & builds ---
-      - name: Download Previous Site
-        uses: actions/download-artifact@v4
-        with:
-          name: allure-history-archive
-          path: previous-site
-        continue-on-error: true
-
-      # --- Download Allure Results from all OSes ---
       - name: Download Allure Results
         uses: actions/download-artifact@v4
         with:
           path: ${{ env.RESULTS_DIR }}
 
-      # --- Restore history from previous builds ---
-      - name: Merge History
+      - name: Merge Previous Builds
         run: |
-          mkdir -p "${{ env.RESULTS_DIR }}/history"
-          if [ -d "previous-site/latest/history" ]; then
-            echo "♻️ Restoring previous history..."
-            cp -r previous-site/latest/history/* "${{ env.RESULTS_DIR }}/history/" || true
+          rm -rf ${{ env.SITE_DIR }}
+          mkdir -p ${{ env.SITE_DIR }}/builds
+          # Restore previous builds safely
+          if [ -d "previous-site/builds" ]; then
+            rsync -a --copy-links previous-site/builds/ ${{ env.SITE_DIR }}/builds/
           fi
 
-      # --- Generate Allure Report ---
       - name: Generate Allure Report
         run: |
           allure generate "${{ env.RESULTS_DIR }}" --clean -o allure-report
 
-      # --- Prepare site folder and avoid copying directories into themselves ---
-      - name: Merge Builds & Prepare Site
+      - name: Add Current Build
         run: |
-          mkdir -p "${{ env.SITE_DIR }}/builds"
-          # Restore previous builds
-          if [ -d "previous-site/builds" ]; then
-            echo "🔁 Restoring previous builds..."
-            rsync -a --ignore-existing previous-site/builds/ "${{ env.SITE_DIR }}/builds/"
-          fi
-          # Add current build
           BUILD_ID=${{ github.run_number }}
-          BUILD_PATH="${{ env.SITE_DIR }}/builds/${BUILD_ID}"
+          BUILD_PATH="${{ env.SITE_DIR }}/builds/$BUILD_ID"
           mkdir -p "$BUILD_PATH"
-          cp -r allure-report/* "$BUILD_PATH/"
+          rsync -a --copy-links allure-report/ "$BUILD_PATH/"
           rm -rf "${{ env.SITE_DIR }}/latest"
           cp -r "$BUILD_PATH" "${{ env.SITE_DIR }}/latest"
 
-      # --- Rebuild index.html with trend charts ---
-      - name: Update Build History Index
+      - name: Rebuild index.html with Trend
         run: |
-          SITE_DIR="${{ env.SITE_DIR }}"
-          INDEX="$SITE_DIR/index.html"
-          mkdir -p "$SITE_DIR"
+          INDEX="${{ env.SITE_DIR }}/index.html"
           CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
-
           echo "<html><head><title>Allure Report History</title>
           <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
           <style>body{font-family:sans-serif;margin:20px;}a{text-decoration:none;color:#0366d6;}a:hover{text-decoration:underline;}</style>
           </head><body><h1>🤖 Robotics BDD CI/CD History</h1>
           <p>Generated on $CURRENT_LA_TIME</p><hr><ul>" > "$INDEX"
 
-          BUILDS=$(find "$SITE_DIR/builds" -mindepth 1 -maxdepth 1 -type d | sort -V)
+          BUILDS=$(find "${{ env.SITE_DIR }}/builds" -mindepth 1 -maxdepth 1 -type d | sort -V)
           LABELS=""
           PASS_COUNTS=""
           FAIL_COUNTS=""
@@ -201,21 +179,18 @@ jobs:
             options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}});
           </script></body></html>" >> "$INDEX"
 
-      # --- Upload artifact for future builds ---
-      - name: Upload Updated Report Archive
+      - name: Upload Site Artifact
         uses: actions/upload-artifact@v4
         with:
           name: allure-history-archive
           path: ${{ env.SITE_DIR }}
           retention-days: 30
 
-      # --- Deploy Reports directly from workspace ---
-      - name: Deploy Allure Reports
+      - name: Deploy Pages
         uses: actions/deploy-pages@v4
         with:
           artifact_name: allure-history-archive
 
-      # --- Add Workflow Summary Badges ---
       - name: Add Workflow Summary (Badges)
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
@@ -224,19 +199,17 @@ jobs:
 
           if [[ "$TEST_STATUS" == "FAIL" ]]; then
             STATUS_ICON="❌"
-            STATUS_TEXT="Failed (setup/config error)"
+            STATUS_TEXT="Failed"
           elif [[ "$TEST_STATUS" == "UNSTABLE" ]]; then
             STATUS_ICON="⚠️"
-            STATUS_TEXT="Unstable (some tests failed)"
+            STATUS_TEXT="Unstable"
           else
             STATUS_ICON="✅"
             STATUS_TEXT="All tests passed"
           fi
 
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build #${{ github.run_number }} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY

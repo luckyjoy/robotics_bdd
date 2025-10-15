@@ -29,16 +29,13 @@ jobs:
       test_outcome: ${{ steps.run_tests.outputs.test_outcome }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.11
 
-      - name: Cache pip dependencies
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
@@ -50,7 +47,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build Docker Image
+      - name: Build Docker Image (Linux only)
         if: matrix.os == 'ubuntu-latest'
         uses: docker/build-push-action@v5
         with:
@@ -71,11 +68,11 @@ jobs:
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
-              pytest -v -m sensors --alluredir="$RESULTS_DIR"
+              pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
             echo "🪟 Running tests on Windows..."
-            pytest -v -m sensors --alluredir="$RESULTS_DIR"
+            pytest -v -m navigation --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
 
@@ -100,19 +97,15 @@ jobs:
         with:
           name: allure-results-${{ matrix.os }}
           path: allure-results/${{ matrix.os }}
+          retention-days: 30
 
   report:
     name: 📊 Generate & Deploy Allure Report
     runs-on: ubuntu-latest
     needs: [test]
-    permissions:
-      contents: write
-      pages: write
-      id-token: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Download Allure CLI
         run: |
@@ -121,54 +114,54 @@ jobs:
           mv allure-${{ env.ALLURE_VERSION }} allure-commandline
           echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
 
-      # --- Download Previous Site for Build History ---
-      - name: Download Previous Reports Artifact
+      # --- Try to restore previous deployed site (for history & builds) ---
+      - name: Download Previous Site
         uses: actions/download-artifact@v4
         with:
           name: allure-history-archive
           path: previous-site
         continue-on-error: true
 
-      # --- Download Latest Test Results ---
-      - name: Download Allure Results Artifacts
+      # --- Merge new test results from both OSes ---
+      - name: Download Allure Results
         uses: actions/download-artifact@v4
         with:
           path: ${{ env.RESULTS_DIR }}
 
-      # --- Restore History for Trend Charts ---
-      - name: Restore Allure History
+      - name: Merge History
         run: |
           mkdir -p "${{ env.RESULTS_DIR }}/history"
-          if [ -d "previous-site/history" ]; then
-            echo "♻️ Restoring Allure history for trends..."
-            cp -r previous-site/history/* "${{ env.RESULTS_DIR }}/history/" || true
+          if [ -d "previous-site/latest/history" ]; then
+            echo "♻️ Restoring previous history..."
+            cp -r previous-site/latest/history/* "${{ env.RESULTS_DIR }}/history/" || true
           fi
 
-      # --- Generate Allure Report for Combined Results ---
       - name: Generate Allure Report
         run: |
           allure generate "${{ env.RESULTS_DIR }}" --clean -o allure-report
 
-      # --- Merge Previous Builds and Preserve History ---
-      - name: Merge Previous Builds
+      # --- Append new build into /builds folder and keep existing ---
+      - name: Merge Previous Builds & Preserve index.html
         run: |
           mkdir -p "${{ env.SITE_DIR }}/builds"
           if [ -d "previous-site/builds" ]; then
+            echo "🔁 Restoring previous builds..."
             cp -r previous-site/builds "${{ env.SITE_DIR }}/" || true
           fi
-
           BUILD_ID=${{ github.run_number }}
           BUILD_PATH="${{ env.SITE_DIR }}/builds/${BUILD_ID}"
           mkdir -p "$BUILD_PATH"
-
           cp -r allure-report/* "$BUILD_PATH/"
           rm -rf "${{ env.SITE_DIR }}/latest"
           cp -r "$BUILD_PATH" "${{ env.SITE_DIR }}/latest"
 
-          echo "✅ Added Build #${BUILD_ID} to dashboard"
+          # Preserve previous index.html before overwriting
+          if [ -f "previous-site/index.html" ]; then
+            cp previous-site/index.html "${{ env.SITE_DIR }}/index_prev.html"
+          fi
 
-      # --- Update Index Page Dynamically with Trend Charts ---
-      - name: Update Build History Index
+      # --- Rebuild index.html while keeping historical list ---
+      - name: Update Build History Index (Preserve Existing)
         run: |
           SITE_DIR="${{ env.SITE_DIR }}"
           INDEX="$SITE_DIR/index.html"
@@ -207,17 +200,25 @@ jobs:
               {label:'Fail',data:[${FAIL_COUNTS%,}],borderColor:'red',fill:false}
             ]},
             options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}});
-          </script></body></html>" >> "$INDEX"
+          </script>" >> "$INDEX"
 
-      # --- Upload New History Artifact ---
+          # Append previous index backup (if any)
+          if [ -f "$SITE_DIR/index_prev.html" ]; then
+            echo "<hr><details><summary>Previous Index Snapshot</summary>" >> "$INDEX"
+            tail -n +1 "$SITE_DIR/index_prev.html" >> "$INDEX"
+            echo "</details>" >> "$INDEX"
+          fi
+
+          echo "</body></html>" >> "$INDEX"
+
       - name: Upload Updated Report Archive
         uses: actions/upload-artifact@v4
         with:
           name: allure-history-archive
           path: ${{ env.SITE_DIR }}
+          retention-days: 30
 
-      # --- Deploy to GitHub Pages (directly from workspace) ---
-      - name: Deploy Allure Reports
+      - name: Deploy to GitHub Pages (via Actions)
         uses: actions/deploy-pages@v4
         with:
           artifact_name: allure-history-archive

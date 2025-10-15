@@ -108,6 +108,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ⬇️ *** FIX: Add a short delay to ensure the previous run's artifact is indexed and available ***
+      - name: Wait for previous artifact to index
+        run: sleep 10s
+        shell: bash
+
       # ⬇️ *** FIX: Download dedicated 'allure-history' artifact from previous successful run ***
       - name: Download previous report history
         uses: dawidd6/action-download-artifact@v3

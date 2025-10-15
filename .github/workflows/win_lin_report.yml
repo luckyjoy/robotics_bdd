@@ -15,6 +15,10 @@ env:
   ALLURE_VERSION: 2.29.0
   SITE_DIR: site
 
+concurrency:
+  group: robotics-bdd-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Run tests on ${{ matrix.os }}
@@ -67,9 +71,9 @@ jobs:
           RESULTS_DIR="allure-results/$OS_NAME"
           mkdir -p "$RESULTS_DIR"
 
-          if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
+          if [ "$OS_NAME" = "ubuntu-latest" ]; then
             echo "🐳 Running tests in Docker..."
-            docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
+            docker run --rm -v "$(pwd)":/workspace -w /workspace robotics-bdd:ci-build \
               pytest -v -m sensors --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
@@ -97,7 +101,7 @@ jobs:
       - name: Upload Allure Results Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-${{ matrix.os }}
+          name: ${{ matrix.os }}
           path: allure-results/${{ matrix.os }}
 
   report:
@@ -112,7 +116,7 @@ jobs:
       - name: Wait for previous artifact to index
         run: sleep 10s
 
-      # ✅ FIX 1 & 2
+      # ✅ FIX 1 & 2: Restore full previous site for trend + history
       - name: Restore Previous Allure Site (for Trend + History)
         uses: dawidd6/action-download-artifact@v3
         with:
@@ -128,17 +132,18 @@ jobs:
         run: |
           SITE_DIR="site"
           mkdir -p "$SITE_DIR"
-
           if [ -d "previous_site" ]; then
             echo "🗂️ Restoring previous site content for trend & build history..."
             cp -r previous_site/* "$SITE_DIR/" || true
           else
-            echo "⚠️ No previous site found (first run or artifact expired)."
+            echo "⚠️ No previous site found (first run or expired artifact)."
           fi
+          echo "✅ Previous site merged. Contents:"
+          ls -R "$SITE_DIR" || true
 
       - name: Download Allure CLI
         run: |
-          wget https://github.com/allure-framework/allure2/releases/download/${{ env.ALLURE_VERSION }}/allure-${{ env.ALLURE_VERSION }}.tgz
+          wget -q https://github.com/allure-framework/allure2/releases/download/${{ env.ALLURE_VERSION }}/allure-${{ env.ALLURE_VERSION }}.tgz
           tar -xzf allure-${{ env.ALLURE_VERSION }}.tgz
           mv allure-${{ env.ALLURE_VERSION }} allure-commandline
           echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
@@ -149,17 +154,104 @@ jobs:
           path: allure-results
 
       - name: Generate Allure Reports Per OS
+        shell: bash
         run: |
-          # (your existing Allure generation logic)
-          ...
+          SITE_DIR="site"
+          BUILD_NUMBER=${{ github.run_number }}
+          mkdir -p "$SITE_DIR/latest"
+
+          for OS in ubuntu-latest windows-latest; do
+            RESULTS_DIR="allure-results/$OS"
+            REPORT_DIR_BUILD="$SITE_DIR/$BUILD_NUMBER/$OS"
+            REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
+
+            mkdir -p "$RESULTS_DIR" "$REPORT_DIR_BUILD" "$REPORT_DIR_LATEST"
+
+            # Merge history for Allure trend
+            if [ -d "$REPORT_DIR_LATEST/history" ]; then
+              echo "Merging trend history from previous $OS report..."
+              mkdir -p "$RESULTS_DIR/history"
+              cp -r "$REPORT_DIR_LATEST/history"/* "$RESULTS_DIR/history/" || true
+            fi
+
+            # Add environment.properties
+            if [ "$OS" = "ubuntu-latest" ]; then
+              cp supports/ubuntu.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
+            else
+              cp supports/windows.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
+            fi
+
+            # Copy categories.json
+            cp supports/categories.json "$RESULTS_DIR/categories.json" 2>/dev/null || true
+
+            # Add executor.json
+            REPO_NAME="${GITHUB_REPOSITORY##*/}"
+            echo "{\"name\":\"$OS\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/$OS/\",\"buildOrder\":\"${BUILD_NUMBER}\",\"buildName\":\"Build ${BUILD_NUMBER} ($OS)\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$RESULTS_DIR/executor.json"
+
+            # Generate Allure report
+            allure generate "$RESULTS_DIR" -o "$REPORT_DIR_BUILD" --clean
+
+            # Copy to latest
+            cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/"
+
+            # Save build info
+            date -u > "$REPORT_DIR_BUILD/build-info.txt"
+            date -u > "$REPORT_DIR_LATEST/build-info.txt"
+          done
 
       - name: Fix Allure Paths
+        shell: bash
         run: |
-          # (unchanged)
+          find site -type f \( -path "*/latest/*" -o -path "*/${{ github.run_number }}/*" \) -name 'index.html' | while read FILE_PATH; do
+            perl -pi -e 's|src="/|src="./|g' "$FILE_PATH"
+            perl -pi -e 's|href="/|href="./|g' "$FILE_PATH"
+          done
 
       - name: Rebuild index.html (History & PDT Fix)
+        shell: bash
         run: |
-          # (unchanged)
+          SITE_DIR="site"
+          CURRENT_LA_TIME=$(TZ='America/Los_Angeles' date)
+
+          mkdir -p "$SITE_DIR"
+          echo "<html><head><title>Allure Reports History</title>
+          <style>
+          body{font-family:sans-serif;margin:20px;}
+          ul{list-style:none;padding:0;}
+          li{margin:6px 0;}
+          a{text-decoration:none;color:#0366d6;}
+          a:hover{text-decoration:underline;}
+          </style></head><body>
+          <h1>🤖 Robotics BDD Simulation CI/CD Build History</h1>
+          <h2>🧩 Latest Allure Reports</h2><hr><ul>" > "$SITE_DIR/index.html"
+
+          for OS in ubuntu-latest windows-latest; do
+            if [ -d "$SITE_DIR/latest/$OS" ]; then
+              TS_UTC=$(cat "$SITE_DIR/latest/$OS/build-info.txt" 2>/dev/null || echo "")
+              TS_DISPLAY=$(TZ='America/Los_Angeles' date -d "$TS_UTC" '+%a %b %d %H:%M:%S %Z %Y' 2>/dev/null || echo "$TS_UTC")
+              echo "<li><strong><a href='latest/$OS/'>Latest Report ($OS)</a></strong> - Last run: $TS_DISPLAY</li>" >> "$SITE_DIR/index.html"
+            else
+              echo "<li><strong>$OS:</strong> (No report found)</li>" >> "$SITE_DIR/index.html"
+            fi
+          done
+
+          echo "</ul><hr><h2>📊 Report History</h2><ul>" >> "$SITE_DIR/index.html"
+          BUILDS=$(find "$SITE_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -nr)
+          if [ -z "$BUILDS" ]; then
+            echo "<li>No previous builds found.</li>" >> "$SITE_DIR/index.html"
+          else
+            for BUILD in $BUILDS; do
+              for OS in ubuntu-latest windows-latest; do
+                if [ -d "$SITE_DIR/$BUILD/$OS" ]; then
+                  TS_UTC=$(cat "$SITE_DIR/$BUILD/$OS/build-info.txt" 2>/dev/null || echo "")
+                  TS_DISPLAY=$(TZ='America/Los_Angeles' date -d "$TS_UTC" '+%a %b %d %H:%M:%S %Z %Y' 2>/dev/null || echo "$TS_UTC")
+                  echo "<li><a href='${BUILD}/${OS}/'>Build #${BUILD} ($OS)</a> - ${TS_DISPLAY}</li>" >> "$SITE_DIR/index.html"
+                fi
+              done
+            done
+          fi
+
+          echo "</ul><hr><p><em>Generated automatically on $CURRENT_LA_TIME</em></p></body></html>" >> "$SITE_DIR/index.html"
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
@@ -175,30 +267,16 @@ jobs:
         with:
           name: allure-history
           path: ${{ env.SITE_DIR }}
-          retention-days: 7
+          retention-days: 30
 
-      # ⬇️ *** FIX: Use the output from the correct deployment step ***
       - name: Add Workflow Summary (Badges)
         run: |
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
           BASE_URL="${PAGE_URL%/}"
-          TEST_STATUS=${{ needs.test.outputs.test_outcome }}
-
-          if [[ "$TEST_STATUS" == "FAILED" ]]; then
-            STATUS_ICON="❌"
-            STATUS_TEXT="Failed (setup/config error)"
-          elif [[ "$TEST_STATUS" == "UNSTABLE" ]]; then
-            STATUS_ICON="⚠️"
-            STATUS_TEXT="Unstable (some tests failed)"
-          else
-            STATUS_ICON="✅"
-            STATUS_TEXT="All tests passed"
-          fi
-
           echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Report History](https://img.shields.io/badge/All-Builds-green)](${BASE_URL}/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Build #${{ github.run_number }} | Status: $STATUS_ICON $STATUS_TEXT" >> $GITHUB_STEP_SUMMARY
+          echo "Build #${{ github.run_number }} completed successfully." >>_

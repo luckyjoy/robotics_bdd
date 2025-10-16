@@ -109,22 +109,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Wait for artifact indexing
-        run: sleep 10s
-
-      # ✅ FIX (1) + (2): Restore full previous site (build history + trends)
-      - name: Download previous site (for history & trends)
-        uses: actions/checkout@v4
+      # ✅ FIX: Download history from the previous run's artifact instead of a git branch.
+      - name: Download previous Allure history artifact
+        uses: dawidd6/action-download-artifact@v6
         with:
-          ref: gh-pages
+          workflow: ${{ github.workflow }}
+          branch: main
+          name: allure-history
           path: previous-site
-        continue-on-error: true
+          if_no_artifact_found: ignore
 
       - name: Restore Allure History
         run: |
-          mkdir -p "${{ env.SITE_DIR }}/latest"
-          if [ -d "previous-site/latest" ]; then
-            echo "♻️ Restoring previous history for trend charts..."
+          mkdir -p "${{ env.SITE_DIR }}"
+          if [ -d "previous-site" ]; then
+            echo "♻️ Restoring previous site history..."
             cp -r previous-site/* "${{ env.SITE_DIR }}/" || true
           fi
 
@@ -135,7 +134,7 @@ jobs:
           mv allure-${{ env.ALLURE_VERSION }} allure-commandline
           echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
 
-      - name: Download Allure Artifacts
+      - name: Download Allure Test Results
         uses: actions/download-artifact@v4
         with:
           path: allure-results
@@ -153,10 +152,10 @@ jobs:
             REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
             mkdir -p "$RESULTS_DIR" "$REPORT_DIR_BUILD" "$REPORT_DIR_LATEST"
 
-            # ✅ FIX (1): Preserve trend data from previous site
-            if [ -d "previous-site/latest/$OS/history" ]; then
+            # Use restored history from the artifact for trend data
+            if [ -d "site/latest/$OS/history" ]; then
               mkdir -p "$RESULTS_DIR/history"
-              cp -r "previous-site/latest/$OS/history/"* "$RESULTS_DIR/history/" || true
+              cp -r "site/latest/$OS/history/"* "$RESULTS_DIR/history/" || true
             fi
 
             # Copy env info
@@ -280,6 +279,7 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
+      # This artifact now serves as the source of truth for the next run.
       - name: Upload Allure History Artifact
         uses: actions/upload-artifact@v4
         with:

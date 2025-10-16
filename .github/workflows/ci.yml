@@ -109,11 +109,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ✅ FIX: Identify the workflow by its filename for reliability.
+      # ✅ FIX: Dynamically find the workflow filename.
+      - name: Get workflow filename
+        id: get_workflow_name
+        run: echo "WORKFLOW_FILE=$(basename .github/workflows/*.yml)" >> $GITHUB_ENV
+
       - name: Download previous Allure history artifact
         uses: dawidd6/action-download-artifact@v6
         with:
-          workflow: ci.yml # Use the workflow's filename
+          workflow: ${{ env.WORKFLOW_FILE }}
           branch: main
           name: allure-history
           path: previous-site
@@ -181,6 +185,7 @@ jobs:
             perl -pi -e 's|href="/|href="./|g' "$FILE_PATH"
           done
 
+      # ✅ FIX: Moved build history list above the trend chart.
       - name: Rebuild index.html with Trend Charts
         shell: bash
         run: |
@@ -212,40 +217,33 @@ jobs:
 
           echo "</ul><hr><h2>📊 Report History & Trends</h2>" >> "$SITE_DIR/index.html"
           BUILDS=$(find "$SITE_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -n)
-          echo "<canvas id='trendChart' width='800' height='400'></canvas>" >> "$SITE_DIR/index.html"
-          echo "<ul>" >> "$SITE_DIR/index.html"
 
+          echo "<ul>" >> "$SITE_DIR/index.html"
           LABELS=""
           PASS_COUNTS=""
           FAIL_COUNTS=""
           UNSTABLE_COUNTS=""
 
           for BUILD in $BUILDS; do
-            TOTAL_PASS=0
-            TOTAL_FAIL=0
-            TOTAL_UNSTABLE=0
+            echo "<li><a href='${BUILD}/ubuntu-latest/'>Ubuntu_Build #${BUILD}</a> / <a href='${BUILD}/windows-latest/'>Windows_Build #${BUILD}</a></li>" >> "$SITE_DIR/index.html"
+            TOTAL_PASS=0; TOTAL_FAIL=0; TOTAL_UNSTABLE=0
             for OS in ubuntu-latest windows-latest; do
               BUILD_FILE="$SITE_DIR/$BUILD/$OS/executor.json"
               if [ -f "$BUILD_FILE" ]; then
                 BUILD_NAME=$(jq -r '.buildName' "$BUILD_FILE" 2>/dev/null || echo "")
-                if [[ "$BUILD_NAME" == *"PASS"* ]]; then
-                  ((TOTAL_PASS+=1))
-                elif [[ "$BUILD_NAME" == *"Unstable"* ]]; then
-                  ((TOTAL_UNSTABLE+=1))
-                else
-                  ((TOTAL_FAIL+=1))
-                fi
+                if [[ "$BUILD_NAME" == *"PASS"* ]]; then ((TOTAL_PASS+=1));
+                elif [[ "$BUILD_NAME" == *"Unstable"* ]]; then ((TOTAL_UNSTABLE+=1));
+                else ((TOTAL_FAIL+=1)); fi
               fi
             done
             LABELS="$LABELS'$BUILD',"
             PASS_COUNTS="$PASS_COUNTS$TOTAL_PASS,"
             FAIL_COUNTS="$FAIL_COUNTS$TOTAL_FAIL,"
             UNSTABLE_COUNTS="$UNSTABLE_COUNTS$TOTAL_UNSTABLE,"
-
-            echo "<li><a href='${BUILD}/ubuntu-latest/'>Ubuntu_Build #${BUILD}</a> / <a href='${BUILD}/windows-latest/'>Windows_Build #${BUILD}</a></li>" >> "$SITE_DIR/index.html"
           done
+          echo "</ul>" >> "$SITE_DIR/index.html"
 
-          echo "</ul>
+          echo "<canvas id='trendChart' width='800' height='400'></canvas>
           <script>
           const ctx = document.getElementById('trendChart').getContext('2d');
           new Chart(ctx, {
@@ -258,11 +256,7 @@ jobs:
                 {label: 'UNSTABLE', data: [${UNSTABLE_COUNTS%,}], borderColor: 'orange', fill: false}
               ]
             },
-            options: {
-              responsive: true,
-              plugins: { legend: { position: 'top' } },
-              scales: { y: { beginAtZero: true, stepSize: 1 } }
-            }
+            options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true, stepSize: 1 } } }
           });
           </script>
           <hr><p><em>Generated automatically on $CURRENT_LA_TIME</em></p></body></html>" >> "$SITE_DIR/index.html"

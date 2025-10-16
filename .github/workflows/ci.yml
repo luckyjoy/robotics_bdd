@@ -70,11 +70,11 @@ jobs:
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
-              pytest -v -m navigation --alluredir="$RESULTS_DIR"
+              pytest -m sensors --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
             echo "🪟 Running tests on Windows..."
-            pytest -v -m navigation --alluredir="$RESULTS_DIR"
+            pytest -m sensors --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
 
@@ -203,11 +203,11 @@ jobs:
           li{margin:6px 0;}
           a{text-decoration:none;color:#0366d6;}
           a:hover{text-decoration:underline;}
-          /* FIX: CSS to control the chart container's size */
+          /* FIX: CSS to control the chart container's size and align left */
           #chart-container {
             max-width: 400px;
             max-height: 200px;
-            margin:0; /* Align the container to the left*/
+            margin: 0; /* Aligns the container to the left */
           }
           </style></head><body>
           <h1>🤖 Robotics BDD Simulation CI/CD Build History</h1>
@@ -268,7 +268,7 @@ jobs:
             UNSTABLE_COUNTS="$UNSTABLE_COUNTS$TOTAL_UNSTABLE,"
           done
 
-          # FIX: Wrapped canvas in a controlled div and removed hard-coded width/height
+          # The canvas is correctly wrapped in a controlled div
           echo "<div id='chart-container'>
           <canvas id='trendChart'></canvas>
           </div>
@@ -286,9 +286,26 @@ jobs:
             },
             options: { 
               responsive: true, 
-              maintainAspectRatio: false, /* Essential for making responsive sizing work with parent div */
+              maintainAspectRatio: false, 
               plugins: { legend: { position: 'top' } }, 
-              scales: { y: { beginAtZero: true, stepSize: 1 } } 
+              scales: { 
+                y: { 
+                  beginAtZero: true, 
+                  stepSize: 1,
+                  // ✅ FIX: Added Y-axis title
+                  title: {
+                    display: true,
+                    text: 'Total Number of Tests'
+                  }
+                },
+                x: {
+                  // ✅ FIX: Added X-axis title
+                  title: {
+                    display: true,
+                    text: 'Build Number'
+                  }
+                }
+              } 
             }
           });
           </script>

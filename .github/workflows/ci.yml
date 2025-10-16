@@ -50,7 +50,7 @@ jobs:
           push: false
           load: true
 
-      - name: Run Tests (Pytest or Docker)
+      - name: Run Tests
         id: run_tests
         shell: bash
         run: |
@@ -105,21 +105,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Allure Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: allure-results
-
       - name: Download Allure CLI
         run: |
-          echo "⬇️ Downloading Allure ${ALLURE_VERSION}..."
           curl -sL -o allure-${ALLURE_VERSION}.tgz \
             https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz
           tar -xzf allure-${ALLURE_VERSION}.tgz
           mv allure-${ALLURE_VERSION} allure
           echo "$(pwd)/allure/bin" >> $GITHUB_PATH
 
-      - name: Restore Previous Site
+      - name: Download Allure Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: allure-results
+
+      - name: Restore Previous Site History
         uses: actions/download-artifact@v4
         with:
           name: allure-history
@@ -128,34 +127,44 @@ jobs:
 
       - name: Generate Reports per OS
         run: |
-          set -e
           SITE="${{ env.SITE_DIR }}"
-          BUILD=${{ github.run_number }}
+          BUILD_NUMBER=${{ github.run_number }}
           mkdir -p "$SITE/latest"
 
           for OS in ubuntu-latest windows-latest; do
-            SRC="allure-results/allure-results-$OS"
-            DEST_BUILD="$SITE/$BUILD/$OS"
-            DEST_LATEST="$SITE/latest/$OS"
-            mkdir -p "$SRC" "$DEST_BUILD" "$DEST_LATEST"
+            RESULTS_DIR="allure-results/$OS"
+            REPORT_DIR_BUILD="$SITE/$BUILD_NUMBER/$OS"
+            REPORT_DIR_LATEST="$SITE/latest/$OS"
+            mkdir -p "$REPORT_DIR_BUILD" "$REPORT_DIR_LATEST"
 
-            # Preserve trend data
+            # Copy env info and executor.json
+            if [ "$OS" == "ubuntu-latest" ]; then
+              cp supports/ubuntu.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
+            else
+              cp supports/windows.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
+            fi
+            cp supports/categories.json "$RESULTS_DIR/categories.json" 2>/dev/null || true
+
+            # executor.json
+            REPO_NAME="${GITHUB_REPOSITORY##*/}"
+            echo "{\"name\":\"$OS\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/$OS/\",\"buildOrder\":\"${BUILD_NUMBER}\",\"buildName\":\"Build ${BUILD_NUMBER} ($OS)\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$RESULTS_DIR/executor.json"
+
+            # Preserve previous history for trends
             if [ -d "$SITE/latest/$OS/history" ]; then
-              cp -r "$SITE/latest/$OS/history" "$SRC/history" || true
+              mkdir -p "$RESULTS_DIR/history"
+              cp -r "$SITE/latest/$OS/history/"* "$RESULTS_DIR/history/" || true
             fi
 
-            ./allure/bin/allure generate "$SRC" -o "$DEST_BUILD" --clean
-            cp -r "$DEST_BUILD"/* "$DEST_LATEST/" || true
-            date -u > "$DEST_BUILD/build-time.txt"
-            date -u > "$DEST_LATEST/build-time.txt"
+            # Generate Allure report
+            ./allure/bin/allure generate "$RESULTS_DIR" -o "$REPORT_DIR_BUILD" --clean
+            cp -r "$REPORT_DIR_BUILD"/* "$REPORT_DIR_LATEST/" || true
+            date -u > "$REPORT_DIR_BUILD/build-time.txt"
+            date -u > "$REPORT_DIR_LATEST/build-time.txt"
           done
 
       - name: Update Build History Index
         run: |
           SITE="${{ env.SITE_DIR }}"
-          BUILD=${{ github.run_number }}
-          mkdir -p "$SITE"
-
           echo "<html><head><title>Allure Build History</title>
           <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
           <style>
@@ -177,20 +186,42 @@ jobs:
           echo "</ul><hr><h2>📊 Report History & Trends</h2>
           <canvas id='trendChart' width='800' height='400'></canvas><ul>" >> "$SITE/index.html"
 
+          # Prepare trend data arrays
           LABELS=""
           PASSES=""
           FAILS=""
           UNSTABLES=""
 
-          for DIR in $(find "$SITE" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -n); do
-            LABELS="${LABELS}'${DIR}',"
-            PASSES="${PASSES}1,"
-            UNSTABLES="${UNSTABLES}0,"
-            FAILS="${FAILS}0,"
-            echo "<li><a href='${DIR}/ubuntu-latest/'>Build #${DIR} (Ubuntu)</a> / <a href='${DIR}/windows-latest/'>Build #${DIR} (Windows)</a></li>" >> "$SITE/index.html"
+          BUILDS=$(find "$SITE" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -n)
+          for BUILD in $BUILDS; do
+            LABELS="$LABELS'$BUILD',"
+
+            TOTAL_PASS=0
+            TOTAL_FAIL=0
+            TOTAL_UNSTABLE=0
+            for OS in ubuntu-latest windows-latest; do
+              EXEC="$SITE/$BUILD/$OS/executor.json"
+              if [ -f "$EXEC" ]; then
+                STATUS=$(jq -r '.buildName' "$EXEC" | grep -oP '\(.*?\)' | tr -d '()')
+                if [[ "$STATUS" == "PASS" ]]; then
+                  ((TOTAL_PASS+=1))
+                elif [[ "$STATUS" == "UNSTABLE" ]]; then
+                  ((TOTAL_UNSTABLE+=1))
+                else
+                  ((TOTAL_FAIL+=1))
+                fi
+              fi
+            done
+
+            PASSES="$PASSES$TOTAL_PASS,"
+            UNSTABLES="$UNSTABLES$TOTAL_UNSTABLE,"
+            FAILS="$FAILS$TOTAL_FAIL,"
+
+            echo "<li><a href='${BUILD}/ubuntu-latest/'>Build #${BUILD} (Ubuntu)</a> / <a href='${BUILD}/windows-latest/'>Build #${BUILD} (Windows)</a></li>" >> "$SITE/index.html"
           done
 
-          echo "</ul><script>
+          echo "</ul>
+          <script>
           const ctx=document.getElementById('trendChart').getContext('2d');
           new Chart(ctx,{
             type:'line',
@@ -200,7 +231,7 @@ jobs:
                 {label:'UNSTABLE',data:[${UNSTABLES%,}],borderColor:'orange',fill:false},
                 {label:'FAIL',data:[${FAILS%,}],borderColor:'red',fill:false}
               ]},
-            options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}
+            options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true,stepSize:1}}}
           });
           </script></body></html>" >> "$SITE/index.html"
 
@@ -213,14 +244,14 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-      - name: Persist Site for Future Trends
+      - name: Persist Site History Artifact
         uses: actions/upload-artifact@v4
         with:
           name: allure-history
           path: ${{ env.SITE_DIR }}
           retention-days: 10
 
-      - name: Add Workflow Summary
+      - name: Workflow Summary Badges
         run: |
           STATUS=${{ needs.test.outputs.test_outcome }}
           PAGE_URL=${{ steps.deployment.outputs.page_url }}
@@ -238,7 +269,5 @@ jobs:
           fi
 
           echo "### 🤖 Robotics BDD CI/CD Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "[Ubuntu Latest](${BASE_URL}/latest/ubuntu-latest/index.html) | [Windows Latest](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build #${{ github.run_number }} — $ICON $DESC" >> $GITHUB_STEP_SUMMARY

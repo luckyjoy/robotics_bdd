@@ -1,4 +1,4 @@
-name: Robotics TDD CI/CD
+name: Robotics BDD CI/CD
 
 on:
   push:
@@ -55,7 +55,7 @@ jobs:
         with:
           context: .
           push: false
-          tags: robotics-tdd:ci-build
+          tags: robotics-bdd:ci-build
           load: true
 
       - name: Run tests
@@ -69,7 +69,7 @@ jobs:
 
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
-            docker run --rm -v $PWD:/workspace -w /workspace robotics-tdd:ci-build \
+            docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
               pytest -m sensors --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
@@ -109,7 +109,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ✅ FIX: Dynamically find the workflow filename.
       - name: Get workflow filename
         id: get_workflow_name
         run: echo "WORKFLOW_FILE=$(basename .github/workflows/*.yml)" >> $GITHUB_ENV
@@ -185,7 +184,6 @@ jobs:
             perl -pi -e 's|href="/|href="./|g' "$FILE_PATH"
           done
 
-      # ✅ FIX: Moved build history list above the trend chart.
       - name: Rebuild index.html with Trend Charts
         shell: bash
         run: |
@@ -202,7 +200,7 @@ jobs:
           a{text-decoration:none;color:#0366d6;}
           a:hover{text-decoration:underline;}
           </style></head><body>
-          <h1>🤖 Robotics TDD Simulation CI/CD Build History</h1>
+          <h1>🤖 Robotics BDD Simulation CI/CD Build History</h1>
           <h2>🧩 Latest Allure Reports</h2><hr><ul>" > "$SITE_DIR/index.html"
 
           for OS in ubuntu-latest windows-latest; do
@@ -216,16 +214,25 @@ jobs:
           done
 
           echo "</ul><hr><h2>📊 Report History & Trends</h2>" >> "$SITE_DIR/index.html"
-          BUILDS=$(find "$SITE_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -n)
-
+          # ✅ FIX: Sort builds from newest to oldest using `sort -nr`.
+          BUILDS=$(find "$SITE_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -nr)
+          
           echo "<ul>" >> "$SITE_DIR/index.html"
+          # Data for chart needs to be in ascending order (oldest to newest)
+          CHART_BUILDS=$(echo "$BUILDS" | sort -n)
           LABELS=""
           PASS_COUNTS=""
           FAIL_COUNTS=""
           UNSTABLE_COUNTS=""
 
+          # Generate the visible list of links (newest to oldest)
           for BUILD in $BUILDS; do
             echo "<li><a href='${BUILD}/ubuntu-latest/'>Ubuntu_Build #${BUILD}</a> / <a href='${BUILD}/windows-latest/'>Windows_Build #${BUILD}</a></li>" >> "$SITE_DIR/index.html"
+          done
+          echo "</ul>" >> "$SITE_DIR/index.html"
+
+          # Gather data for the chart in ascending order
+          for BUILD in $CHART_BUILDS; do
             TOTAL_PASS=0; TOTAL_FAIL=0; TOTAL_UNSTABLE=0
             for OS in ubuntu-latest windows-latest; do
               BUILD_FILE="$SITE_DIR/$BUILD/$OS/executor.json"
@@ -241,7 +248,6 @@ jobs:
             FAIL_COUNTS="$FAIL_COUNTS$TOTAL_FAIL,"
             UNSTABLE_COUNTS="$UNSTABLE_COUNTS$TOTAL_UNSTABLE,"
           done
-          echo "</ul>" >> "$SITE_DIR/index.html"
 
           echo "<canvas id='trendChart' width='800' height='400'></canvas>
           <script>
@@ -294,7 +300,7 @@ jobs:
             STATUS_TEXT="All tests passed"
           fi
 
-          echo "### 🤖 Robotics TDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
+          echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY

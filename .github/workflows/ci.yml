@@ -214,11 +214,6 @@ jobs:
             fi
           done
 
-          echo "</ul><hr><h2>📊 Report History & Trends</h2>" >> "$SITE_DIR/index.html"
-          BUILDS=$(find "$SITE_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -n)
-          echo "<canvas id='trendChart' width='800' height='400'></canvas>" >> "$SITE_DIR/index.html"
-          echo "<ul>" >> "$SITE_DIR/index.html"
-
           LABELS=""
           PASS_COUNTS=""
           FAIL_COUNTS=""
@@ -248,6 +243,13 @@ jobs:
 
             echo "<li><a href='${BUILD}/ubuntu-latest/'>Build_Ubuntu #${BUILD}</a> / <a href='${BUILD}/windows-latest/'>Build_Windows #${BUILD}</a></li>" >> "$SITE_DIR/index.html"
           done
+          
+          echo "</ul><hr><h2>📊 Report History & Trends</h2>" >> "$SITE_DIR/index.html"
+          BUILDS=$(find "$SITE_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -n)
+          echo "<canvas id='trendChart' width='800' height='400'></canvas>" >> "$SITE_DIR/index.html"
+          echo "<ul>" >> "$SITE_DIR/index.html"
+
+ 
 
           echo "</ul>
           <script>

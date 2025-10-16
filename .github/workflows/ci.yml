@@ -223,45 +223,38 @@ jobs:
           FAIL_COUNTS=""
           UNSTABLE_COUNTS=""
 
-          # 1. Generate the visible list of links (newest to oldest)
           for BUILD in $BUILDS; do
             echo "<li><a href='${BUILD}/ubuntu-latest/'>Ubuntu_Build #${BUILD}</a> / <a href='${BUILD}/windows-latest/'>Windows_Build #${BUILD}</a></li>" >> "$SITE_DIR/index.html"
           done
           echo "</ul>" >> "$SITE_DIR/index.html"
 
-          # 2. Gather data for the chart (oldest to newest)
-          # ✅ FIX: Reads actual test statistics from Allure's summary.json
           for BUILD in $CHART_BUILDS; do
             TOTAL_PASS=0
             TOTAL_FAIL=0   
             TOTAL_UNSTABLE=0 
             
             for OS in ubuntu-latest windows-latest; do
-              # The summary.json contains the statistic object with test counts
               SUMMARY_FILE="$SITE_DIR/$BUILD/$OS/widgets/summary.json"
               
               if [ -f "$SUMMARY_FILE" ]; then
-                # Extract counts using jq. Allure's 'failed' is test assertion failure (FAIL). 
-                # Allure's 'broken' is often environment/logic error (mapped to UNSTABLE for the chart).
                 PASS_COUNT=$(jq -r '.statistic.passed // 0' "$SUMMARY_FILE" 2>/dev/null)
                 FAIL_COUNT=$(jq -r '.statistic.failed // 0' "$SUMMARY_FILE" 2>/dev/null)
                 BROKEN_COUNT=$(jq -r '.statistic.broken // 0' "$SUMMARY_FILE" 2>/dev/null)
 
-                # Sum up the totals across all OS jobs for this build
                 TOTAL_PASS=$((TOTAL_PASS + PASS_COUNT))
                 TOTAL_FAIL=$((TOTAL_FAIL + FAIL_COUNT))
                 TOTAL_UNSTABLE=$((TOTAL_UNSTABLE + BROKEN_COUNT))
               fi
             done
             
-            # Append data for the chart arrays
             LABELS="$LABELS'$BUILD',"
             PASS_COUNTS="$PASS_COUNTS$TOTAL_PASS,"
             FAIL_COUNTS="$FAIL_COUNTS$TOTAL_FAIL,"
             UNSTABLE_COUNTS="$UNSTABLE_COUNTS$TOTAL_UNSTABLE,"
           done
 
-          echo "<canvas id='trendChart' width='800' height='400'></canvas>
+          # ✅ FIX: Reduced width and height of the canvas element.
+          echo "<canvas id='trendChart' width='600' height='300'></canvas>
           <script>
           const ctx = document.getElementById('trendChart').getContext('2d');
           new Chart(ctx, {

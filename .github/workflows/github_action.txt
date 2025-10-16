@@ -70,11 +70,11 @@ jobs:
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
-              pytest -v -m navigation --alluredir="$RESULTS_DIR"
+              pytest -m sensors --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
             echo "🪟 Running tests on Windows..."
-            pytest -v -m navigation --alluredir="$RESULTS_DIR"
+            pytest -m sensors --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
 
@@ -109,22 +109,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Wait for artifact indexing
-        run: sleep 10s
+      # ✅ FIX: Dynamically find the workflow filename.
+      - name: Get workflow filename
+        id: get_workflow_name
+        run: echo "WORKFLOW_FILE=$(basename .github/workflows/*.yml)" >> $GITHUB_ENV
 
-      # ✅ FIX (1) + (2): Restore full previous site (build history + trends)
-      - name: Download previous site (for history & trends)
-        uses: actions/checkout@v4
+      - name: Download previous Allure history artifact
+        uses: dawidd6/action-download-artifact@v6
         with:
-          ref: gh-pages
+          workflow: ${{ env.WORKFLOW_FILE }}
+          branch: main
+          name: allure-history
           path: previous-site
-        continue-on-error: true
+          if_no_artifact_found: ignore
 
       - name: Restore Allure History
         run: |
-          mkdir -p "${{ env.SITE_DIR }}/latest"
-          if [ -d "previous-site/latest" ]; then
-            echo "♻️ Restoring previous history for trend charts..."
+          mkdir -p "${{ env.SITE_DIR }}"
+          if [ -d "previous-site" ]; then
+            echo "♻️ Restoring previous site history..."
             cp -r previous-site/* "${{ env.SITE_DIR }}/" || true
           fi
 
@@ -135,7 +138,7 @@ jobs:
           mv allure-${{ env.ALLURE_VERSION }} allure-commandline
           echo "$(pwd)/allure-commandline/bin" >> $GITHUB_PATH
 
-      - name: Download Allure Artifacts
+      - name: Download Allure Test Results
         uses: actions/download-artifact@v4
         with:
           path: allure-results
@@ -153,13 +156,11 @@ jobs:
             REPORT_DIR_LATEST="$SITE_DIR/latest/$OS"
             mkdir -p "$RESULTS_DIR" "$REPORT_DIR_BUILD" "$REPORT_DIR_LATEST"
 
-            # ✅ FIX (1): Preserve trend data from previous site
-            if [ -d "previous-site/latest/$OS/history" ]; then
+            if [ -d "site/latest/$OS/history" ]; then
               mkdir -p "$RESULTS_DIR/history"
-              cp -r "previous-site/latest/$OS/history/"* "$RESULTS_DIR/history/" || true
+              cp -r "site/latest/$OS/history/"* "$RESULTS_DIR/history/" || true
             fi
 
-            # Copy env info
             if [ "$OS" == "ubuntu-latest" ]; then
               cp supports/ubuntu.properties "$RESULTS_DIR/environment.properties" 2>/dev/null || true
             else
@@ -167,7 +168,6 @@ jobs:
             fi
             cp supports/categories.json "$RESULTS_DIR/categories.json" 2>/dev/null || true
 
-            # executor.json
             REPO_NAME="${GITHUB_REPOSITORY##*/}"
             echo "{\"name\":\"$OS\",\"type\":\"GitHub Actions\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"reportUrl\":\"https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/latest/$OS/\",\"buildOrder\":\"${BUILD_NUMBER}\",\"buildName\":\"Build ${BUILD_NUMBER} ($OS)\",\"buildUrl\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" > "$RESULTS_DIR/executor.json"
 
@@ -185,6 +185,7 @@ jobs:
             perl -pi -e 's|href="/|href="./|g' "$FILE_PATH"
           done
 
+      # ✅ FIX: Moved build history list above the trend chart.
       - name: Rebuild index.html with Trend Charts
         shell: bash
         run: |
@@ -216,40 +217,33 @@ jobs:
 
           echo "</ul><hr><h2>📊 Report History & Trends</h2>" >> "$SITE_DIR/index.html"
           BUILDS=$(find "$SITE_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -n)
-          echo "<canvas id='trendChart' width='800' height='400'></canvas>" >> "$SITE_DIR/index.html"
-          echo "<ul>" >> "$SITE_DIR/index.html"
 
+          echo "<ul>" >> "$SITE_DIR/index.html"
           LABELS=""
           PASS_COUNTS=""
           FAIL_COUNTS=""
           UNSTABLE_COUNTS=""
 
           for BUILD in $BUILDS; do
-            TOTAL_PASS=0
-            TOTAL_FAIL=0
-            TOTAL_UNSTABLE=0
+            echo "<li><a href='${BUILD}/ubuntu-latest/'>Ubuntu_Build #${BUILD}</a> / <a href='${BUILD}/windows-latest/'>Windows_Build #${BUILD}</a></li>" >> "$SITE_DIR/index.html"
+            TOTAL_PASS=0; TOTAL_FAIL=0; TOTAL_UNSTABLE=0
             for OS in ubuntu-latest windows-latest; do
               BUILD_FILE="$SITE_DIR/$BUILD/$OS/executor.json"
               if [ -f "$BUILD_FILE" ]; then
                 BUILD_NAME=$(jq -r '.buildName' "$BUILD_FILE" 2>/dev/null || echo "")
-                if [[ "$BUILD_NAME" == *"PASS"* ]]; then
-                  ((TOTAL_PASS+=1))
-                elif [[ "$BUILD_NAME" == *"Unstable"* ]]; then
-                  ((TOTAL_UNSTABLE+=1))
-                else
-                  ((TOTAL_FAIL+=1))
-                fi
+                if [[ "$BUILD_NAME" == *"PASS"* ]]; then ((TOTAL_PASS+=1));
+                elif [[ "$BUILD_NAME" == *"Unstable"* ]]; then ((TOTAL_UNSTABLE+=1));
+                else ((TOTAL_FAIL+=1)); fi
               fi
             done
             LABELS="$LABELS'$BUILD',"
             PASS_COUNTS="$PASS_COUNTS$TOTAL_PASS,"
             FAIL_COUNTS="$FAIL_COUNTS$TOTAL_FAIL,"
             UNSTABLE_COUNTS="$UNSTABLE_COUNTS$TOTAL_UNSTABLE,"
-
-            echo "<li><a href='${BUILD}/ubuntu-latest/'>Build #${BUILD}</a> / <a href='${BUILD}/windows-latest/'>Build #${BUILD}</a></li>" >> "$SITE_DIR/index.html"
           done
+          echo "</ul>" >> "$SITE_DIR/index.html"
 
-          echo "</ul>
+          echo "<canvas id='trendChart' width='800' height='400'></canvas>
           <script>
           const ctx = document.getElementById('trendChart').getContext('2d');
           new Chart(ctx, {
@@ -262,11 +256,7 @@ jobs:
                 {label: 'UNSTABLE', data: [${UNSTABLE_COUNTS%,}], borderColor: 'orange', fill: false}
               ]
             },
-            options: {
-              responsive: true,
-              plugins: { legend: { position: 'top' } },
-              scales: { y: { beginAtZero: true, stepSize: 1 } }
-            }
+            options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true, stepSize: 1 } } }
           });
           </script>
           <hr><p><em>Generated automatically on $CURRENT_LA_TIME</em></p></body></html>" >> "$SITE_DIR/index.html"

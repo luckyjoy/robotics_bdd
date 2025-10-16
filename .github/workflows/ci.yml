@@ -1,4 +1,4 @@
-name: Robotics BDD CI/CD
+name: Robotics TDD CI/CD
 
 on:
   push:
@@ -55,7 +55,7 @@ jobs:
         with:
           context: .
           push: false
-          tags: robotics-bdd:ci-build
+          tags: robotics-tdd:ci-build
           load: true
 
       - name: Run tests
@@ -69,7 +69,7 @@ jobs:
 
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
-            docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
+            docker run --rm -v $PWD:/workspace -w /workspace robotics-tdd:ci-build \
               pytest -m sensors --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
@@ -202,7 +202,7 @@ jobs:
           a{text-decoration:none;color:#0366d6;}
           a:hover{text-decoration:underline;}
           </style></head><body>
-          <h1>🤖 Robotics BDD Simulation CI/CD Build History</h1>
+          <h1>🤖 Robotics TDD Simulation CI/CD Build History</h1>
           <h2>🧩 Latest Allure Reports</h2><hr><ul>" > "$SITE_DIR/index.html"
 
           for OS in ubuntu-latest windows-latest; do
@@ -294,7 +294,7 @@ jobs:
             STATUS_TEXT="All tests passed"
           fi
 
-          echo "### 🤖 Robotics BDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
+          echo "### 🤖 Robotics TDD Simulation CI/CD" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "[![Ubuntu Latest Report](https://img.shields.io/badge/Ubuntu-Latest_Build-blue)](${BASE_URL}/latest/ubuntu-latest/index.html)" >> $GITHUB_STEP_SUMMARY
           echo "[![Windows Latest Report](https://img.shields.io/badge/Windows-Latest_Build-blue)](${BASE_URL}/latest/windows-latest/index.html)" >> $GITHUB_STEP_SUMMARY

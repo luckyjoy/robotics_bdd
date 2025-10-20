@@ -29,5 +29,10 @@
     "messageRegex": ".*(retried successfully|sometimes fails|timing|inconsistent result).*",
     "description": "Tests that fail due to slight variations in simulation timing or environment instability. Requires investigation into non-deterministic behavior.",
     "matchedStatuses": ["failed", "broken"]
+  },
+  {
+    "name": "✅ Passed Benchmarks",
+    "description": "All tests executed successfully and met expectations.",
+    "matchedStatuses": ["passed"]
   }
 ]

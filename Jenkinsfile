@@ -14,6 +14,8 @@ pipeline {
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         disableConcurrentBuilds()
+        // 🚨 NEW: Set the time zone for build logs and timestamps to PDT/PST
+        timestamps(timeZone: 'America/Los_Angeles')
     }
 
     stages {
@@ -77,7 +79,8 @@ pipeline {
 					Write-Host "Docker Image: $env:DOCKER_IMAGE"
 					Write-Host "========================================================="
 
-					# CORRECTED: Simply pull the image. Docker handles the inspection/caching without PowerShell erroring.
+					# CORRECTED: Simply pull the image.
+					# Docker handles the inspection/caching without PowerShell erroring.
 					docker pull $env:DOCKER_IMAGE
 
 					docker run --rm -v "$env:WORKSPACE:/tests" -w /tests $env:DOCKER_IMAGE bash -lc \
@@ -157,6 +160,8 @@ pipeline {
                 bat """
                     if exist "%ALLURE_REPORT_DIR%" rd /s /q "%ALLURE_REPORT_DIR%"
                     mkdir "%ALLURE_REPORT_DIR%"
+                    
+                    // 🚨 MODIFIED: Use both results directories to generate a combined report
                     allure generate "%ALLURE_RESULTS_DIR%" "%LINUX_ALLURE_RESULTS_DIR%" -o "%ALLURE_REPORT_DIR%" --clean
                 """
                 // Persist history for next build
@@ -174,6 +179,8 @@ pipeline {
                 script {
                     echo 'Archiving and publishing Allure report...'
                     archiveArtifacts artifacts: "${ALLURE_REPORT_DIR}/**/*", allowEmptyArchive: true
+                    
+                    // 🚨 This publishes the "Latest" report link on the job page, fulfilling part of the links request.
                     publishHTML(target: [
                         reportName: "Robotics-BDD-Allure-Report-Build-${env.BUILD_NUMBER}-CrossPlatform",
                         reportDir: "${ALLURE_REPORT_DIR}",

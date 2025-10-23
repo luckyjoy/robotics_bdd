@@ -11,9 +11,9 @@
     "Product Model": "BDD-Sim-PyBullet",
     "Test Framework": "Gherkin (Behave)",
     "Git Branch": "main",
-    "Git Commit": "969e214",
+    "Git Commit": "3d9442d",
     "OS": "Windows",
     "Python": "3.13.7",
-    "Docker Image": "robotics-bdd-local:latest"
+    "Docker Image": "luckyjoy/robotics-bdd-local:latest"
   }
 }

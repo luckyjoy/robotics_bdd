@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: robotics-bdd-pv
+spec:
+  capacity:
+    storage: 2Gi         # Volume size (must match the PVC request)
+  accessModes:
+    - ReadWriteOnce      # Can be mounted by one node read/write
+  persistentVolumeReclaimPolicy: Retain # Keep the volume after the PVC is deleted
+  storageClassName: manual-hostpath    # Custom StorageClass name to ensure binding
+  hostPath:
+    path: "/mnt/data/robotics-bdd-reports" # Directory on the Kubernetes node's host filesystem
+    type: DirectoryOrCreate            # Create the directory if it doesn't exist

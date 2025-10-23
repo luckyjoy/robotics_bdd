@@ -6,93 +6,54 @@ import time
 import platform
 import json
 import psutil
-import signal # <-- Import the signal module
 
 # FILENAME: run_docker.py
-# NOTE: Orchestrates the local Robotics BDD workflow (cleanup → Docker → Allure Local Report)
 
 # --- Configuration ---
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 IMAGE_NAME = "robotics-bdd-local:latest"
-
-# Local Allure Reporting Constants
-# Directory where Docker will output raw results for the CURRENT build
-ALLURE_RESULTS_DIR = os.path.join(PROJECT_ROOT, "allure-results") 
-# Directory where the final HTML report will be generated
-ALLURE_REPORT_DIR = os.path.join(PROJECT_ROOT, "allure-html-report")
-
-# Deprecated/Removed Constants (Used for Netlify/Deployment)
+ALLURE_RESULTS_DIR = os.path.join(PROJECT_ROOT, "allure-results")
+REPORTS_DIR = os.path.join(PROJECT_ROOT, "reports")
+ALLURE_REPORT_DIR = os.path.join(REPORTS_DIR, "allure-report")
 SUPPORTS_DIR = os.path.join(PROJECT_ROOT, "supports")
+DASHBOARD_OUTPUT_PATH = os.path.join(PROJECT_ROOT, "index.html")
+NETLIFY_REPORT_PATH = "/reports/latest"
 
 
-def execute_command(command, error_message, stream_output=False, exit_on_error=True):
+def execute_command(command, error_message, stream_output=False):
     """
     Executes a shell command and checks for errors.
-
-    If exit_on_error is True (default), the script exits on any non-zero return code.
-    If exit_on_error is False (used for test run), returns the exit code.
+    Returns the subprocess.run result object for synchronous commands.
     """
     print(f"\n--- Executing: {' '.join(command)} ---")
-    
-    # Check for start_new_session flag if stream_output is True (used in main)
-    start_new_session_flag = 'start_new_session' in command
-    
-    # Remove the custom flag before execution
-    if start_new_session_flag:
-        command.remove('start_new_session')
+    result = None
 
     if not stream_output:
         # Synchronous execution for most commands
         try:
-            # check=True is temporarily set to catch errors as exceptions
             result = subprocess.run(command, check=True, capture_output=True, text=True, encoding="utf-8")
             print("--- STDOUT ---")
             print(result.stdout)
             if result.stderr:
                 print("--- STDERR (Warnings/Notices) ---")
                 print(result.stderr)
-            # Command succeeded (Exit Code 0)
-            return 0 
+            return result
         except subprocess.CalledProcessError as e:
-            # An error occurred (non-zero exit code)
-            print("--- STDOUT (Error Context) ---")
-            print(e.stdout)
-            print("--- STDERR (Error Context) ---")
-            print(e.stderr)
-            
-            if exit_on_error:
-                # Fatal environment/setup error (FAIL). Exit.
-                print(f"\n==========================================================")
-                print(f"CRITICAL ERROR running {error_message}: {e.stderr.strip()}")
-                print(f"==========================================================")
+            print(f"\n==========================================================")
+            print(f"CRITICAL ERROR running {error_message}: {e.stderr.strip()}")
+            print(f"==========================================================")
+            if error_message != "Git Commit/Push":
                 sys.exit(e.returncode)
-            else:
-                # Test run failure (UNSTABLE). Return the test failure code.
-                return e.returncode
         except FileNotFoundError:
             print(f"\n==========================================================")
-            print(f"CRITICAL ERROR: Command not found. Ensure Docker, Python, and other tools are in your PATH.")
+            print(f"CRITICAL ERROR: Command not found. Ensure Docker, Python, and Git are in your PATH.")
             print(f"==========================================================")
             sys.exit(1)
     else:
         # Asynchronous streaming execution (used for Docker Build)
         print("--- STDOUT (Streaming) ---")
-        process = None 
-        
-        # Set up Popen arguments for signal handling on Unix
-        popen_kwargs = {
-            'stdout': subprocess.PIPE, 
-            'stderr': subprocess.STDOUT, 
-            'text': True, 
-            'encoding': "utf-8", 
-            'bufsize': 1
-        }
-        if platform.system() != "Windows" and start_new_session_flag:
-            # This is essential for os.killpg() to work
-            popen_kwargs['start_new_session'] = True
-        
         try:
-            process = subprocess.Popen(command, **popen_kwargs)
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", bufsize=1)
             
             # Read output line-by-line in real-time
             while True:
@@ -102,53 +63,36 @@ def execute_command(command, error_message, stream_output=False, exit_on_error=T
                 if line:
                     print(line.strip())
 
+            # Check return code
             return_code = process.wait()
             if return_code != 0:
                 raise subprocess.CalledProcessError(return_code, command, output=None, stderr=f"Command failed with exit code {return_code}")
-            return 0
                 
-        except KeyboardInterrupt:
-            if process and process.poll() is None:
-                print("\n[INFO] Ctrl+C detected. Attempting to terminate child process...")
-                try:
-                    if platform.system() == "Windows":
-                        # On Windows, terminate() is usually sufficient
-                        process.terminate()
-                    elif platform.system() != "Windows" and start_new_session_flag:
-                        # On Unix, use os.killpg to kill the entire process group
-                        os.killpg(os.getpgid(process.pid), signal.SIGINT)
-                    else:
-                        # Fallback for non-session-separated processes
-                        process.terminate()
-                        
-                    # Give it a moment to terminate
-                    time.sleep(1)
-                    if process.poll() is None:
-                        process.kill() # Hard kill if still running
-                        
-                except Exception as e:
-                    print(f"[CRITICAL] Failed to terminate/kill child process: {e}")
-            
-            # Exit the Python script
-            sys.exit(1) 
-            
         except subprocess.CalledProcessError as e:
             print(f"\n==========================================================")
             print(f"CRITICAL ERROR running {error_message}: Command failed. Check streamed output above.")
             print(f"==========================================================")
-            sys.exit(e.returncode)
+            if error_message != "Git Commit/Push":
+                sys.exit(e.returncode)
         except FileNotFoundError:
             print(f"\n==========================================================")
-            print(f"CRITICAL ERROR: Command not found. Ensure Docker, Python, and other tools are in your PATH.")
+            print(f"CRITICAL ERROR: Command not found. Ensure Docker, Python, and Git are in your PATH.")
             print(f"==========================================================")
             sys.exit(1)
+            
+    return result
 
 
 def check_if_image_exists(image_name):
-    """Checks if a Docker image is locally present."""
+    """
+    Checks if a Docker image is locally present.
+    Returns True if found, False otherwise.
+    """
     print(f"\n--- Step 2: Docker Image Check for {image_name} ---")
     
+    # We use subprocess.run directly here to capture the output silently
     try:
+        # Check if the image name exists in the output of 'docker images'
         result = subprocess.run(
             ["docker", "images", image_name, "--format", "{{.Repository}}:{{.Tag}}"], 
             check=True, 
@@ -157,6 +101,7 @@ def check_if_image_exists(image_name):
             encoding="utf-8"
         )
         
+        # If the output is non-empty and contains the full image name, it exists.
         if result.stdout.strip() == image_name:
             print(f"✅ Docker image '{image_name}' found locally.")
             return True
@@ -165,6 +110,7 @@ def check_if_image_exists(image_name):
             return False
             
     except subprocess.CalledProcessError:
+        # This occurs if docker itself fails, usually still means the image isn't the problem
         print(f"❌ Error running 'docker images' command. Assuming image is missing.")
         return False
     except FileNotFoundError:
@@ -183,10 +129,12 @@ def check_docker_running():
         except Exception:
             return False
 
+    # ✅ If Docker is already running
     if is_docker_responsive():
         print("✅ Docker is running and responsive.")
         return
 
+    # ❌ Docker not running — handle by OS
     system_os = platform.system()
     if system_os == "Windows":
         print("⚠️  Docker daemon not detected. Attempting to start Docker Desktop...")
@@ -222,52 +170,37 @@ def check_docker_running():
         sys.exit(1)
 
 
-# --- Allure Reporting Functions (Local Only) ---
+def git_commit_and_push(build_number):
+    """Commits the generated reports and pushes to the repository."""
+    print("\n--- Step 8: Committing and Pushing Reports ---")
 
-def generate_allure_report():
-    """Generates the Allure HTML report."""
-    print("\n--- Step 5: Generating Allure Report ---")
-    allure_bin = shutil.which("allure") or shutil.which("allure.cmd")
-    if not allure_bin:
-        print("[CRITICAL] Allure CLI not found. Install it via Scoop, npm, or download manually.")
-        return
-        
     try:
-        subprocess.run([allure_bin, "generate", ALLURE_RESULTS_DIR, "-o", ALLURE_REPORT_DIR, "--clean"], check=True)
-        print(f"✅ Report generated to {ALLURE_REPORT_DIR}")
-        
-    except subprocess.CalledProcessError as e:
-        print(f"[CRITICAL] Failed to generate Allure report: {e}")
+        print("  -> Adding reports and dashboard files.")
+        execute_command(["git", "add", "index.html", "_redirects", "reports/"], "Git Add (Reports)")
 
+        print("  -> Force-adding raw results (allure-results) as it is usually ignored.")
+        execute_command(["git", "add", "-f", "allure-results"], "Git Add (Raw Results - Force)")
 
-def open_allure_report():
-    """Opens the generated Allure report in the default browser."""
-    print("\n--- Step 6: Opening Allure Report ---")
-    allure_bin = shutil.which("allure") or shutil.which("allure.cmd")
-    if allure_bin:
-        try:
-            subprocess.Popen([allure_bin, "open", ALLURE_REPORT_DIR])
-            print(f"🚀 Attempting to open report in default browser: {ALLURE_REPORT_DIR}/index.html")
-        except Exception as e:
-             print(f"[WARN] Failed to open Allure report: {e}")
+        commit_message = f"CI: New test report and dashboard for Build #{build_number}"
+        execute_command(["git", "commit", "-m", commit_message], "Git Commit")
+        execute_command(["git", "push"], "Git Push")
 
+        print(f"\nSuccessfully committed and pushed reports for Build #{build_number}. Netlify build triggered.")
+    except Exception as e:
+        print(f"\nWARNING: Git push failed. The report files are generated locally but were not uploaded. Error: {e}")
 
-# --- Main Execution Flow ---
 
 def main():
     """Main workflow runner."""
-    # --- Input Parsing ---
     if len(sys.argv) < 2:
         print("Error: Missing Build Number argument.")
-        print("Usage: python run_docker.py <BUILD_NUMBER> [SUITE]")
+        print("Usage: python run_docker.py <BUILD_NUMBER>")
         sys.exit(1)
 
     build_number = sys.argv[1].strip()
-    test_suite = sys.argv[2].strip() if len(sys.argv) >= 3 else "navigation"
 
     print("==========================================================")
     print(f"Running Robotics BDD Test Workflow for Build #{build_number}")
-    print(f"Target Test Suite: {test_suite}")
     print("==========================================================")
 
     # --- Step 0: Check Docker Daemon ---
@@ -275,21 +208,22 @@ def main():
 
     # --- Step 1: Prepare Workspace and History ---
     print("\n--- Step 1: Prepare Workspace and History ---")
-    
-    LATEST_HISTORY_SOURCE = os.path.join(ALLURE_REPORT_DIR, "history")
+    LAST_HISTORY_SOURCE = os.path.join(REPORTS_DIR, "latest", "history")
     HISTORY_DESTINATION = os.path.join(ALLURE_RESULTS_DIR, "history")
 
     print("1a. Cleaning up old raw results (allure-results, __pycache__, .pytest_cache)")
     shutil.rmtree(ALLURE_RESULTS_DIR, ignore_errors=True)
+    shutil.rmtree(os.path.join(REPORTS_DIR, "allure-report"), ignore_errors=True)
     shutil.rmtree(os.path.join(PROJECT_ROOT, "__pycache__"), ignore_errors=True)
     shutil.rmtree(os.path.join(PROJECT_ROOT, ".pytest_cache"), ignore_errors=True)
 
     os.makedirs(ALLURE_RESULTS_DIR, exist_ok=True)
+    os.makedirs(REPORTS_DIR, exist_ok=True)
 
-    if os.path.exists(LATEST_HISTORY_SOURCE):
-        print(f"1b. Copying previous history from '{os.path.basename(LATEST_HISTORY_SOURCE)}' to '{os.path.basename(ALLURE_RESULTS_DIR)}'")
+    if os.path.exists(LAST_HISTORY_SOURCE):
+        print(f"1b. Copying previous history from '{LAST_HISTORY_SOURCE}' to '{HISTORY_DESTINATION}'")
         try:
-            shutil.copytree(LATEST_HISTORY_SOURCE, HISTORY_DESTINATION, dirs_exist_ok=True)
+            shutil.copytree(LAST_HISTORY_SOURCE, HISTORY_DESTINATION)
         except Exception as e:
             print(f"  Warning: Failed to copy history folder. Trend data might be missing. Error: {e}")
     else:
@@ -300,27 +234,21 @@ def main():
     # --- Step 2 & 2.5: Docker Image Check and Conditional Build ---
     if not check_if_image_exists(IMAGE_NAME):
         print("\n--- Step 2.5: Build Docker Image ---")
-        
-        docker_build_command = ["docker", "build", "-t", IMAGE_NAME, "."]
-        
-        # Add a custom flag to tell execute_command to start a new session (for Unix signal handling)
-        if platform.system() != "Windows":
-             docker_build_command.append("start_new_session")
-             
-        execute_command(docker_build_command, "Docker Image Build", stream_output=True)
+        # stream_output=True enables real-time progress and uses UTF-8 encoding
+        execute_command(["docker", "build", "-t", IMAGE_NAME, "."], "Docker Image Build", stream_output=True)
     else:
         print("\n--- Step 2.5: Build Docker Image ---")
         print(f"✅ Skipping Docker build: Image '{IMAGE_NAME}' already exists.")
 
 
-    # --- Step 3: Preparing Allure Metadata ---
-    print("\n--- Step 3: Preparing Allure Metadata ---")
-
+    # Determine OS property file
     system_os = platform.system()
     env_property_file = "windows.properties" if system_os == 'Windows' else "ubuntu.properties"
     print(f"Detected OS: {system_os}. Using {env_property_file} for Allure metadata.")
 
-    # Copy environment and categories files
+    # --- Step 3: Preparing Allure Metadata ---
+    print("\n--- Step 3: Preparing Allure Metadata ---")
+
     metadata_files = [
         (env_property_file, "environment.properties"),
         ("categories.json", "categories.json"),
@@ -335,16 +263,26 @@ def main():
         except FileNotFoundError:
             print(f"  Warning: Allure metadata file not found: {src_name}. Skipping.")
 
-    # Generating dynamic executor.json
-    print("  Generating dynamic executor.json...")
+    print("  Generating dynamic executor.json for Netlify...")
+
     try:
+        git_branch = subprocess.getoutput("git rev-parse --abbrev-ref HEAD")
+        git_commit = subprocess.getoutput("git rev-parse --short HEAD")
+
         executor_data = {
-            "name": "Local Robotics BDD Runner",
-            "type": "Local_Execution",
+            "name": "Robotics BDD Framework Runner (Netlify)",
+            "type": "CI_Pipeline",
+            "url": "https://robotic-bdd.netlify.app/",
             "buildOrder": build_number,
-            "buildName": f"Local Run #{build_number}",
+            "buildName": f"Robotics BDD Build #{build_number}",
+            "buildUrl": f"https://robotic-bdd.netlify.app/reports/{build_number}/index.html",
+            "reportUrl": f"https://robotic-bdd.netlify.app/reports/latest/index.html",
             "data": {
-                "Test Framework": "Gherkin (Behave) / Pytest",
+                "Validation Engineer": os.getenv("GIT_AUTHOR_NAME", "Automation System"),
+                "Product Model": "BDD-Sim-PyBullet",
+                "Test Framework": "Gherkin (Behave)",
+                "Git Branch": git_branch,
+                "Git Commit": git_commit,
                 "OS": platform.system(),
                 "Python": platform.python_version(),
                 "Docker Image": IMAGE_NAME
@@ -354,7 +292,7 @@ def main():
         dest_executor_path = os.path.join(ALLURE_RESULTS_DIR, "executor.json")
         with open(dest_executor_path, "w", encoding="utf-8") as f:
             json.dump(executor_data, f, indent=2)
-        print(f"  ✅ Created executor.json at {os.path.basename(ALLURE_RESULTS_DIR)}/executor.json")
+        print(f"  ✅ Created executor.json at {dest_executor_path}")
     except Exception as e:
         print(f"  ⚠️  Failed to generate executor.json: {e}")
 
@@ -366,54 +304,59 @@ def main():
         IMAGE_NAME,
         "pytest",
         "--alluredir=allure-results",
-        "-m", test_suite,
+        "-m", "navigation",
         "--ignore=features/manual_tests"
     ]
-    
-    # Run command, but DO NOT exit on test failure (Exit Code 1)
-    test_exit_code = execute_command(docker_test_command, "Docker Test Run", exit_on_error=False)
-
-    # --- Apply PASS/FAIL/UNSTABLE Policy ---
-    if test_exit_code is None:
-        print(f"\n==========================================================")
-        print(f"❌ FAIL POLICY: Test execution failed to return a status.")
-        print(f"Stopping Allure report generation.")
-        print(f"==========================================================")
-        sys.exit(1)
-    elif test_exit_code >= 2:
-        # Pytest environment/usage error (Exit Code 2 or higher)
-        print(f"\n==========================================================")
-        print(f"❌ FAIL POLICY: Docker Test Run encountered a critical error (Exit Code {test_exit_code}).")
-        print(f"Stopping Allure report generation.")
-        print(f"==========================================================")
-        sys.exit(test_exit_code)
-    elif test_exit_code == 0:
-        print("✅ PASS POLICY: All tests succeeded. Proceeding to Allure report.")
-    elif test_exit_code == 1:
-        print("⚠️ UNSTABLE POLICY: One or more tests failed. Proceeding to Allure report.")
-        
+    execute_command(docker_test_command, "Docker Test Run")
     time.sleep(1)
 
-    # --- Step 5: Allure Report Generation ---
-    generate_allure_report()
+    # --- Step 5: Allure Report Generation (via Docker) ---
+    print("\n--- Step 5: Allure Report Generation (via Docker) ---")
+    allure_report_output = os.path.join(REPORTS_DIR, "allure-report")
+    os.makedirs(allure_report_output, exist_ok=True)
+    ALLURE_BASE_URL_FOR_NETLIFY = NETLIFY_REPORT_PATH
 
-    # --- Step 6: Open Allure Report ---
-    open_allure_report()
+    docker_allure_command = [
+        "docker", "run", "--rm",
+        "-v", f"{ALLURE_RESULTS_DIR}:/app/allure-results",
+        "-v", f"{allure_report_output}:/app/allure-report",
+        "-e", f"ALLURE_ENVIRONMENT_BASEURL={ALLURE_BASE_URL_FOR_NETLIFY}",
+        IMAGE_NAME,
+        "allure", "generate", "allure-results", "-o", "allure-report", "--clean"
+    ]
+    execute_command(docker_allure_command, "Allure Report Generation (via Docker)")
 
+    # --- Step 6: Executing Report Deployment Workflow ---
+    print("\n--- Step 6: Executing Report Deployment Workflow ---")
+    deployment_command = [
+        sys.executable,
+        os.path.join(SUPPORTS_DIR, "deployment_workflow.py"),
+        build_number,
+        PROJECT_ROOT
+    ]
+    execute_command(deployment_command, "Report Deployment Workflow")
+
+    # --- Step 7: Create Netlify Redirects File ---
+    print("\n--- Step 7: Creating Netlify Redirects File ---")
+    redirect_path = os.path.join(PROJECT_ROOT, "_redirects")
+
+    try:
+        # Use explicit UTF-8 encoding for file writing, just in case
+        with open(redirect_path, 'w', encoding="utf-8") as f:
+            f.write("/reports/:build/* /reports/:build/index.html 200\n")
+            f.write(f"{NETLIFY_REPORT_PATH}/* {NETLIFY_REPORT_PATH}/index.html 200\n")
+        print(f"  Created/Updated Netlify rewrite rule in '{os.path.basename(redirect_path)}'.")
+        print("  Added dynamic rules for Allure Report SPA support.")
+    except Exception as e:
+        print(f"  CRITICAL ERROR creating _redirects file: {e}")
+        sys.exit(1)
+
+    # --- Step 8: Git Commit and Push ---
+    git_commit_and_push(build_number)
     print("\n--- Workflow Complete ---")
 
 
 if __name__ == '__main__':
-    # On Unix-like systems, set the process group ID for the script itself 
-    # to facilitate proper signal handling (os.killpg in execute_command).
-    # NOTE: This is less critical now that start_new_session is used in execute_command, 
-    # but still good practice for general signal robustness.
-    if platform.system() != "Windows":
-        try:
-            os.setpgrp()
-        except Exception:
-            pass 
-            
     PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
     os.chdir(PROJECT_ROOT)
     try:

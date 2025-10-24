@@ -13,7 +13,8 @@ This repository enables automation teams to:
 
 ---
 
-![Kubernetes](https://img.shields.io/badge/docker-ready-yellow?style=for-the-badge&logo=kubernetes)
+![CI/CD](https://img.shields.io/badge/CI/CD-ready-green?style=for-the-badge&logo=cicd)
+![Kubernetes](https://img.shields.io/badge/kubernetes-ready-yellow?style=for-the-badge&logo=kubernetes)
 ![Docker](https://img.shields.io/badge/docker-ready-blue?style=for-the-badge&logo=docker)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg?style=for-the-badge&logo=python)
 ![Allure Report](https://img.shields.io/badge/report-Allure-orange?style=for-the-badge&logo=allure)

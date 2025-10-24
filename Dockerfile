@@ -49,8 +49,6 @@ RUN if [ ! -f requirements.txt ]; then echo "" > requirements.txt; fi
 
 # Install core project dependencies, including the necessary testing packages
 RUN pip install --no-cache-dir \
-    pytest \
-    allure-pytest \
     -r requirements.txt || true
 
 # Copy the rest of the application code into the container

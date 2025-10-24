@@ -2,7 +2,7 @@
 
 ## 🧠 Overview
 
-A Behavior-Driven Development (BDD) testing framework that integrates **Robot Framework**, **Allure Reporting**, and **Kubernetes (K8s)** orchestration for scalable, production-grade CI/CD automation.
+> A Behavior-Driven Development (BDD) testing framework that integrates **Robot Framework**, **Allure Reporting**, and **Kubernetes (K8s)** orchestration for scalable, production-grade CI/CD automation.
 
 This repository enables automation teams to:
 
@@ -12,6 +12,22 @@ This repository enables automation teams to:
 * Integrate with **Docker** and **Kubernetes Jobs** for high scalability.
 
 ---
+
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge&logo=githubactions)
+![Docker](https://img.shields.io/badge/docker-ready-blue?style=for-the-badge&logo=docker)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg?style=for-the-badge&logo=python)
+![Allure Report](https://img.shields.io/badge/report-Allure-orange?style=for-the-badge&logo=allure)
+![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
+
+---
+
+## 👤 Author & Contact
+
+**Author:** Bang Thien Nguyen  
+**Email:** [ontario1998@gmail.com](mailto:ontario1998@gmail.com)
+
+---
+
 
 ## 🧩 Key Features
 
@@ -187,12 +203,6 @@ robotics_bdd/
 2. Create a new branch (`feature/awesome-enhancement`)
 3. Commit your changes
 4. Open a Pull Request
-
----
-
-## 🧑‍💻 Maintainers
-
-* **Author:** Bang Thien Nguyen - ontario1998@gmail.com
 
 
 ---

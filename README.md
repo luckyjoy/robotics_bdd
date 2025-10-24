@@ -1,246 +1,142 @@
-# 🤖 Robotics Behavior-Driven Development (BDD) Framework
+# 🤖 Robotics BDD Framework
 
-A robust, BDD-driven framework for validating the functionality, path planning, and critical safety protocols of simulated mobile manipulator robots.
+## 🧠 Overview
 
----
+A Behavior-Driven Development (BDD) testing framework that integrates **Robot Framework**, **Allure Reporting**, and **Kubernetes (K8s)** orchestration for scalable, 
+production-grade CI/CD automation and K8 execution with Docker.
 
-## 👤 Author & Contact  
-**Author:** Bang Thien Nguyen  
-**Contact:** ontario1998@gmail.com  
+This repository enables automation teams to:
 
----
-
-## 💡 Project Overview  
-This framework implements **Behavior-Driven Development (BDD)** using `pytest-bdd` to create **living documentation** and validation for robot control logic.  
-All requirements are defined as **human-readable Gherkin scenarios (Given–When–Then)**, ensuring clear collaboration between developers, QA, and stakeholders.
-
-| **Component** | **Technology** | **Role** |
-|----------------|----------------|-----------|
-| Test Syntax | **Gherkin (.feature)** | Defines human-readable scenario-based test cases. |
-| Test Runner | **pytest** | Industry-standard Python test execution framework. |
-| BDD Integration | **pytest-bdd** | Maps Gherkin steps to Python step definitions. |
-| Reporting | **Allure / pytest-html** | Generates professional, interactive test reports. |
+* Write human-readable test cases with **Gherkin syntax**.
+* Run tests locally or in **distributed cloud-native environments**.
+* Automatically generate and host **interactive Allure reports**.
+* Integrate with **Docker** and **Kubernetes Jobs** for high scalability.
 
 ---
 
-## 🚀 Getting Started  
+## 🧩 Key Features
 
-### 🔧 Prerequisites  
-- 🐋 Docker Desktop *(required for containerized execution)*  
-- 💻 Windows Command Prompt *(to run `run_docker.bat`)*  
-- 🐍 (Optional) Python 3.10+ *(for local testing)*  
-- 📈 (Optional) Allure command-line tool *(for local report viewing)*  
+* **Robot Framework + Allure** for structured, visual, and traceable test reporting.
+* **Cross-platform CI/CD**: Works on Windows (ci.bat) and Linux (ci.sh) agents.
+* **Dockerized Test Execution** ensures consistency and easy environment setup.
+* **Kubernetes Integration** to offload workloads to production-like clusters.
+* **GitHub Actions / Jenkins** support for CI/CD pipelines.
 
 ---
 
-### ⚙️ Installation  
+## ⚙️ Setup Instructions
 
-Clone the repository:  
+### 1. Local Environment Setup
+
 ```bash
-git clone https://github.com/luckyjoy/robotics_bdd.git
-cd robotics_bdd
-```
-
-Install dependencies (only if running outside Docker):  
-```bash
+git clone https://github.com/<your-org>/robotics-bdd-framework.git
+cd robotics-bdd-framework
 pip install -r requirements.txt
-```
-
----
-
-## 🐳 Dockerized Execution (Recommended)
-
-Ensure consistent results by running the full suite inside Docker.
-
-### 🧱 Docker Image  
-Image: **`robotics-bdd-local:latest`** — based on `python:3.10-slim`, includes:  
-- Java JRE 21 + Allure CLI for reporting  
-- Preinstalled dependencies from `requirements.txt`  
-- `/app` as working directory
-
-### ▶️ Run Tests via Script  
-Use the included Windows batch file to automate build, test, and report steps.
-
-**Script:** `run_docker.bat`  
-**Workflow:**  
-
-| **Step** | **Description** |
-|-----------|-----------------|
-| 1️⃣ Check Docker | Verifies Docker Desktop is active. |
-| 2️⃣ Clean Up | Removes old `allure-results` and `reports` directories. |
-| 3️⃣ Build / Pull | Builds or updates the Docker image. |
-| 4️⃣ Execute Tests | Runs BDD tests (e.g., navigation) and stores results. |
-| 5️⃣ Generate Report | Produces Allure HTML output. |
-| 6️⃣ Serve Report | Opens Allure report locally on **http://localhost:8080**. |
-
-Command to execute:  
-```bash
-run_docker.bat
-```
-
----
-
-### 🧹 Build Optimization – `.dockerignore` Example  
-
-```
-# Python artifacts
-__pycache__
-*.pyc
-*.pyo
-.pytest_cache
-venv/
-.tox/
-
-# IDE/OS files
-.vscode
-.idea
-.DS_Store
-*.swp
-
-# Generated reports/logs
-/allure-results
-/reports
-*.log
-```
-
----
-
-## 🌳 Framework Architecture  
-
-```
-robotics_bdd/
-├─ README.md
-├─ run_docker.bat
-├─ Dockerfile
-├─ .dockerignore
-├─ Jenkinsfile
-├─ pytest.ini
-├─ requirements.txt
-├─ features/                  # Gherkin feature files
-├─ steps/                     # Python step definitions
-├─ src/                       # Simulation and robot logic
-├─ supports/                  # Configs, test data, allure metadata
-```
-
----
-
-## 🏷️ Test Tags & Execution  
-
-| **Tag** | **Focus Area** | **Description** |
-|----------|----------------|-----------------|
-| `navigation` | Path Planning | Safe movement, obstacle avoidance, waypoint following. |
-| `pick_and_place` | Manipulation | Object handling, kinematics, and dynamic interactions. |
-| `safety` | System Integrity | Collision prevention, boundary constraints, error handling. |
-| `walking` | Gait Control | Posture, speed, stability, locomotion transitions. |
-| `sensors` | Data Fusion | Sensor accuracy and Kalman Filter convergence. |
-
-### 🧪 Run Tests Locally (Without Docker)  
-
-| **Mode** | **Command** |
-|-----------|-------------|
-| Run All Tests | `pytest --verbose` |
-| Run by Tag | `pytest -m sensors --verbose` |
-| Sequential (OR) | `pytest -m "navigation or pick_and_place"` |
-| Parallel | `pytest -m "navigation or safety" -n auto` |
-
----
-
-## 📊 Professional Test Reporting  
-
-### 1️⃣ **Interactive Allure Report (Recommended)**  
-```bash
-pytest -m "pick_and_place or safety" --alluredir=allure-results
+pytest --alluredir=allure-results
 allure serve allure-results
 ```
 
-📸 *Preview:* 
+### 2. Run with Docker
 
-![Allure Overview Report](https://github.com/luckyjoy/robotics_bdd/blob/main/reports/allure_report.jpg)
-
-
-![Allure Pytest Suites Report](https://github.com/luckyjoy/robotics_bdd/blob/main/reports/allure_suites.jpg)
-
-> Opens an interactive HTML dashboard with detailed execution insights.
-
-### 2️⃣ **Static HTML Report (pytest-html)**  
 ```bash
-pytest --html=reports/report.html --self-contained-html
+docker build -t robotics-bdd:latest .
+docker run --rm -v $(pwd)/reports:/reports robotics-bdd:latest
+```
+
+### 3. Run in CI/CD
+
+Use the provided scripts for pipeline execution:
+
+```bash
+# On Linux
+docker-compose -f docker-compose.yml up --build --abort-on-container-exit
+
+# On Windows
+ci.bat
 ```
 
 ---
 
-## 🧭 Test Coverage Summary
+## 🌐 Advanced CI/CD: Docker and Kubernetes (K8s) Integration
 
-| Feature | Objective | Value Proposition |
-|----------|------------|------------------|
-| **Navigation** | Validate safe, collision-free motion | Ensures reliable target reaching |
-| **Pick & Place** | Verify arm dexterity | Guarantees object handling success |
-| **Safety** | Enforce operational constraints | Prevents boundary violations |
-| **Sensor Fusion** | Validate perception accuracy | Confirms Kalman convergence |
-| **Walking** | Test locomotion stability | Maintains posture and control |
+This framework leverages a sophisticated pipeline (`kubernetes_pipeline.bat` or `ci.bat`) to ensure reliability and scalability for running tests in a production-like environment.
 
----
+### 1. Component Roles
 
-## ⚙️ CI/CD Integration
+| Component                 | Purpose in the Pipeline                                                                                          | Key Benefit                                                                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Docker**                | Packages the Robot Framework tests, Python dependencies, and tools into a single, isolated image.                | **Consistency**: Guarantees tests run the exact same way on every machine or cluster node.                                                         |
+| **Kubernetes (K8s) Job**  | Executes the BDD Test Docker image as a controlled workload on a cluster.                                        | **Reliability & Scalability**: Decouples heavy test execution from the CI runner, using robust K8s infrastructure to manage resources and retries. |
+| **Report Artifact Image** | Packages the final static Allure HTML report into a small Nginx web server image, which is pushed to Docker Hub. | **Portable Publishing**: Creates a web-hosted artifact deployable anywhere for easy remote viewing and sharing.                                    |
 
-| System | Description |
-|--------|--------------|
-| **Jenkinsfile** | Automates build → test → report |
-| **GitHub Actions** | Easily adaptable for cloud CI/CD |
-| **Allure + pytest** | Generates professional analytics dashboards |
-| **Dockerized Execution** | Guarantees repeatable test environments |
+### 2. K8s Execution Flow
 
----
+K8s execution refers to running the BDD Test container directly on a Kubernetes cluster. This is achieved via a Job object defined in `robotics-bdd-job.yaml`.
 
-**📁 Repository:** *Robotics BDD Framework*  
-**🧠 Approach:** Behavior-Driven Development (BDD)  
-**📈 Reporting:** Allure + pytest-html  
-**⚙️ CI/CD Integration:** Jenkins/Github + Docker  
+* **Job Object**: The Kubernetes Job ensures that the specific task (running the BDD tests) is executed to completion. If the test Pod fails due to infrastructure issues, the Job can be configured to automatically retry the test container.
+* **Decoupling**: The pipeline instructs the cluster to run the job (`kubectl apply`), and Kubernetes handles the entire execution, from finding a suitable node to pulling the image and monitoring the test run.
 
----
+### 3. Remote Report Access
 
-### 📈 Example CI/CD Badges
+After the tests run, the final Report Artifact Image (`luckyjoy/robotics-bdd-report:<BUILD_NUMBER>`) is published to Docker Hub.
 
-![Jenkins](https://img.shields.io/badge/jenkins-pipeline%20passing-brightgreen?style=flat-square&logo=jenkins)
-![GitHub Actions](https://img.shields.io/github/actions/workflow/status/yourusername/robotics_bdd/ci.yml?style=flat-square&logo=github)
-![Allure Tests](https://img.shields.io/badge/tests-58%20passed%2C%202%20failed-yellow?style=flat-square&logo=allure)
+To view the report remotely, run this image on any publicly accessible server:
 
----
-
-## 🤝 Contributing Guidelines
-
-We welcome contributions to improve and expand this framework!  
-
-### 🧩 How to Contribute
-1. **Fork** the repository  
-2. **Create a branch**: `git checkout -b feature/my-improvement`  
-3. **Write clean, BDD-compliant code**  
-4. **Run local tests** (`pytest` or `run_docker.bat`)  
-5. **Submit a Pull Request** describing your enhancement  
-
-### ✅ Code Style
-- Follow **PEP8** conventions  
-- Use **pytest markers** consistently  
-- Ensure **Allure reports** run without errors  
-- Write **docstrings** for all new functions  
-
-### 🧪 Before Submitting
-Run:
 ```bash
-pytest --maxfail=1 --disable-warnings -q
+# On your remote server/VM with Docker installed:
+docker run -d -p 80:80 docker.io/luckyjoy/robotics-bdd-report:<BUILD_NUMBER>
+
+# Access via browser:
+http://<YOUR_SERVER_PUBLIC_IP_OR_DNS_NAME>
 ```
-and make sure all tests pass locally.
 
 ---
 
-## 🪪 License
+## 📊 Allure Reporting
 
-This project is released under the **MIT License** — free to use, modify, and distribute.
+To generate and serve the Allure Report locally:
+
+```bash
+pytest --alluredir=allure-results
+allure generate allure-results --clean -o allure-report
+allure open allure-report
+```
+
+The CI pipeline will automatically attach and publish the generated reports as artifacts.
 
 ---
 
-📬 *For collaboration inquiries, reach out at* [ontario1998@gmail.com](mailto:ontario1998@gmail.com)
+## 🧱 Project Structure
+
+```
+robotics-bdd-framework/
+├── tests/                     # Robot Framework tests
+├── resources/                 # Shared keywords and variables
+├── supports/                  # Custom Python libraries and hooks
+├── docker/                    # Dockerfiles and entrypoints
+├── k8s/                       # Kubernetes manifests
+├── reports/                   # Allure and log outputs
+└── ci.bat / ci.sh             # Cross-platform CI entry points
+```
 
 ---
 
-> _“Build robots that test themselves before they move — that’s true autonomy.”_
+## 🧩 Contributing
+
+1. Fork the repository
+2. Create a new branch (`feature/awesome-enhancement`)
+3. Commit your changes
+4. Open a Pull Request
+
+---
+
+## 🧑‍💻 Maintainers
+
+* **Author:** Burak — Senior QA Automation & BI Engineer
+* **Maintainer:** LuckyJoy DevOps Team
+
+---
+
+## 📜 License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

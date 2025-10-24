@@ -1,6 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
 
+echo Running Kubernetes Pipelines for Robotics BDD Simulation Tests...
+echo Author: Bang Thien Nguyen, ontario1998@gmail.com
+echo.
+
 :: -----------------------------------------------------------
 :: ARGUMENT CHECKING & SETUP
 :: -----------------------------------------------------------
@@ -201,11 +205,11 @@ FOR /F "tokens=*" %%p IN ('kubectl get pods -l app=robotics-bdd --sort-by=.metad
 :: FINAL STATUS
 :: -----------------------------------------------------------
 echo.
-echo =======================================================
+echo ====================================================================
 echo PIPELINE COMPLETE.
 echo Kubernetes Job execution has finished.
 echo Use 'debug_job.bat' to inspect final Pod status if the logs above did not appear.
-echo =======================================================
+echo ====================================================================
 echo.
 echo BDD Test Image Location: https://hub.docker.com/r/luckyjoy/robotics-bdd-local/tags
 echo Report Artifact Tag: %REPORT_FULL_TAG%
@@ -221,7 +225,7 @@ echo 1. SSH into your remote server/VM.
 echo 2. Run the image, mapping the port:
 echo    docker run -d -p 80:80 docker.io/%REPORT_FULL_TAG%
 echo 3. Access the report via your server's public IP address or DNS name.
-echo ---------------------------------------
+echo ---------------------------------------------------------------------
 echo.
 
 :: -----------------------------------------------------------

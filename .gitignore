@@ -44,3 +44,7 @@ Thumbs.db
 g.bat
 build.bat
 ci.bat
+last_pushed_id.txt
+BUILD_NUMBER.txt
+debug_job.bat
+index.html

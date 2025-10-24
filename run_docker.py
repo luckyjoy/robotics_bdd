@@ -13,13 +13,13 @@ import signal # <-- Import the signal module
 
 # --- Configuration ---
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-IMAGE_NAME = "robotics-bdd-local:latest"
+IMAGE_NAME = "luckyjoy/robotics-bdd-local:latest"
 
 # Local Allure Reporting Constants
 # Directory where Docker will output raw results for the CURRENT build
 ALLURE_RESULTS_DIR = os.path.join(PROJECT_ROOT, "allure-results") 
 # Directory where the final HTML report will be generated
-ALLURE_REPORT_DIR = os.path.join(PROJECT_ROOT, "allure-html-report")
+ALLURE_REPORT_DIR = os.path.join(PROJECT_ROOT, "allure-report")
 
 # Deprecated/Removed Constants (Used for Netlify/Deployment)
 SUPPORTS_DIR = os.path.join(PROJECT_ROOT, "supports")

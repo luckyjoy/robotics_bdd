@@ -36,3 +36,16 @@ Thumbs.db
 Ignore the Dockerfile and other Docker-related files themselves
 Dockerfile
 .dockerignore
+last_pushed_id.txt
+BUILD_NUMBER.txt
+Thumbs.db
+.DS_Store
+*.tmp
+*.swp
+g.bat
+build.bat
+ci.bat
+last_pushed_id.txt
+BUILD_NUMBER.txt
+debug_job.bat
+index.html

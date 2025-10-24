@@ -2,8 +2,7 @@
 
 ## 🧠 Overview
 
-A Behavior-Driven Development (BDD) testing framework that integrates **Robot Framework**, **Allure Reporting**, and **Kubernetes (K8s)** orchestration for scalable, 
-production-grade CI/CD automation and K8 execution with Docker.
+A Behavior-Driven Development (BDD) testing framework that integrates **Robot Framework**, **Allure Reporting**, and **Kubernetes (K8s)** orchestration for scalable, production-grade CI/CD automation.
 
 This repository enables automation teams to:
 
@@ -24,6 +23,21 @@ This repository enables automation teams to:
 
 ---
 
+
+## 🏷️ Test Tags & Execution  
+
+| **Tag** | **Focus Area** | **Description** |
+|----------|----------------|-----------------|
+| `navigation` | Path Planning | Safe movement, obstacle avoidance, waypoint following. |
+| `pick_and_place` | Manipulation | Object handling, kinematics, and dynamic interactions. |
+| `safety` | System Integrity | Collision prevention, boundary constraints, error handling. |
+| `walking` | Gait Control | Posture, speed, stability, locomotion transitions. |
+| `sensors` | Data Fusion | Sensor accuracy and Kalman Filter convergence. |
+
+
+---
+
+
 ## ⚙️ Setup Instructions
 
 ### 1. Local Environment Setup
@@ -36,24 +50,40 @@ pytest --alluredir=allure-results
 allure serve allure-results
 ```
 
-### 2. Run with Docker
+### 2. Run Tests Locally (Without Docker)  
+
+| **Mode** | **Command** |
+|-----------|-------------|
+| Run All Tests | `pytest --verbose` |
+| Run by Tag | `pytest -m sensors --verbose` |
+| Sequential (OR) | `pytest -m "navigation or pick_and_place"` |
+| Parallel | `pytest -m "navigation or safety" -n auto` |
+
+
+### 3. Run with Docker
 
 ```bash
 docker build -t robotics-bdd:latest .
 docker run --rm -v $(pwd)/reports:/reports robotics-bdd:latest
+
+or python run_docker.py <build_number> [test_suite]
+
 ```
 
-### 3. Run in CI/CD
+### 3.️ CI/CD Integration
 
-Use the provided scripts for pipeline execution:
+| System                   | Description                                 |
+| ------------------------ | ------------------------------------------- |
+| **Jenkinsfile**          | Automates build → test → report             |
+| **GitHub Actions**       | Easily adaptable for cloud CI/CD            |
+| **Allure + pytest**      | Generates professional analytics dashboards |
+| **Dockerized Execution** | Guarantees repeatable test environments     |
 
-```bash
-# On Linux
-docker-compose -f docker-compose.yml up --build --abort-on-container-exit
-
-# On Windows
-ci.bat
-```
+📁 **Repository:** Robotics BDD Framework
+🧠 **Approach:** Behavior-Driven Development (BDD)
+📈 **Reporting:** Allure + pytest-html
+⚙️ **CI/CD Integration:** Jenkins/GitHub + Docker/K8s
+📈 **Example CI/CD Badges**
 
 ---
 
@@ -76,6 +106,11 @@ K8s execution refers to running the BDD Test container directly on a Kubernetes 
 * **Job Object**: The Kubernetes Job ensures that the specific task (running the BDD tests) is executed to completion. If the test Pod fails due to infrastructure issues, the Job can be configured to automatically retry the test container.
 * **Decoupling**: The pipeline instructs the cluster to run the job (`kubectl apply`), and Kubernetes handles the entire execution, from finding a suitable node to pulling the image and monitoring the test run.
 
+```bash
+
+kubenestes_pipeline.bat <build_number> [test_suite]
+
+```
 ### 3. Remote Report Access
 
 After the tests run, the final Report Artifact Image (`luckyjoy/robotics-bdd-report:<BUILD_NUMBER>`) is published to Docker Hub.
@@ -102,22 +137,47 @@ allure generate allure-results --clean -o allure-report
 allure open allure-report
 ```
 
-The CI pipeline will automatically attach and publish the generated reports as artifacts.
+📸 *Preview:* 
+
+![Allure Overview Report](https://github.com/luckyjoy/robotics_bdd/blob/main/reports/allure_report.jpg)
+
+
+![Allure Pytest Suites Report](https://github.com/luckyjoy/robotics_bdd/blob/main/reports/allure_suites.jpg)
+
+> Opens an interactive HTML dashboard locally with detailed execution insights.
+
+> The CI pipeline will automatically attach and publish the generated reports as artifacts.
 
 ---
 
 ## 🧱 Project Structure
 
 ```
-robotics-bdd-framework/
-├── tests/                     # Robot Framework tests
-├── resources/                 # Shared keywords and variables
-├── supports/                  # Custom Python libraries and hooks
-├── docker/                    # Dockerfiles and entrypoints
-├── k8s/                       # Kubernetes manifests
-├── reports/                   # Allure and log outputs
-└── ci.bat / ci.sh             # Cross-platform CI entry points
-```
+robotics_bdd/
+├─ BUILD_NUMBER.txt           # File storing current build number.
+├─ Dockerfile                 # Defines the BDD Test Docker image (runtime environment).
+├─ Jenkinsfile                # CI/CD pipeline definition for Jenkins.
+├─ README.md
+├─ requirements.txt			  # dependencies requirements
+├─ run_docker.py			  # python script to run tests insie docker container.
+├─ run_kubenestes.py          # Python script to orchestrate K8s jobs and report generation.
+├─ kubenestes_pipeline.bat    # CI execution script.
+├─ robotics-bdd-job.yaml      # Kubernetes Job definition (runs the tests).
+├─ robotics-bdd-pv.yaml       # Kubernetes Persistent Volume definition.
+├─ robotics-bdd-pvc.yaml      # Kubernetes Persistent Volume Claim.
+│
+├─ features/                  # Gherkin feature files
+│  └─ manual_tests/
+│
+├─ steps/                     # Python step definitions (pick_and_place_steps.py, navigation_steps.py, etc.)
+│
+├─ simulation/                # Robot simulation and core logic (robot_sim.py, sensors.py)
+│
+├─ reports/                   # Static report files
+│  └─ allure-report/          # Final HTML report files
+│     └─ Dockerfile           # Dockerfile for packaging the final report as a web server
+│
+└─ allure-results/            # Raw JSON/XML results (generated during test execution)
 
 ---
 
@@ -130,9 +190,10 @@ robotics-bdd-framework/
 
 ---
 
-## 🧑‍💻 Author
+## 🧑‍💻 Maintainers
 
-* **Author:** Bang Thien Nguyen ontario1998@gmail.com
+* **Author:** Bang Thien Nguyen - ontario1998@gmail.com
+
 
 ---
 

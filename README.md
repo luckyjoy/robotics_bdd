@@ -130,10 +130,9 @@ robotics-bdd-framework/
 
 ---
 
-## 🧑‍💻 Maintainers
+## 🧑‍💻 Author
 
-* **Author:** Burak — Senior QA Automation & BI Engineer
-* **Maintainer:** LuckyJoy DevOps Team
+* **Author:** Bang Thien Nguyen ontario1998@gmail.com
 
 ---
 

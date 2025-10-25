@@ -5,6 +5,7 @@ logs
 examples/
 supports/*.py
 allure-results/
+allure-report/
 tmp
 
 # VM images & snapshots (HUGE files, never commit)

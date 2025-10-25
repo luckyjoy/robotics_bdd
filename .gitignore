@@ -15,7 +15,7 @@ tmp
 
 # Reports & logs
 *.log
-
+_redirects
 
 # Python caches
 __pycache__/
@@ -39,6 +39,7 @@ build/
 # OS junk
 Thumbs.db
 .DS_Store
+*.toml
 *.tmp
 *.swp
 g.bat
@@ -48,3 +49,5 @@ last_pushed_id.txt
 BUILD_NUMBER.txt
 debug_job.bat
 index.html
+python_image_id.tmp
+

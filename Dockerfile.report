@@ -1,0 +1,8 @@
+
+# Use a minimal web server image (e.g., nginx-alpine)
+FROM nginx:alpine
+# Copy the generated report into the Nginx web root
+COPY allure-report /usr/share/nginx/html
+# Nginx serves content on port 80 by default
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

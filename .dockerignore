@@ -18,7 +18,6 @@ venv/
 .benchmarks/
 tmp/
 
-
 Ignore test results and reports
 allure-results/
 reports/
@@ -32,6 +31,7 @@ allure-html-report/
 *.tmp
 Thumbs.db
 .DS_Store
+_redirects
 
 Ignore the Dockerfile and other Docker-related files themselves
 Dockerfile
@@ -42,6 +42,7 @@ Thumbs.db
 .DS_Store
 *.tmp
 *.swp
+*.toml
 g.bat
 build.bat
 ci.bat
@@ -49,3 +50,4 @@ last_pushed_id.txt
 BUILD_NUMBER.txt
 debug_job.bat
 index.html
+python_image_id.tmp

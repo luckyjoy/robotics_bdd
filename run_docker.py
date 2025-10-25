@@ -13,7 +13,7 @@ import signal # <-- Import the signal module
 
 # --- Configuration ---
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-IMAGE_NAME = "luckyjoy/robotics-bdd-local:latest"
+IMAGE_NAME = "robotics-bdd-local:latest"
 
 # Local Allure Reporting Constants
 # Directory where Docker will output raw results for the CURRENT build

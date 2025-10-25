@@ -31,7 +31,6 @@ pipeline {
                 bat """
                     "%PYTHON_EXE%" -m pip install --upgrade pip
                     if exist requirements.txt "%PYTHON_EXE%" -m pip install -r requirements.txt
-                    "%PYTHON_EXE%" -m pip install pytest allure-pytest
                     npm install -g allure-commandline --force
                     where allure >nul 2>nul || (echo Allure CLI not found on PATH. Ensure npm global bin is on PATH & exit /b 1)
                 """

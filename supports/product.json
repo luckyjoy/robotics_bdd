@@ -1,7 +1,7 @@
 {
-  "Title": "Robotics Behavior-Driven Development (BDD) Simulation Framework Documentation",
+  "Title": "Robotics BDD Simulation PRD",
   "Version": "1.0.0",
-  "Date": "2025-09-30",
+  "RevisedDate": "2025-09-30",
   "ProductName": "Robotics BDD Simulation Framework",
   "ProductModel": "BDD-Sim-PyBullet",
   "ProductVersion": "1.0.0",

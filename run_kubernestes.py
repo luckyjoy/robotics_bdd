@@ -325,7 +325,7 @@ FROM nginx:alpine
 # Copy the generated report into the Nginx web root
 COPY {os.path.basename(ALLURE_REPORT_DIR)} /usr/share/nginx/html
 # Nginx serves content on port 80 by default
-EXPOSE 80
+EXPOSE 8081
 CMD ["nginx", "-g", "daemon off;"]
 """
     dockerfile_path = os.path.join(PROJECT_ROOT, "Dockerfile.report")

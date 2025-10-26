@@ -471,7 +471,17 @@ if __name__ == "__main__":
         sys.exit(1)
 
     build_number = sys.argv[1]
-    suite_marker = sys.argv[2] if len(sys.argv) > 2 else "all"
+    
+    # Check if BUILD_NUMBER is numeric
+    if not build_number.isdigit():
+        print("\n==========================================================")
+        print(f"FATAL ERROR: The <BUILD_NUMBER> argument must be an integer.")
+        print(f"Received: '{build_number_arg}'")
+        print("Usage: python run_kubernestes.py <BUILD_NUMBER> [SUITE_MARKER] [Dockerfile]")
+        print("==========================================================")
+        sys.exit(1)
+        
+    suite_marker = sys.argv[2] if len(sys.argv) > 2 else "navigation"
 
     print(f"=======================================================")
     print(f"STARTING ORCHESTRATION PIPELINE")

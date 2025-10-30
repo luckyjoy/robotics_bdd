@@ -22,13 +22,29 @@ This repository enables automation teams to:
 
 ---
 
-## 👤 Author & Contact
+## 🛠️ End-to-End DevOps & Kubernetes Workflow
 
-**Author:** Bang Thien Nguyen  
-**Email:** [ontario1998@gmail.com](mailto:ontario1998@gmail.com)
+This project is built on a comprehensive CI/CD pipeline and an automated Kubernetes deployment workflow:
+
+### 1. Development & Testing (Local/CI)
+* **Testing**: Developers run benchmarks locally using **Pytest** with specific markers (`-m gpu`, `-m cpu`) to validate performance and collect detailed results.
+* **CI/CD (GitHub Actions / Jenkins)**: The **`ci.yml`** workflow in GitHub Actions (or an equivalent Jenkins pipeline) is triggered upon code changes.
+    * It executes the **benchmark tests** against various hardware configurations.
+    * It uses **Docker** to ensure a consistent, reproducible environment for testing.
+    * It generates **Allure Reports** and plots system metrics (`scripts/plot_gpu_metrics.py`).
+
+### 2. Packaging & Publishing
+* **Docker Image Creation**: Using one of the provided `Dockerfile` variants (`Dockerfile.mini`, `Dockerfile.report`), a Docker image containing the test environment, report server, and dependencies is built.
+* **Registry Push**: The final image is tagged and pushed to **Docker Hub** (or a private registry).
+
+### 3. Automated Kubernetes Deployment
+The **`deploy_gpu_workflow.py`** script manages the final deployment to a Kubernetes cluster:
+* **Cluster Cleanup**: It first runs `kubectl delete deployment --all` for a clean state.
+* **Dynamic GPU Detection**: It scans cluster nodes for available extended GPU resources (e.g., `gpu.intel.com/i915`, `nvidia.com/gpu`).
+* **Resource Allocation**: The deployment manifest is dynamically configured to request the detected **GPU resource** or fall back to standard **CPU limits (1 core / 1Gi)**.
+* **Deployment & Access**: It creates the optimized Kubernetes Deployment and Service. Once the Pod is running, it initiates a blocking **`kubectl port-forward`** to map the cluster service (Port 80) to your local machine (Port 8080), allowing instant, interactive access to the Allure Report dashboard via `http://127.0.0.1:8080`.
 
 ---
-
 
 ## 🧩 Key Features
 
@@ -87,62 +103,25 @@ or python run_docker.py <build_number> [test_suite]
 
 ```
 
-### 3.️ CI/CD Integration
-
-| System                   | Description                                 |
-| ------------------------ | ------------------------------------------- |
-| **Jenkinsfile**          | Automates build → test → report             |
-| **GitHub Actions**       | Easily adaptable for cloud CI/CD            |
-| **Allure + pytest**      | Generates professional analytics dashboards |
-| **Dockerized Execution** | Guarantees repeatable test environments     |
-
-📁 **Repository:** Robotics BDD Framework
-🧠 **Approach:** Behavior-Driven Development (BDD)
-📈 **Reporting:** Allure + pytest-html
-⚙️ **CI/CD Integration:** Jenkins/GitHub + Docker/K8s
-📈 **Example CI/CD Badges**
-
----
-
-## 🌐 Advanced CI/CD: Docker and Kubernetes (K8s) Integration
-
-This framework leverages a sophisticated pipeline (`kubernetes_pipeline.bat` or `ci.bat`) to ensure reliability and scalability for running tests in a production-like environment.
-
-### 1. Component Roles
-
-| Component                 | Purpose in the Pipeline                                                                                          | Key Benefit                                                                                                                                        |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Docker**                | Packages the Robot Framework tests, Python dependencies, and tools into a single, isolated image.                | **Consistency**: Guarantees tests run the exact same way on every machine or cluster node.                                                         |
-| **Kubernetes (K8s) Job**  | Executes the BDD Test Docker image as a controlled workload on a cluster.                                        | **Reliability & Scalability**: Decouples heavy test execution from the CI runner, using robust K8s infrastructure to manage resources and retries. |
-| **Report Artifact Image** | Packages the final static Allure HTML report into a small Nginx web server image, which is pushed to Docker Hub. | **Portable Publishing**: Creates a web-hosted artifact deployable anywhere for easy remote viewing and sharing.                                    |
-
-### 2. K8s Execution Flow
-
-K8s execution refers to running the BDD Test container directly on a Kubernetes cluster. This is achieved via a Job object defined in `robotics-bdd-job.yaml`.
-
-* **Job Object**: The Kubernetes Job ensures that the specific task (running the BDD tests) is executed to completion. If the test Pod fails due to infrastructure issues, the Job can be configured to automatically retry the test container.
-* **Decoupling**: The pipeline instructs the cluster to run the job (`kubectl apply`), and Kubernetes handles the entire execution, from finding a suitable node to pulling the image and monitoring the test run.
-
+## 4. Run Advanced CI/CD with Kubernetes & Docker
 ```bash
 
-kubenestes_pipeline.bat <build_number> [test_suite]
+Usage:   python run_kubernestes.py <Build_Number> [Suite_marker] [Dockerfile]
+Example: python run_kubernestes.py 1 -m navigation Dockerfile.custom
+-> Builds Docker images with , runs Robotics BDD Framework with  with build number 1, 
+-> Generates Allure report, and pushes Docker images to Docker Hub.
 
-```
-### 3. Remote Report Access
+Usage:   python deploy_gpu_workflow.py <Build_Number>
+Example: python deploy_gpu_workflow.py 1
+-> Creates the necessary Pod deployment and service, monitors Pod creation & reports scheduling events.
+-> Deploys Docker image (build tag number 1) from Docker Hub, assigns a worker to run the Docker image within the assigned Pod.
+-> Generates Allure Report.
 
-After the tests run, the final Report Artifact Image (`luckyjoy/robotics-bdd-report:<BUILD_NUMBER>`) is published to Docker Hub.
 
-To view the report remotely, run this image on any publicly accessible server:
-
-```bash
-# On your remote server/VM with Docker installed:
-docker run -d -p 80:80 docker.io/luckyjoy/robotics-bdd-report:<BUILD_NUMBER>
-
-# Access via browser:
-http://<YOUR_SERVER_PUBLIC_IP_OR_DNS_NAME>
 ```
 
 ---
+
 
 ## 📊 Allure Reporting
 
@@ -156,10 +135,11 @@ allure open allure-report
 
 📸 *Preview:* 
 
-![Allure Overview Report](https://github.com/luckyjoy/robotics_bdd/blob/main/reports/allure_report.jpg)
+![Build History Dashboard](images/dashboard.jpg)
 
+![Allure Overview Report](images/allure_report.jpg)
 
-![Allure Pytest Suites Report](https://github.com/luckyjoy/robotics_bdd/blob/main/reports/allure_suites.jpg)
+![Allure Pytest Suites Report](images/allure_suites.jpg)
 
 > Opens an interactive HTML dashboard locally with detailed execution insights.
 
@@ -205,9 +185,16 @@ robotics_bdd/
 3. Commit your changes
 4. Open a Pull Request
 
+---
+
+## 🪪 License
+
+Released under the **MIT License** — free to use, modify, and distribute.
 
 ---
 
-## 📜 License
+📬 *Contact:* Bang Thien Nguyen [ontario1998@gmail.com](mailto:ontario1998@gmail.com) 
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+---
+
+> _“Build robots that test themselves before they move. That’s a true autonomy.”_

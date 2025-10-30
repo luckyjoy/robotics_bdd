@@ -6,7 +6,7 @@ examples/
 supports/*.py
 allure-results/
 allure-report/
-tmp
+tmp/
 
 # VM images & snapshots (HUGE files, never commit)
 *.qcow2
@@ -51,4 +51,12 @@ BUILD_NUMBER.txt
 debug_job.bat
 index.html
 python_image_id.tmp
+supports/automation_rate.py          
+supports/github_run_status.py        
+supports/test_coverage.py
+supports/check_builds_size.py        
+supports/jenkins_dashboard.py        
+supports/validation_plan_builder.py
+supports/deployment_workflow.py      
+supports/prd2html.py
 

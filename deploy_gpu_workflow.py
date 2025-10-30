@@ -649,8 +649,9 @@ def main_workflow():
         print("  python deploy_gpu_workflow.py <BUILD_NUMBER> <FRAMEWORK_NAME>")
         print("  python deploy_gpu_workflow.py cleanup-only")
         print("\nExample:")
-        print("  python deploy_gpu_workflow.py 1 gpu-benchmark")
-        print("  python deploy_gpu_workflow.py 1 robotics_bdd")        
+        print("  python deploy_gpu_workflow.py 101 gpu-benchmark")
+        print("  python deploy_gpu_workflow.py 102 robotics_bdd")   
+        print("  python deploy_gpu_workflow.py 103 robotics_tdd")          
         sys.exit(1)
 
     cleanup_mode = (len(sys.argv) == 2 and sys.argv[1] == "cleanup-only")
@@ -667,7 +668,7 @@ def main_workflow():
         FRAMEWORK_NAME_NORM = FRAMEWORK_ARG.replace("_", "-")
 
         # Dynamic Port Assignment
-        port_map = {"robotics-bdd": 8081, "gpu-benchmark": 8082}
+        port_map = {"robotics-bdd": 8081, "robotics-tdd": 8082, "gpu-benchmark": 8083}
         LOCAL_PORT = port_map.get(FRAMEWORK_NAME_NORM, 8080)
         if LOCAL_PORT == 8080:
              print(f"⚠️ Warning: Unknown framework '{FRAMEWORK_ARG}'. Defaulting local port to 8080.")

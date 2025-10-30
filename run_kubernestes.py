@@ -73,7 +73,7 @@ if "-h" in sys.argv or "--help" in sys.argv:
     sys.exit(0)
 
 # Continue normal imports
-import subprocess, os, platform, shutil, json, time, webbrowser, re, psutil
+import subprocess, os, platform, shutil, json, time, webbrowser, re, psutil, signal
 from typing import Optional, Tuple
 
 try:
@@ -183,312 +183,7 @@ def set_global_tags(framework_name: str):
         print("\nERROR: Failed to set global image tags. Exiting.")
         sys.exit(1)
 
-def execute_command(command, error_message, check_output=False, exit_on_error=True, docker_build_status=False, docker_push_status=False):
-    """
-    Executes a shell command and handles errors, with streaming status for Docker operations.
-    Implements PASS/UNSTABLE/FAIL policy for test runs (when exit_on_error=False).
-    """
-    if docker_build_status or docker_push_status:
-        # --- Streaming Logic for Docker Build/Push ---
-        if docker_build_status:
-            try:
-                # The original code used a complex way to get the image name from a string command
-                # We'll use a simpler approach based on the known tag structure
-                image_name = REPORT_IMAGE_TAG.split('/')[1].split(':')[0]
-            except IndexError:
-                image_name = "Docker Image"
-            print(f"Starting Docker Build with Live Status: {image_name}")
-            
-        p = subprocess.Popen(
-            command,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            encoding="utf-8",
-            universal_newlines=True,
-            bufsize=1 
-        )
-        
-        current_step = 0
-        total_steps = 0
-        step_description = "Initializing..."
-        layer_statuses = {} 
-        return_code = None
-        
-        for line in iter(p.stdout.readline, ''):
-            
-            if docker_build_status:
-                match_progress = STEP_PROGRESS_RE.search(line)
-                match_desc = STEP_DESC_RE.search(line)
-
-                if match_progress:
-                    current_step = int(match_progress.group(1))
-                    total_steps = int(match_progress.group(2))
-                    
-                    if match_desc:
-                        step_description = match_desc.group(1).split('\n')[0].strip()
-                        if step_description.startswith('FROM'):
-                             step_description = f"FROM {step_description.split(':')[1].strip()}"
-                        elif len(step_description) > 50:
-                             step_description = step_description[:50] + "..."
-
-                if total_steps > 0:
-                    progress_percent = int((current_step / total_steps) * 100)
-                    status_line = (
-                        f"  [Docker Build Status] Step {current_step}/{total_steps} ({progress_percent}%) | "
-                        f"Task: {step_description:<50} | "
-                        f"{time.strftime('%H:%M:%S')} \r"
-                    )
-                    sys.stdout.write(status_line)
-                    sys.stdout.flush()
-
-            elif docker_push_status:
-                match_push_progress = DOCKER_PUSH_PROGRESS_RE.search(line)
-                
-                if match_push_progress:
-                    layer_id = match_push_progress.group(1)
-                    status = match_push_progress.group(2)
-                    percent_str = match_push_progress.group(3)
-                    percent = int(percent_str) if percent_str else (100 if status in ('Pushed', 'Layer already exists', 'Mounted') else 0)
-                    
-                    layer_statuses[layer_id] = percent
-                    
-                    total_layers = len(layer_statuses)
-                    if total_layers > 0:
-                        active_layers = [p for p in layer_statuses.values() if p < 100]
-                        total_units_possible = total_layers * 100
-                        total_units_achieved = sum(layer_statuses.values())
-                        overall_percent = int((total_units_achieved / total_units_possible) * 100)
-                        
-                        status_line = (
-                            f"  [Docker Push Status] Total Progress: {overall_percent}% "
-                            f"| Layers: {len(active_layers)} active / {total_layers} total | "
-                            f"{time.strftime('%H:%M:%S')} \r"
-                        )
-                        sys.stdout.write(status_line)
-                        sys.stdout.flush()
-
-            if "ERROR" in line.upper() or "FATAL" in line.upper() or "STEP COMPLETE:" in line or "Login Succeeded" in line:
-                 sys.stdout.write(" " * 120 + "\r")
-                 print(line.strip())
-
-        p.stdout.close()
-        return_code = p.wait()
-
-        sys.stdout.write(" " * 120 + "\r")
-        sys.stdout.flush()
-
-        if return_code != 0:
-            print("\n==========================================================")
-            print(f"ERROR UNHANDLED ERROR during Docker process: {error_message}")
-            print(f"Command failed: {command}")
-            print("==========================================================")
-            if exit_on_error:
-                sys.exit(return_code)
-            return return_code
-        
-        if docker_build_status:
-            target_tag = REPORT_IMAGE_TAG if "Dockerfile.report" in command else LOCAL_IMAGE_TAG
-            print(f"✅ Docker build completed successfully: {target_tag}")
-            
-        return 0
-    else:
-        # --- Standard subprocess.run for non-streaming commands (like pytest) ---
-        try:
-            result = subprocess.run(
-                command,
-                shell=True,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                encoding="utf-8",
-                universal_newlines=True,
-            )
-            output = result.stdout.strip()
-            
-            print(output) 
-            return 0
-        except subprocess.CalledProcessError as e:
-            
-            # --- PASS/UNSTABLE/FAIL Policy ---
-            if not exit_on_error:
-                if e.returncode == 1:
-                    print(f"\n⚠️  UNSTABLE: Tests failed (exit code 1). Proceeding to report generation.")
-                    print("----------------------------------------------------------")
-                    print("----------------------------------------------------------")
-                    return e.returncode
-                else:
-                    print("\n==========================================================")
-                    print(f"❌ FAIL: Test execution failed with setup/environment error (exit code {e.returncode}).")
-                    print(f"Command: {command}")
-                    print("----------------------------------------------------------")
-                    print(f"Output:\n{e.stdout}")
-                    print("\nHalting pipeline. No report will be generated.")
-                    print("==========================================================")
-                    sys.exit(e.returncode)
-            
-            # Standard Error Block
-            print("\n==========================================================")
-            print(f"ERROR: {error_message}")
-            print(f"Command failed: {command}")
-            print("----------------------------------------------------------")
-            print(f"Output:\n{e.stdout}")
-            print("==========================================================")
-            sys.exit(1)
-
-def docker_image_exists(image_tag):
-    """Checks if a Docker image with the given tag exists locally."""
-    print(f"Checking for local image: {image_tag}")
-    try:
-        subprocess.run(
-            f"docker image inspect {image_tag}",
-            shell=True,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-        return True
-    except subprocess.CalledProcessError:
-        return False
-
-def check_dependencies():
-    """Verifies that essential command-line tools are installed."""
-    print("--- Step 1: Checking Dependencies ---\n")
-    dependencies = ["docker", "pytest", "allure"]
-    missing = []
-    
-    for dep in dependencies:
-        if shutil.which(dep) is None:
-            missing.append(dep)
-            
-    if missing:
-        print("ERROR: The following dependencies are missing:")
-        for dep in missing:
-            print(f"- {dep}")
-        print("\nPlease install the missing dependencies (e.g., Docker, pytest, 'allure-commandline').")
-        sys.exit(1)
-        
-    print("✅ All dependencies found (docker, pytest, allure).")
-    return 0
-
-def validate_and_get_test_args(framework_name, suite_marker, testfile):
-    """Validates suite/testfile based on framework and returns the pytest command part."""
-    
-    # Normalize to use hyphens for validation logic
-    framework_name = framework_name.lower().replace('_', '-')
-    
-    if framework_name == "robotics-bdd":
-        CORRECT_SUITES = ["navigation", "reverse", "pick", "walking", "safety", "stand", "ground", "all"]
-        # Validation
-        # The strict validation check is commented out to allow complex pytest marker expressions (e.g., "navigation or pick").
-        # if suite_marker not in CORRECT_SUITES:
-        #     print(f"ERROR: Invalid suite marker for robotics-bdd: '{suite_marker}'")
-        #     print(f"  Valid suites: {', '.join(CORRECT_SUITES)}")
-        #     sys.exit(1)
-        # Command Construction
-        # FIX: The suite_marker argument is now enclosed in **double quotes** to ensure proper
-        # cross-platform shell parsing of boolean expressions like "navigation or pick or walking"
-        return f"pytest -m \"{suite_marker}\" --ignore=features/manual_tests --alluredir={{CONTAINER_ALLURE_RESULTS_DIR}}"
-        
-    elif framework_name == "gpu-benchmark" or framework_name == "robotics-tdd":
-        if testfile:
-            # Check 1: Validate file name pattern
-            if testfile.startswith("tests/test_") and testfile.endswith(".py"):
-                 # Check 2: Validate file existence
-                 full_path = os.path.join(PROJECT_ROOT, testfile)
-                 if not os.path.exists(full_path):
-                     print("\n==========================================================")
-                     print(f"❌ ERROR: Test file not found for gpu-benchmark: '{testfile}'")
-                     print(f"   Expected absolute path: {full_path}")
-                     print("   Please ensure the file exists relative to the script's root directory.")
-                     print("==========================================================")
-                     sys.exit(1)
-                 # Passed all checks
-                 pass 
-            else:
-                 print(f"ERROR: Invalid test file format for gpu-benchmark: '{testfile}'")
-                 print("  Valid test files must match the pattern: tests/test_*.py")
-                 sys.exit(1)
-            # Command Construction
-            return f"pytest {testfile} --alluredir={{CONTAINER_ALLURE_RESULTS_DIR}}"
-        
-        elif suite_marker:
-            CORRECT_SUITES = ["gpu", "cpu", "benchmark"]
-            if suite_marker not in CORRECT_SUITES:
-                print(f"ERROR: Invalid suite marker for gpu-benchmark: '{suite_marker}'")
-                print(f"  Valid suites: {', '.join(CORRECT_SUITES)}")
-                sys.exit(1)
-            # Command Construction
-            # FIX: Use double quotes for the suite marker here too.
-            return f"pytest -m \"{suite_marker}\" --alluredir={{CONTAINER_ALLURE_RESULTS_DIR}}"
-        
-        else:
-            print("ERROR: No test suite or test file specified for gpu-benchmark.")
-            sys.exit(1)
-            
-    else:
-        print(f"ERROR: Unsupported framework name: '{framework_name}'")
-        sys.exit(1)
-
-
-def run_tests(framework_name, suite_marker, testfile, dockerfile):
-    """Runs the Tests inside the Docker container."""
-    
-    # Get the validated pytest command string
-    pytest_cmd_suffix = validate_and_get_test_args(framework_name, suite_marker, testfile)
-    
-    print(f"\n--- Step 4: Running Tests (Framework: {framework_name}) ---")
-    
-    if os.path.exists(ALLURE_RESULTS_DIR):
-        shutil.rmtree(ALLURE_RESULTS_DIR)
-        
-    os.makedirs(ALLURE_RESULTS_DIR)
-    
-    CONTAINER_ALLURE_RESULTS_DIR = "/app/allure-results" 
-    
-    # Replace the placeholder in the command
-    final_pytest_cmd = pytest_cmd_suffix.replace("{CONTAINER_ALLURE_RESULTS_DIR}", CONTAINER_ALLURE_RESULTS_DIR)
-    
-    # Check for conftest bypass condition
-    framework_norm = framework_name.lower().replace('_', '-')
-    
-    if framework_norm == "gpu-benchmark" and dockerfile == "Dockerfile.mini":
-        print("INFO: Detected gpu-benchmark with Dockerfile.mini. Applying conftest bypass logic.")
-        
-        # Ensures correct shell quoting for Windows compatibility
-        container_execution_command = (
-            f'sh -c "if [ -f /app/tests/conftest.py ]; then mv /app/tests/conftest.py /app/tests/conftest.bak; fi; '
-            f'{final_pytest_cmd} ; '
-            f'test_exit_code=$?; ' 
-            f'if [ -f /app/tests/conftest.bak ]; then mv /app/tests/conftest.bak /app/tests/conftest.py; fi; '
-            f'exit $test_exit_code"'
-        )
-    else:
-        # Note: final_pytest_cmd already contains the necessary double-quotes around the marker.
-        container_execution_command = final_pytest_cmd
-
-    docker_run_command = (
-        f"docker run --rm "
-        f"-v \"{ALLURE_RESULTS_DIR}\":{CONTAINER_ALLURE_RESULTS_DIR} "
-        f"-v \"{SUPPORTS_DIR}\":/app/supports "
-        f"{LOCAL_IMAGE_TAG} " 
-        f"{container_execution_command}"
-    )
-    
-    print(f"Executing: {docker_run_command}")
-    
-    test_exit_code = execute_command(
-        docker_run_command, 
-        "Test execution failed.",
-        exit_on_error=False
-    )
-    
-    if test_exit_code == 0:
-        print("✅ PASS: All tests passed.")
-        
-    print("✅ Test run finished. Results saved to allure-results.")
-
-
+# --- START: Functions relocated to ensure definition is before full_pipeline calls them ---
 def get_docker_hub_url(tag):
     """Generates the Docker Hub URL for an image tag."""
     parts = tag.split('/')
@@ -544,17 +239,397 @@ def publish_image_tags(image_tag_list, error_artifact_name):
         print(f"✅ All tags for {error_artifact_name} published successfully.")
     else:
         print(f"⚠️ Warning: One or more tags for {error_artifact_name} failed to publish.")
+# --- END: Relocated Functions ---
 
 
-def generate_report(build_number, suite_marker, cpu_info: str, gpu_vendor: str, gpu_name: str, memory_info: str):
+def execute_command(command, error_message, check_output=False, exit_on_error=True, docker_build_status=False, docker_push_status=False):
+    """
+    Executes a shell command and handles errors, with streaming status for Docker operations.
+    Implements PASS/UNSTABLE/FAIL policy for test runs (when exit_on_error=False).
+
+    Enhanced: Safely handles KeyboardInterrupt (Ctrl+C) by terminating the spawned process
+    and any child process group to avoid hangs or slow shutdowns during long-running docker
+    build/push operations and during Allure generation.
+    """
+    if docker_build_status or docker_push_status:
+        # --- Streaming Logic for Docker Build/Push ---
+        if docker_build_status:
+            try:
+                image_name = REPORT_IMAGE_TAG.split('/')[1].split(':')[0]
+            except IndexError:
+                image_name = "Docker Image"
+            print(f"Starting Docker Build with Live Status: {image_name}")
+            
+        # Ensure we create a new session/process group so we can signal the group on interrupt
+        popen_kwargs = {
+            "shell": True,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.STDOUT,
+            "encoding": "utf-8",
+            "universal_newlines": True,
+            "bufsize": 1
+        }
+        if sys.platform.startswith("win"):
+            popen_kwargs["creationflags"] = CREATE_NEW_PROCESS_GROUP
+        else:
+            popen_kwargs["start_new_session"] = True
+
+        try:
+            p = subprocess.Popen(
+                command,
+                **popen_kwargs
+            )
+        except Exception as e:
+            print(f"\nERROR: Failed to start command: {command}\n{e}")
+            if exit_on_error:
+                sys.exit(1)
+            return 1
+        
+        current_step = 0
+        total_steps = 0
+        step_description = "Initializing..."
+        layer_statuses = {} 
+        return_code = None
+
+        try:
+            for line in iter(p.stdout.readline, ''):
+                
+                if docker_build_status:
+                    match_progress = STEP_PROGRESS_RE.search(line)
+                    match_desc = STEP_DESC_RE.search(line)
+
+                    if match_progress:
+                        current_step = int(match_progress.group(1))
+                        total_steps = int(match_progress.group(2))
+                        
+                        if match_desc:
+                            step_description = match_desc.group(1).split('\n')[0].strip()
+                            if step_description.startswith('FROM'):
+                                 step_description = f"FROM {step_description.split(':')[1].strip()}"
+                            elif len(step_description) > 50:
+                                 step_description = step_description[:50] + "..."
+
+                    if total_steps > 0:
+                        progress_percent = int((current_step / total_steps) * 100)
+                        status_line = (
+                            f"  [Docker Build Status] Step {current_step}/{total_steps} ({progress_percent}%) | "
+                            f"Task: {step_description:<50} | "
+                            f"{time.strftime('%H:%M:%S')} \r"
+                        )
+                        sys.stdout.write(status_line)
+                        sys.stdout.flush()
+
+                elif docker_push_status:
+                    match_push_progress = DOCKER_PUSH_PROGRESS_RE.search(line)
+                    
+                    if match_push_progress:
+                        layer_id = match_push_progress.group(1)
+                        status = match_push_progress.group(2)
+                        percent_str = match_push_progress.group(3)
+                        percent = int(percent_str) if percent_str else (100 if status in ('Pushed', 'Layer already exists', 'Mounted') else 0)
+                        
+                        layer_statuses[layer_id] = percent
+                        
+                        total_layers = len(layer_statuses)
+                        if total_layers > 0:
+                            active_layers = [p for p in layer_statuses.values() if p < 100]
+                            total_units_possible = total_layers * 100
+                            total_units_achieved = sum(layer_statuses.values())
+                            overall_percent = int((total_units_achieved / total_units_possible) * 100)
+                            
+                            status_line = (
+                                f"  [Docker Push Status] Total Progress: {overall_percent}% "
+                                f"| Layers: {len(active_layers)} active / {total_layers} total | "
+                                f"{time.strftime('%H:%M:%S')} \r"
+                            )
+                            sys.stdout.write(status_line)
+                            sys.stdout.flush()
+
+                if "ERROR" in line.upper() or "FATAL" in line.upper() or "STEP COMPLETE:" in line or "Login Succeeded" in line:
+                     sys.stdout.write(" " * 120 + "\r")
+                     print(line.strip())
+
+            # end for loop
+            p.stdout.close()
+            return_code = p.wait()
+        except KeyboardInterrupt:
+            # User pressed Ctrl+C - attempt a fast and clean shutdown of the spawned process
+            print("\n\n============================================")
+            print("🛑 KeyboardInterrupt detected. Terminating running process and child processes...")
+            print("============================================")
+            try:
+                # On Windows, attempt to send CTRL_BREAK_EVENT to the process group if possible
+                if sys.platform.startswith("win"):
+                    try:
+                        p.send_signal(signal.CTRL_BREAK_EVENT)
+                        # give a moment to respond
+                        time.sleep(1)
+                    except Exception:
+                        try:
+                            p.terminate()
+                        except Exception:
+                            pass
+                else:
+                    # On POSIX, kill the process group started by start_new_session=True
+                    try:
+                        os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+                    except Exception:
+                        try:
+                            p.terminate()
+                        except Exception:
+                            pass
+                # Wait briefly for termination
+                try:
+                    p.wait(timeout=5)
+                except Exception:
+                    try:
+                        p.kill()
+                    except Exception:
+                        pass
+            except Exception as e:
+                print(f"⚠️ Warning: Failed to fully terminate child processes cleanly: {e}")
+            finally:
+                # Ensure stdout is closed to avoid hanging loops
+                try:
+                    if p.stdout:
+                        p.stdout.close()
+                except Exception:
+                    pass
+
+            if exit_on_error:
+                print("Exiting due to KeyboardInterrupt.")
+                sys.exit(130)
+            return 130
+
+        # Clear status line
+        sys.stdout.write(" " * 120 + "\r")
+        sys.stdout.flush()
+
+        if return_code != 0:
+            print("\n==========================================================")
+            print(f"ERROR UNHANDLED ERROR during Docker process: {error_message}")
+            print(f"Command failed: {command}")
+            print("==========================================================")
+            if exit_on_error:
+                sys.exit(return_code)
+            return return_code
+        
+        if docker_build_status:
+            target_tag = REPORT_IMAGE_TAG if "Dockerfile.report" in command else LOCAL_IMAGE_TAG
+            print(f"✅ Docker build completed successfully: {target_tag}")
+            
+        return 0
+    else:
+        # --- Standard subprocess.run for non-streaming commands (like pytest) ---
+        try:
+            result = subprocess.run(
+                command,
+                shell=True,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                encoding="utf-8",
+                universal_newlines=True,
+            )
+            output = result.stdout.strip()
+            
+            print(output) 
+            return 0
+        except subprocess.CalledProcessError as e:
+            
+            # --- PASS/UNSTABLE/FAIL Policy ---
+            if not exit_on_error:
+                if e.returncode == 1:
+                    print(f"\n⚠️  UNSTABLE: Tests failed (exit code 1). Proceeding to report generation.")
+                    print("----------------------------------------------------------")
+                    print("----------------------------------------------------------")
+                    return e.returncode
+                else:
+                    full_output = e.stdout or "No output captured."
+                    
+                    print("\n==========================================================")
+                    print(f"❌ FAIL: Test execution failed with setup/environment error (exit code {e.returncode}).")
+                    print(f"Command: {command}")
+                    print("----------------------------------------------------------")
+                    print(f"Output:\n{full_output}")
+                    print("\nHalting pipeline. No report will be generated.")
+                    print("==========================================================")
+                    sys.exit(e.returncode)
+            
+            # Standard Error Block
+            print("\n==========================================================")
+            print(f"ERROR: {error_message}")
+            print(f"Command failed: {command}")
+            print("----------------------------------------------------------")
+            print(f"Output:\n{e.stdout}")
+            print("==========================================================")
+            sys.exit(1)
+        except KeyboardInterrupt:
+            # Handle Ctrl+C gracefully during non-streaming commands (e.g., allure generate, pytest)
+            print("\n\n============================================")
+            print("🛑 KeyboardInterrupt detected. Terminating command...")
+            print("============================================")
+            if exit_on_error:
+                print("Exiting due to KeyboardInterrupt.")
+                sys.exit(130)
+            return 130
+
+def docker_image_exists(image_tag):
+    """Checks if a Docker image with the given tag exists locally."""
+    print(f"Checking for local image: {image_tag}")
+    try:
+        subprocess.run(
+            f"docker image inspect {image_tag}",
+            shell=True,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+def check_dependencies():
+    """Verifies that essential command-line tools are installed."""
+    print("--- Step 1: Checking Dependencies ---\n")
+    dependencies = ["docker", "pytest", "allure"]
+    missing = []
+    
+    for dep in dependencies:
+        if shutil.which(dep) is None:
+            missing.append(dep)
+            
+    if missing:
+        print("ERROR: The following dependencies are missing:")
+        for dep in missing:
+            print(f"- {dep}")
+        print("\nPlease install the missing dependencies (e.g., Docker, pytest, 'allure-commandline').")
+        sys.exit(1)
+        
+    print("✅ All dependencies found (docker, pytest, allure).")
+    return 0
+
+def validate_and_get_test_args(framework_name, suite_marker, testfile):
+    """Validates suite/testfile based on framework and returns the pytest command part."""
+    
+    # Normalize to use hyphens for validation logic
+    framework_name = framework_name.lower().replace('_', '-')
+    
+    if framework_name == "robotics-bdd" or framework_name == "robotics-tdd":
+        return f"pytest -m \"{suite_marker}\" --ignore=features/manual_tests --alluredir={{CONTAINER_ALLURE_RESULTS_DIR}}"
+        
+    elif framework_name == "gpu-benchmark":
+        if testfile:
+            if testfile.startswith("tests/test_") and testfile.endswith(".py"):
+                 full_path = os.path.join(PROJECT_ROOT, testfile)
+                 if not os.path.exists(full_path):
+                     print("\n==========================================================")
+                     print(f"❌ ERROR: Test file not found for gpu-benchmark: '{testfile}'")
+                     print(f"   Expected absolute path: {full_path}")
+                     print("   Please ensure the file exists relative to the script's root directory.")
+                     print("==========================================================")
+                     sys.exit(1)
+            else:
+                 print(f"ERROR: Invalid test file format for gpu-benchmark: '{testfile}'")
+                 print("  Valid test files must match the pattern: tests/test_*.py")
+                 sys.exit(1)
+            return f"pytest {testfile} --alluredir={{CONTAINER_ALLURE_RESULTS_DIR}}"
+        
+        elif suite_marker:
+            CORRECT_SUITES = ["gpu", "cpu", "benchmark"]
+            if suite_marker not in CORRECT_SUITES:
+                print(f"ERROR: Invalid suite marker for gpu-benchmark: '{suite_marker}'")
+                print(f"  Valid suites: {', '.join(CORRECT_SUITES)}")
+                sys.exit(1)
+            return f"pytest -m \"{suite_marker}\" --alluredir={{CONTAINER_ALLURE_RESULTS_DIR}}"
+        
+        else:
+            print("ERROR: No test suite or test file specified for gpu-benchmark.")
+            sys.exit(1)
+            
+    else:
+        print(f"ERROR: Unsupported framework name: '{framework_name}'")
+        sys.exit(1)
+
+
+def run_tests(framework_name, suite_marker, testfile, dockerfile):
+    """Runs the Tests inside the Docker container."""
+    
+    pytest_cmd_suffix = validate_and_get_test_args(framework_name, suite_marker, testfile)
+    
+    print(f"\n--- Step 4: Running Tests (Framework: {framework_name}) ---")
+    
+    if os.path.exists(ALLURE_RESULTS_DIR):
+        shutil.rmtree(ALLURE_RESULTS_DIR)
+        
+    os.makedirs(ALLURE_RESULTS_DIR)
+    
+    CONTAINER_ALLURE_RESULTS_DIR = "/app/allure-results" 
+    
+    final_pytest_cmd = pytest_cmd_suffix.replace("{CONTAINER_ALLURE_RESULTS_DIR}", CONTAINER_ALLURE_RESULTS_DIR)
+    
+    framework_norm = framework_name.lower().replace('_', '-')
+    
+    if framework_norm == "gpu-benchmark" and dockerfile == "Dockerfile.mini":
+        print("INFO: Detected gpu-benchmark with Dockerfile.mini. Applying conftest bypass logic.")
+        
+        container_execution_command = (
+            f'sh -c "if [ -f /app/tests/conftest.py ]; then mv /app/tests/conftest.py /app/tests/conftest.bak; fi; '
+            f'{final_pytest_cmd} ; '
+            f'test_exit_code=$?; ' 
+            f'if [ -f /app/tests/conftest.bak ]; then mv /app/tests/conftest.bak /app/tests/conftest.py; fi; '
+            f'exit $test_exit_code"'
+        )
+    else:
+        container_execution_command = final_pytest_cmd
+
+    docker_run_command = (
+        f"docker run --rm "
+        f"-e DOCKER_USER={DOCKER_USER} " # FIX: Passes DOCKER_USER to container
+        f"-v \"{ALLURE_RESULTS_DIR}\":{CONTAINER_ALLURE_RESULTS_DIR} "
+        f"-v \"{SUPPORTS_DIR}\":/app/supports "
+        f"{LOCAL_IMAGE_TAG} " 
+        f"{container_execution_command}"
+    )
+    
+    print(f"Executing: {docker_run_command}")
+    
+    test_exit_code = execute_command(
+        docker_run_command, 
+        "Test execution failed.",
+        exit_on_error=False
+    )
+    
+    if test_exit_code == 0:
+        print("✅ PASS: All tests passed.")
+        
+    print("✅ Test run finished. Results saved to allure-results.")
+
+
+# --- MODIFIED FUNCTION SIGNATURE ---
+def generate_report(build_number, framework_name: str, test_arg_display: str, cpu_info: str, gpu_vendor: str, gpu_name: str, memory_info: str):
     """Generates the Allure HTML report, adds metadata, and packages it into a Docker image."""
     print("\n--- Step 5: Generating Allure Report and Packaging ---")
     
     DOCKER_HUB_USER_FOR_LINKS = f"{DOCKER_USER}"
+    
+    # --- START: REPORT TITLE FIX ---
+    # Use the passed framework_name directly, normalized to uppercase with hyphens.
+    base_framework_name = framework_name.upper().replace('_', '-')
+    
+    # This is still needed for the Docker Hub URLs in executor.json
     base_repo_name = REPORT_IMAGE_TAG.split('/')[1].split(':')[0] 
-    base_framework_name = base_repo_name.split('-')[0].upper() 
     REPORT_REPO_BASE_URL = f"https://hub.docker.com/r/{DOCKER_HUB_USER_FOR_LINKS}/{base_repo_name}"
     
+    # Use existing logic for the title suffix
+    if '/' in test_arg_display or '\\' in test_arg_display: # Check for file path
+        title_suffix = test_arg_display # Keep path as-is
+    else:
+        title_suffix = test_arg_display.upper() # Uppercase suite marker
+        
+    report_title = f"{base_framework_name}:{title_suffix}"
+    # --- END: REPORT TITLE FIX ---
+
     # 5.1. Creating Allure executor.json for build metadata
     print("  5.1. Creating Allure executor.json for build metadata...")
     try:
@@ -563,7 +638,7 @@ def generate_report(build_number, suite_marker, cpu_info: str, gpu_vendor: str, 
             "type": "Local_Execution",
             "url": f"{REPORT_REPO_BASE_URL}/tags",
             "reportUrl": f"{REPORT_REPO_BASE_URL}/tags?build={build_number}",
-            "buildName": f"Build #{build_number} ({suite_marker.upper()} suite)",
+            "buildName": f"Build #{build_number} ({title_suffix} suite)", # Use title_suffix
             "buildUrl": f"{REPORT_REPO_BASE_URL}/tags?build={build_number}",
             "buildOrder": int(build_number)  
         }
@@ -579,13 +654,11 @@ def generate_report(build_number, suite_marker, cpu_info: str, gpu_vendor: str, 
     print("  5.2. Creating Allure environment.properties for report details...")
     try:
         environment_data = [
-            f"Report Title={base_framework_name}: {suite_marker.upper()} Suite Run #{build_number}", 
+            f"Report Title={report_title}", # Use the new fixed title
             f"Platform={platform.system()} {platform.release()}",
-            f"Test Suite Marker={suite_marker}",
-            # --- START: Requested order change (GPU on top of CPU) ---
+            f"Test Suite Marker={test_arg_display}", # Keep original arg for detail
             f"GPU_Model={gpu_name}", 
             f"CPU_Model={cpu_info}",
-            # --- END: Requested order change ---
             f"System_Memory={memory_info}",
             f"Docker User={DOCKER_USER}" 
         ]
@@ -607,7 +680,7 @@ def generate_report(build_number, suite_marker, cpu_info: str, gpu_vendor: str, 
     else:
         print("  ℹ️ Previous report history not found. Starting new history.")
 
-    # --- START: Copy categories.json for Allure categorization ---
+    # 5.3. Copying custom categorization file
     print("  5.3. Copying custom categorization file...")
     categories_source_path = os.path.join(SUPPORTS_DIR, "categories.json")
     categories_dest_path = os.path.join(ALLURE_RESULTS_DIR, "categories.json")
@@ -620,7 +693,6 @@ def generate_report(build_number, suite_marker, cpu_info: str, gpu_vendor: str, 
             print(f"⚠️ WARNING: Failed to copy categories.json: {e}")
     else:
         print("  ℹ️ 'supports/categories.json' not found. Skipping custom categorization.")
-    # --- END: Copy categories.json ---
 
     if os.path.exists(ALLURE_REPORT_DIR):
         shutil.rmtree(ALLURE_REPORT_DIR)
@@ -683,19 +755,40 @@ def open_report():
     print("\n--- Step 7: Opening Allure Report Locally ---")
     index_file = os.path.join(ALLURE_REPORT_DIR, "index.html")
     allure_bin = shutil.which("allure") or shutil.which("allure.cmd")
-    if allure_bin:
-        try:
-            subprocess.Popen([allure_bin, "open", ALLURE_REPORT_DIR])
-            print(f"🚀 Opening via Allure CLI at: {index_file}")
-        except Exception as e:
-            print(f"⚠️ CLI open failed: {e}")
-            webbrowser.open_new_tab(index_file)
-            print(f"🚀 Opening directly in browser at: {index_file}")
-    else:
-        webbrowser.open_new_tab(index_file)
-        print(f"🚀 Opening directly in browser at: {index_file}")
-        
-def full_pipeline(build_number, framework_name, suite_marker, testfile, dockerfile, cpu_info: str, gpu_vendor: str, gpu_name: str, memory_info: str):
+    try:
+        if allure_bin:
+            try:
+                # spawn via Popen so main process remains responsive; ensure new session for clean signal handling
+                if sys.platform.startswith("win"):
+                    subprocess.Popen([allure_bin, "open", ALLURE_REPORT_DIR], creationflags=CREATE_NEW_PROCESS_GROUP)
+                else:
+                    subprocess.Popen([allure_bin, "open", ALLURE_REPORT_DIR], start_new_session=True)
+                print(f"🚀 Opening via Allure CLI at: {index_file}")
+            except KeyboardInterrupt:
+                print("\n🛑 KeyboardInterrupt detected while attempting to open report via Allure CLI.")
+                print("Report open aborted by user.")
+            except Exception as e:
+                print(f"⚠️ CLI open failed: {e}")
+                try:
+                    webbrowser.open_new_tab(index_file)
+                    print(f"🚀 Opening directly in browser at: {index_file}")
+                except Exception as e2:
+                    print(f"⚠️ Failed to open browser: {e2}")
+        else:
+            try:
+                webbrowser.open_new_tab(index_file)
+                print(f"🚀 Opening directly in browser at: {index_file}")
+            except KeyboardInterrupt:
+                print("\n🛑 KeyboardInterrupt detected while attempting to open report in browser.")
+                print("Report open aborted by user.")
+            except Exception as e:
+                print(f"⚠️ Failed to open browser: {e}")
+    except KeyboardInterrupt:
+        print("\n🛑 KeyboardInterrupt detected in open_report. Returning to caller.")
+
+
+# --- MODIFIED FUNCTION SIGNATURE ---
+def full_pipeline(build_number, framework_name, suite_marker, testfile, dockerfile, cpu_info: str, gpu_vendor: str, gpu_name: str, memory_info: str, test_arg_display: str):
     """Runs the full pipeline."""
     # 1. Set global tags based on framework
     set_global_tags(framework_name)
@@ -726,10 +819,10 @@ def full_pipeline(build_number, framework_name, suite_marker, testfile, dockerfi
 
     # --- Step 5: Generate and Package Report ---
     # This step is only reached if tests are PASS or UNSTABLE
-    report_suite_marker = suite_marker or (testfile.split('/')[-1] if testfile else "default")
     
+    # --- MODIFIED CALL TO GENERATE_REPORT (passes framework_name) ---
     REPORT_VERSION_TAG, REPORT_LATEST_TAG = generate_report(
-        build_number, report_suite_marker, cpu_info, gpu_vendor, gpu_name, memory_info
+        build_number, framework_name, test_arg_display, cpu_info, gpu_vendor, gpu_name, memory_info
     )
 
     # --- Step 6: Publish Report Image ---
@@ -749,12 +842,12 @@ if __name__ == "__main__":
         sys.exit(1)
 
     build_number = sys.argv[1]
-    framework_name = sys.argv[2]
+    framework_name = sys.argv[2] # This is the raw framework name (e.g., "robotics_tdd")
     
     optional_test_arg = sys.argv[3] if len(sys.argv) > 3 else None
     dockerfile = sys.argv[4] if len(sys.argv) > 4 else "Dockerfile.mini"
 
-    # --- NEW VALIDATION: Check for valid FRAMEWORK_NAME ---
+    # --- VALIDATION: Check for valid FRAMEWORK_NAME ---
     SUPPORTED_FRAMEWORKS = ["robotics-bdd", "robotics-tdd", "gpu-benchmark"]
     framework_norm = framework_name.lower().replace('_', '-')
 
@@ -765,33 +858,33 @@ if __name__ == "__main__":
         print("   It appears you provided a test file path in the FRAMEWORK_NAME position.")
         print("==========================================================")
         sys.exit(1)
-    # --- END NEW VALIDATION ---
+    # --- END VALIDATION ---
 
 
-    # --- Set defaults for Test Arg before printing ---
+    # --- Set defaults for Test Arg and determine final display value ---
     suite_marker = None
     testfile = None
-    
-    # framework_norm is now guaranteed to be valid
-    test_arg_display = "None"
-    
+    test_arg_display = "default" # Initialize default
+
     if framework_norm == 'robotics-bdd':
-        # Set default 'navigation' if no 3rd arg is provided
         suite_marker = optional_test_arg or "navigation"
         test_arg_display = suite_marker
         if optional_test_arg and (optional_test_arg.startswith("tests/") or optional_test_arg.endswith(".py")):
              print(f"WARNING: Test file '{optional_test_arg}' is not a valid argument for 'robotics-bdd'. Treating as suite marker.")
         
-    elif framework_norm == 'gpu-benchmark':
+    elif framework_norm == 'gpu-benchmark' or framework_norm == 'robotics-tdd':
         if optional_test_arg:
-            # Test files must be of the form tests/test_*.py
             if optional_test_arg.startswith("tests/test_") and optional_test_arg.endswith(".py"):
                  testfile = optional_test_arg
             else:
                  suite_marker = optional_test_arg
         else:
             # Set default test file if no 3rd arg is provided
-            testfile = "tests/test_data_preprocessing.py"
+            if framework_norm == 'gpu-benchmark':
+                testfile = "tests/test_data_preprocessing.py"
+            else: # robotics-tdd
+                suite_marker = "navigation"
+            
         test_arg_display = suite_marker or testfile
 
     if not build_number.isdigit():
@@ -805,27 +898,33 @@ if __name__ == "__main__":
     cpu_info = detect_cpu_info()
     memory_info = detect_memory_info()
     gpu_vendor, gpu_name = detect_gpu_info()
-    # --- END NEW ---
 
     print(f"=======================================================")
     print(f"STARTING ORCHESTRATION PIPELINE")
     print(f"Build Number: {build_number}")
-    print(f"Framework:    {framework_name}")
-    
-    # --- UPDATED print statement to include hardware info ---
+    print(f"Framework:    {framework_name}") # Prints the raw framework name
     print(f"CPU:          {cpu_info}")
     print(f"GPU:          {gpu_name} ({gpu_vendor})")
     print(f"Memory:       {memory_info}")
-    # --- END UPDATED print statement ---
-    
     print(f"Test Arg:     {test_arg_display}") 
     print(f"Dockerfile:   {dockerfile}")
     print(f"=======================================================")
     
     try:
-        # --- UPDATED: Pass hardware info to full_pipeline ---
-        full_pipeline(build_number, framework_name, suite_marker, testfile, dockerfile, cpu_info, gpu_vendor, gpu_name, memory_info)
+        # Pass the raw framework_name to full_pipeline
+        full_pipeline(build_number, framework_name, suite_marker, testfile, dockerfile, cpu_info, gpu_vendor, gpu_name, memory_info, test_arg_display)
     except KeyboardInterrupt:
         print("\n\n============================================")
         print(" 🛑 PIPELINE MANUALLY TERMINATED (Ctrl+C).")
         print("============================================")
+        try:
+            # Best-effort: attempt to clean up lingering processes (docker builds, containers)
+            # On POSIX, try to kill any orphaned process group of this script (best-effort)
+            if not sys.platform.startswith("win"):
+                try:
+                    os.killpg(0, signal.SIGTERM)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        sys.exit(130)

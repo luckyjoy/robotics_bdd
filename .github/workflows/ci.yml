@@ -6,10 +6,10 @@ on:
   pull_request:
     branches: [ main ]
 
+# Updated permissions for gh-pages deployment
 permissions:
   contents: write
-  pages: write
-  id-token: write
+  actions: read # Required for dawidd6/action-download-artifact
 
 env:
   ALLURE_VERSION: 2.29.0
@@ -108,6 +108,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # New step to get the repo name for the summary URL
+      - name: Get repository name
+        run: echo "REPO_NAME=${GITHUB_REPOSITORY##*/}" >> $GITHUB_ENV
 
       # Fix: Dynamically find the workflow filename.
       - name: Get workflow filename
@@ -317,15 +321,29 @@ jobs:
           </script>
           <hr><p><em>Generated automatically on $CURRENT_LA_TIME</em></p></body></html>" >> "$SITE_DIR/index.html"
 
-      - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v3
+      # --- REMOVED STEP ---
+      # - name: Upload Pages Artifact
+      #   uses: actions/upload-pages-artifact@v3
+      #   with:
+      #     path: ${{ env.SITE_DIR }}
+
+      # --- NEW STEP ---
+      # Deploys the content of the 'site' directory to the 'gh-pages' branch
+      - name: Deploy to gh-pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' # Only deploy on main branch push
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: ${{ env.SITE_DIR }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ${{ env.SITE_DIR }}
+          publish_branch: gh-pages
+          force_orphan: true # Creates a clean branch history each time
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      # --- REMOVED STEP ---
+      # - name: Deploy to GitHub Pages
+      #   id: deployment
+      #   uses: actions/deploy-pages@v4
 
+      # This step is crucial for persisting the history dashboard for the *next* run
       - name: Upload Allure History Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -333,10 +351,12 @@ jobs:
           path: ${{ env.SITE_DIR }}
           retention-days: 7
 
+      # --- UPDATED STEP ---
+      # Builds the gh-pages URL manually
       - name: Add Workflow Summary (Badges)
         run: |
-          PAGE_URL=${{ steps.deployment.outputs.page_url }}
-          BASE_URL="${PAGE_URL%/}"
+          # Construct the gh-pages URL manually
+          BASE_URL="https://${{ github.repository_owner }}.github.io/${{ env.REPO_NAME }}"
           TEST_STATUS=${{ needs.test.outputs.test_outcome }}
 
           if [[ "$TEST_STATUS" == "FAIL" ]]; then

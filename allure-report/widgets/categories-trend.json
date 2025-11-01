@@ -1,1 +1,1 @@
-[{"buildOrder":1,"reportUrl":"https://hub.docker.com/r/luckyjoy/robotics-bdd-report/tags?build=1","data":{"✅ Passed Benchmarks":9}}]
+[{"buildOrder":2,"reportUrl":"https://hub.docker.com/r/luckyjoy/robotics-bdd-report/tags?build=2","data":{"✅ Passed Benchmarks":65,"Core Logic / Navigation Defect":1}},{"buildOrder":1,"reportUrl":"https://hub.docker.com/r/luckyjoy/robotics-bdd-report/tags?build=1","data":{"✅ Passed Benchmarks":9}}]

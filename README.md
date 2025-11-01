@@ -76,7 +76,7 @@ The **`deploy_gpu_workflow.py`** script manages the final deployment to a Kubern
 ### 1. Local Environment Setup
 
 ```bash
-git clone https://github.com/<your-org>/robotics-bdd-framework.git
+git clone https://github.com/luckyjoy/robotics-bdd-framework.git
 cd robotics-bdd-framework
 pip install -r requirements.txt
 pytest --alluredir=allure-results

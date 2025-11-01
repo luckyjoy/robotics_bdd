@@ -70,11 +70,11 @@ jobs:
           if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
             echo "🐳 Running tests in Docker..."
             docker run --rm -v $PWD:/workspace -w /workspace robotics-bdd:ci-build \
-              pytest -v -m navigation --alluredir="$RESULTS_DIR"
+              pytest -v -m "navigation or walking or pick" --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           else
             echo "🪟 Running tests on Windows..."
-            pytest -v -m navigation --alluredir="$RESULTS_DIR"
+            pytest -v -m "navigation or walking or pick" --alluredir="$RESULTS_DIR"
             TEST_EXIT_CODE=$?
           fi
 

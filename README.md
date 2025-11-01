@@ -66,7 +66,7 @@ The **`deploy_gpu_workflow.py`** script manages the final deployment to a Kubern
 | `safety` | System Integrity | Collision prevention, boundary constraints, error handling. |
 | `walking` | Gait Control | Posture, speed, stability, locomotion transitions. |
 | `sensors` | Data Fusion | Sensor accuracy and Kalman Filter convergence. |
-
+| `security` | System Security | System security checks. |
 
 ---
 
@@ -153,27 +153,22 @@ allure open allure-report
 robotics_bdd/
 ├─ BUILD_NUMBER.txt           # File storing current build number.
 ├─ Dockerfile                 # Defines the BDD Test Docker image (runtime environment).
+├─ Dockerfile.mini            # Minimal Docker build file
+├─ Dockerfile.report          # Docker build file for the report server
 ├─ Jenkinsfile                # CI/CD pipeline definition for Jenkins.
 ├─ README.md
 ├─ requirements.txt			  # dependencies requirements
 ├─ run_docker.py			  # python script to run tests insie docker container.
 ├─ run_kubenestes.py          # Python script to orchestrate K8s jobs and report generation.
 ├─ kubenestes_pipeline.bat    # CI execution script.
-├─ robotics-bdd-job.yaml      # Kubernetes Job definition (runs the tests).
-├─ robotics-bdd-pv.yaml       # Kubernetes Persistent Volume definition.
-├─ robotics-bdd-pvc.yaml      # Kubernetes Persistent Volume Claim.
-│
+├─ configs/                   # Kubernetes job configurations
+├─ .github/                   # GitHub Actions CI/CD workflows
 ├─ features/                  # Gherkin feature files
 │  └─ manual_tests/
-│
 ├─ steps/                     # Python step definitions (pick_and_place_steps.py, navigation_steps.py, etc.)
-│
 ├─ simulation/                # Robot simulation and core logic (robot_sim.py, sensors.py)
-│
-├─ reports/                   # Static report files
-│  └─ allure-report/          # Final HTML report files
-│     └─ Dockerfile           # Dockerfile for packaging the final report as a web server
-│
+├─ reports/         	      # Static HTML docs (Test plan, PRD summary, metrics)
+├─ allure-report/             # Dynamic history report files
 └─ allure-results/            # Raw JSON/XML results (generated during test execution)
 
 ---

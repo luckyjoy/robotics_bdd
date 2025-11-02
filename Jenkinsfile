@@ -6,15 +6,16 @@ pipeline {
         ALLURE_RESULTS_DIR = "allure-results"
         LINUX_ALLURE_RESULTS_DIR = "linux-allure-results"
         ALLURE_REPORT_DIR = "allure-report-latest"
-        ALLURE_HISTORY_DIR = "C:\\ProgramData\\Jenkins\\.jenkins\\jobs\\robotics_tdd\\allure-history"
+        ALLURE_HISTORY_DIR = "C:\\ProgramData\\Jenkins\\.jenkins\\jobs\\robotics_bdd\\allure-history"
         PATH = "${env.PATH};${env.USERPROFILE}\\AppData\\Roaming\\npm"
         DOCKER_IMAGE = "python:3.10-slim"
+        // Define the suite argument for pytest -m
+        SUITE_ARGUMENT = "security or pick or navigation or walking or safety"
     }
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         disableConcurrentBuilds()
-        // 🚨 FIX: Removed argument to resolve "0 arguments but has 1" error.
         timestamps() 
     }
 
@@ -51,11 +52,11 @@ pipeline {
 
         stage('Run Pytest (Windows)') {
             steps {
-                echo "Running tests with Allure on Windows..."
+                echo "Running tests with Allure on Windows using suite: %SUITE_ARGUMENT%"
                 catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
-                    // Running required test markers
-                    bat "\"%PYTHON_EXE%\" -m pytest -m \"security or pick or navigation or walking or safety\" --alluredir=\"%ALLURE_RESULTS_DIR%\" --capture=tee-sys"
-                }
+                    // Running required test markers using the SUITE_ARGUMENT variable
+                    bat "\"%PYTHON_EXE%\" -m pytest -m \"%SUITE_ARGUMENT%\" --alluredir=\"%ALLURE_RESULTS_DIR%\" --capture=tee-sys"
+				}
                 echo "Windows tests execution complete."
             }
         }
@@ -73,17 +74,19 @@ pipeline {
 
 					# Ensure results dir exists/clean
 					if (Test-Path "$env:WORKSPACE\\linux-allure-results") { Remove-Item -Recurse -Force "$env:WORKSPACE\\linux-allure-results" }
-					New-Item -ItemType Directory -Force -Path "$env:WORKSPACE\\linux-allure-results" | Out-Null
+					New-Item -ItemType Directory -ItemType Directory -Force -Path "$env:WORKSPACE\\linux-allure-results" | Out-Null
 
 					Write-Host "========================================================="
 					Write-Host "Running Robotics BDD Docker Simulation Tests..."
 					Write-Host "Docker Image: $env:DOCKER_IMAGE"
+                    Write-Host "Pytest Suite: $env:SUITE_ARGUMENT"
 					Write-Host "========================================================="
 
 					docker pull $env:DOCKER_IMAGE
 
+					// Use the SUITE_ARGUMENT environment variable in the Docker run command
 					docker run --rm -v "$env:WORKSPACE:/tests" -w /tests $env:DOCKER_IMAGE bash -lc \
-						"pip install -q pytest allure-pytest && pytest -m \"security or pick or navigation or walking or safety\" --alluredir=/tests/linux-allure-results"
+						"pip install -q pytest allure-pytest && pytest -m \\"$env:SUITE_ARGUMENT\\" --alluredir=/tests/linux-allure-results"
 					'''
 				}
 			}
@@ -118,7 +121,7 @@ pipeline {
                     writeFile file: "${ALLURE_RESULTS_DIR}/categories.json", text: categoriesJson
 
                     def executorJson = """{
-                        "name": "Robotics BDD Framework Runner",
+                        "name": "Robotics BDD Framework - Suite: ${env.SUITE_ARGUMENT}",
                         "type": "CI_Pipeline",
                         "url": "${env.JENKINS_URL}",
                         "buildOrder": "${env.BUILD_ID}",
@@ -128,7 +131,8 @@ pipeline {
                         "data": {
                             "Validation Engineer": "TBD",
                             "Product Model": "BDD-Sim-PyBullet",
-                            "Test Framework": "pytest"
+                            "Test Framework": "pytest",
+                            "Pytest Suite Argument": "${env.SUITE_ARGUMENT}" 
                         }
                     }""".stripIndent()
                     writeFile file: "${ALLURE_RESULTS_DIR}/executor.json", text: executorJson
@@ -176,13 +180,15 @@ pipeline {
                 script {
                     echo 'Archiving and publishing Allure report...'
                     archiveArtifacts artifacts: "${ALLURE_REPORT_DIR}/**/*", allowEmptyArchive: true
-                    publishHTML(target: [
+             
+                    // ✅ Pass the single report configuration map directly to the 'target' parameter.
+                    publishHTML target: [
                         reportName: "Robotics-BDD-Allure-Report-Build-${env.BUILD_NUMBER}-CrossPlatform",
                         reportDir: "${ALLURE_REPORT_DIR}",
                         reportFiles: "index.html",
                         keepAll: true,
                         alwaysLinkToLastBuild: true
-                    ])
+                    ]
                 }
             }
         }

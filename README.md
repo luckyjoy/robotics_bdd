@@ -2,7 +2,7 @@
 
 ## 🧠 Overview
 
-> A Behavior-Driven Development (BDD) testing framework that integrates a **Robotic Framework**, **Allure Reporting**, and **Kubernetes (K8s)** orchestration for scalable, production-grade CI/CD automation.
+> A Behavior-Driven Development (BDD) testing framework that integrates a **Robotic Framework** with **pytest** , **Allure Reporting**, **Kubernetes (K8s)** orchestration for scalable, and production-grade CI/CD (Jenkins/Github Actions) automation.
 
 This repository enables automation teams to:
 
